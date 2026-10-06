@@ -26,9 +26,9 @@
 
 ## 개요
 
-**Remote Desktop Commander (RACP)**는 대규모 언어 모델(LLM) 기반 AI 어시스턴트(Claude Desktop, Cursor, 자체 AI 호스트 등)와 인간 운영자가 방화벽 너머의 원격 PC를 안전하게 조작할 수 있도록 중계하는 원격 실행 오케스트레이션 플랫폼입니다.
+<strong>Remote Desktop Commander (RACP)</strong>는 대규모 언어 모델(LLM) 기반 AI 어시스턴트(Claude Desktop, Cursor, 자체 AI 호스트 등)와 인간 운영자가 방화벽 너머의 원격 PC를 안전하게 조작할 수 있도록 중계하는 원격 실행 오케스트레이션 플랫폼입니다.
 
-기존 원격 제어 도구와 달리, 인바운드 포트 개방 없이 **역방향 보안 웹소켓(Outbound-only WSS)**을 통해 연결되며, **디렉터리 스코프 격리(Scoped Workspaces)**와 **사전 정책 승인(Approval Gate)**, **전수 감사 추적(Audit Trail)**을 통해 제로 트러스트(Zero-Trust) 수준의 통제력을 제공합니다.
+기존 원격 제어 도구와 달리, 인바운드 포트 개방 없이 <strong>역방향 보안 웹소켓(Outbound-only WSS)</strong>을 통해 연결되며, <strong>디렉터리 스코프 격리(Scoped Workspaces)</strong>와 <strong>사전 정책 승인(Approval Gate)</strong>, <strong>전수 감사 추적(Audit Trail)</strong>을 통해 제로 트러스트(Zero-Trust) 수준의 통제력을 제공합니다.
 
 > [!NOTE]
 > 본 프로젝트는 현재 **v0.1.x** 개발 및 검증 단계입니다. Windows 환경 중심의 엔드투엔드(E2E) 인수 시험이 통과되었으며, 운영 환경 배포 전 단계입니다.
@@ -160,7 +160,7 @@ uv run racp-gateway --enable-trusted-personal
 원격 제어 대상 PC에서 허용할 작업 폴더를 지정하고 게이트웨이에 역방향 연결합니다.
 
 #### 방법 A. GUI 데스크톱 클라이언트 활용 (.racp 파일 방식)
-1. 게이트웨이 Console에서 **장치 등록**을 진행하고 `.racp` 연결 설정 파일을 발급받습니다.
+1. 게이트웨이 Console에서 <strong>장치 등록</strong>을 진행하고 `.racp` 연결 설정 파일을 발급받습니다.
 2. 대상 PC에서 `RACP Client.exe`를 실행하고 `.racp` 파일을 선택합니다.
 3. 원격 접근을 허용할 로컬 폴더(Workspaces)를 지정하고 연결을 시작합니다.
 
