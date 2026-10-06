@@ -1,0 +1,10 @@
+{
+  "name": "racp-console-workspace",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "engines": { "node": "22.23.0" },
+  "scripts": {
+    "console:build": "pnpm --dir apps/console build",
+    "console:test": "pnpm --dir apps/console test"
+  }
+}

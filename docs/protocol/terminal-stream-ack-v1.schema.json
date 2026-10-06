@@ -1,0 +1,27 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "const": "stream_ack",
+      "default": "stream_ack",
+      "title": "Type",
+      "type": "string"
+    },
+    "stream_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Stream Id",
+      "type": "string"
+    },
+    "byte_offset": {
+      "pattern": "^\\d{1,20}$",
+      "title": "Byte Offset",
+      "type": "string"
+    }
+  },
+  "required": [
+    "stream_id",
+    "byte_offset"
+  ],
+  "title": "StreamAckInput",
+  "type": "object"
+}

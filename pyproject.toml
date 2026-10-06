@@ -1,0 +1,53 @@
+[project]
+name = "racp-workspace"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["racp-gateway", "racp-agent", "racp-cli"]
+
+[tool.uv.workspace]
+members = ["apps/*", "packages/*"]
+exclude = ["apps/console", "apps/client"]
+
+[tool.uv.sources]
+racp-gateway = { workspace = true }
+racp-agent = { workspace = true }
+racp-cli = { workspace = true }
+racp-domain = { workspace = true }
+racp-protocol = { workspace = true }
+racp-policy = { workspace = true }
+racp-observability = { workspace = true }
+racp-sdk = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<10",
+    "pytest-asyncio>=0.25,<2",
+    "ruff>=0.9,<1",
+    "mypy>=1.15,<2",
+    "types-psutil",
+    "build>=1.2,<2",
+    "types-jsonschema>=4.26.0.20260518",
+    "cryptography==50.0.2",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["apps", "packages"]
+
+[[tool.mypy.overrides]]
+module = ["win32job", "win32api", "win32con", "win32process", "win32crypt", "win32file", "win32security", "win32gui", "win32event", "win32pipe", "win32ts", "win32service", "win32serviceutil", "servicemanager", "pywintypes", "comtypes.*", "pythoncom", "win32com.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = ["workspaces: configure additional named folders on the fixture Agent", "browser_cdp: explicitly enable loopback CDP on the fixture Agent", "desktop: explicitly enable the current session Broker on the fixture Agent", "desktop_login: enable the configured user-login registration fixture", "native_gui: opt-in GUI acceptance confined to temporary owned test windows", "re_plugin: explicitly install the synthetic RE domain contract fixture", "gdb_native: explicitly enable installed native GDB against the known-source fixture", "ghidra_native: explicitly enable installed Ghidra against the known-source fixture", "remote_tls: real HTTPS/WSS listener with a temporary private CA", "oauth_keycloak: opt-in real local Keycloak OAuth authorization-code/PKCE integration"]

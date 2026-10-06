@@ -1,0 +1,269 @@
+:root {
+    font-family:
+        Segoe UI,
+        Arial,
+        sans-serif;
+    color: #e5edf6;
+    background: #0b1320;
+    color-scheme: dark;
+}
+.login-option {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+.login-option input {
+    width: auto;
+    margin: 0;
+}
+* {
+    box-sizing: border-box;
+}
+body {
+    margin: 0;
+}
+main {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 32px 28px;
+}
+.metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 18px 0;
+}
+.metrics article {
+    background: #131f30;
+    border: 1px solid #293c51;
+    padding: 18px;
+    border-radius: 10px;
+}
+.metrics small,
+.metrics strong {
+    display: block;
+}
+.metrics small {
+    color: #9cadbf;
+    margin-bottom: 10px;
+    font-size: 12px;
+}
+.metrics strong {
+    font-size: 26px;
+}
+.metrics .timestamp {
+    font-size: 17px;
+}
+.dashboard-actions {
+    flex-wrap: wrap;
+}
+.danger {
+    background: #803e45;
+}
+.tabs {
+    display: flex;
+    gap: 8px;
+    margin-top: 24px;
+}
+.tabs button {
+    background: transparent;
+    color: #9cadbf;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+}
+.tabs button[aria-pressed="true"] {
+    color: #8bbdf1;
+    border-bottom-color: #58a9ec;
+}
+.section-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+}
+.section-heading small {
+    color: #9cadbf;
+    font-size: 12px;
+}
+.activity {
+    max-height: 310px;
+    overflow: auto;
+}
+.activity-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 14px 0;
+    border-bottom: 1px solid #293c51;
+    font-size: 13px;
+}
+.activity-row time {
+    color: #9cadbf;
+    min-width: 88px;
+}
+.activity-row div {
+    flex: 1;
+}
+.activity-row div span {
+    display: block;
+    color: #9cadbf;
+    margin-top: 5px;
+}
+.badge {
+    border: 1px solid #3a5169;
+    padding: 4px 8px;
+    border-radius: 5px;
+    font-size: 11px;
+    white-space: nowrap;
+}
+.success {
+    color: #3fd9aa;
+    border-color: #277c68;
+}
+.operation-list {
+    list-style: none;
+    padding: 0;
+}
+.operation-list li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 15px 0;
+}
+.operation-list small {
+    width: 100%;
+    color: #9cadbf;
+}
+@media (max-width: 650px) {
+    .metrics {
+        grid-template-columns: 1fr;
+    }
+    .section-heading {
+        display: block;
+    }
+    .activity-row {
+        gap: 8px;
+    }
+}
+.eyebrow {
+    color: #8bbdf1;
+    font-size: 11px;
+    letter-spacing: 2px;
+}
+h1 {
+    font-size: 30px;
+    margin: 8px 0;
+}
+h2 {
+    font-size: 19px;
+    margin: 0 0 20px;
+}
+p {
+    color: #9cadbf;
+    font-size: 14px;
+    line-height: 1.6;
+}
+section {
+    padding: 24px;
+    margin: 20px 0;
+    background: #131f30;
+    border: 1px solid #293c51;
+    border-radius: 12px;
+}
+.state {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 24px;
+}
+.state small {
+    margin-left: auto;
+    color: #9cadbf;
+}
+.dot {
+    width: 9px;
+    height: 9px;
+    background: #93a4b5;
+    border-radius: 50%;
+}
+.online {
+    background: #3fd9aa;
+}
+label {
+    display: block;
+    font-size: 13px;
+    margin: 16px 0;
+    color: #c2d2e4;
+}
+input,
+select {
+    display: block;
+    width: 100%;
+    padding: 11px 12px;
+    margin-top: 8px;
+    border: 1px solid #3a5169;
+    border-radius: 6px;
+    background: #0c1625;
+    font: inherit;
+    color: #edf4fb;
+}
+button {
+    border: 0;
+    background: #2c79be;
+    color: white;
+    border-radius: 6px;
+    padding: 11px 18px;
+    font: inherit;
+    cursor: pointer;
+}
+.secondary {
+    background: #25384d;
+}
+button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+.pick {
+    display: flex;
+    gap: 10px;
+    align-items: end;
+}
+.pick input {
+    flex: 1;
+}
+.pick button {
+    white-space: nowrap;
+}
+.actions {
+    display: flex;
+    gap: 10px;
+}
+.hint {
+    font-size: 12px;
+}
+dl {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 15px;
+    font-size: 13px;
+}
+dt {
+    color: #9cadbf;
+}
+dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+footer {
+    color: #71879f;
+    font-size: 11px;
+    text-align: center;
+}
+.desktop-setting { display: flex; align-items: center; gap: 12px; }
+.desktop-setting input { width: 18px; height: 18px; margin: 0; flex-shrink: 0; }
+p[role="alert"] {
+    color: #ffbdbd;
+    padding: 14px;
+    border: 1px solid #704547;
+    border-radius: 6px;
+}

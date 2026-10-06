@@ -1,0 +1,15 @@
+.git
+.venv
+.racp
+.tools
+dist
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/renderer-dist
+**/test-results
+**/playwright-report
+**/*.pem
+**/*.key
+**/*.bin
+**/*.db*

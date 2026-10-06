@@ -1,0 +1,142 @@
+{
+  "$defs": {
+    "WorkspaceSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "path": {
+          "format": "path",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "path"
+      ],
+      "title": "WorkspaceSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "default": 1,
+      "maximum": 1,
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "service_name": {
+      "default": "RACPAgent",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+      "title": "Service Name",
+      "type": "string"
+    },
+    "service_sid": {
+      "maxLength": 184,
+      "pattern": "^S-1-5-80-(?:\\d+-){4}\\d+$",
+      "title": "Service Sid",
+      "type": "string"
+    },
+    "agent_sid": {
+      "maxLength": 184,
+      "pattern": "^S-1-(?:\\d+-)*\\d+$",
+      "title": "Agent Sid",
+      "type": "string"
+    },
+    "credentials": {
+      "format": "path",
+      "title": "Credentials",
+      "type": "string"
+    },
+    "data_dir": {
+      "format": "path",
+      "title": "Data Dir",
+      "type": "string"
+    },
+    "workspace": {
+      "format": "path",
+      "title": "Workspace",
+      "type": "string"
+    },
+    "allowed_workspaces": {
+      "items": {
+        "$ref": "#/$defs/WorkspaceSpec"
+      },
+      "maxItems": 15,
+      "title": "Allowed Workspaces",
+      "type": "array"
+    },
+    "profile": {
+      "default": "read_only",
+      "enum": [
+        "read_only",
+        "standard",
+        "trusted_personal"
+      ],
+      "title": "Profile",
+      "type": "string"
+    },
+    "desktop_login_users": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 16,
+      "title": "Desktop Login Users",
+      "type": "array"
+    },
+    "browser_cdp": {
+      "default": false,
+      "title": "Browser Cdp",
+      "type": "boolean"
+    },
+    "browser_allowed_origins": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 16,
+      "title": "Browser Allowed Origins",
+      "type": "array"
+    },
+    "plugin_config": {
+      "anyOf": [
+        {
+          "format": "path",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Plugin Config"
+    },
+    "ca_file": {
+      "anyOf": [
+        {
+          "format": "path",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ca File"
+    }
+  },
+  "required": [
+    "service_sid",
+    "agent_sid",
+    "credentials",
+    "data_dir",
+    "workspace"
+  ],
+  "title": "ServiceConfig",
+  "type": "object"
+}

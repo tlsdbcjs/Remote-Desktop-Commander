@@ -1,0 +1,33 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "const": "stream_open",
+      "default": "stream_open",
+      "title": "Type",
+      "type": "string"
+    },
+    "cursor": {
+      "default": "0",
+      "pattern": "^\\d{1,20}$",
+      "title": "Cursor",
+      "type": "string"
+    },
+    "max_bytes": {
+      "default": 65536,
+      "maximum": 65536,
+      "minimum": 4,
+      "title": "Max Bytes",
+      "type": "integer"
+    },
+    "window_bytes": {
+      "default": 262144,
+      "maximum": 262144,
+      "minimum": 1024,
+      "title": "Window Bytes",
+      "type": "integer"
+    }
+  },
+  "title": "StreamOpenInput",
+  "type": "object"
+}

@@ -1,0 +1,119 @@
+{
+  "$defs": {
+    "ResolutionView": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "operation_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "SUCCEEDED",
+            "FAILED",
+            "TIMED_OUT",
+            "CANCELLED",
+            "UNKNOWN"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Result"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error"
+        },
+        "observed_at": {
+          "maxLength": 64,
+          "title": "Observed At",
+          "type": "string"
+        },
+        "outcome_available": {
+          "title": "Outcome Available",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "operation_id",
+        "digest",
+        "state",
+        "result",
+        "error",
+        "observed_at",
+        "outcome_available"
+      ],
+      "title": "ResolutionView",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "operation_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "ACCEPTED",
+        "DISPATCHED",
+        "RUNNING",
+        "CANCEL_REQUESTED",
+        "RECONCILING",
+        "SUCCEEDED",
+        "FAILED",
+        "TIMED_OUT",
+        "CANCELLED",
+        "UNKNOWN"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/ResolutionView"
+      },
+      "maxItems": 16,
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "operation_id",
+    "state",
+    "items"
+  ],
+  "title": "OperationResolutions",
+  "type": "object"
+}

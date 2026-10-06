@@ -1,0 +1,2128 @@
+{
+  "$defs": {
+    "Ack": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "request_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "operation_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "trace_id": {
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "ack",
+          "default": "ack",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "request_id",
+        "operation_id",
+        "trace_id"
+      ],
+      "title": "Ack",
+      "type": "object"
+    },
+    "BrowserState": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "type": {
+          "const": "browser_state",
+          "default": "browser_state",
+          "title": "Type",
+          "type": "string"
+        },
+        "provider_instance_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Provider Instance Id",
+          "type": "string"
+        },
+        "event_sequence": {
+          "pattern": "^\\d{1,20}$",
+          "title": "Event Sequence",
+          "type": "string"
+        },
+        "browser_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Browser Id"
+        },
+        "kind": {
+          "enum": [
+            "health",
+            "inventory",
+            "gap",
+            "navigation",
+            "frame",
+            "page_created",
+            "page_closed",
+            "dialog",
+            "download"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "observed",
+            "changed",
+            "active",
+            "closed",
+            "failed",
+            "expired",
+            "dismissed",
+            "completed",
+            "unsolicited_cancelled",
+            "pending",
+            "refresh_required",
+            "files_verified",
+            "unavailable"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "handles": {
+          "items": {
+            "$ref": "#/$defs/ResourceHandle"
+          },
+          "maxItems": 128,
+          "title": "Handles",
+          "type": "array"
+        },
+        "capability": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Capability"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "provider_instance_id",
+        "event_sequence",
+        "kind",
+        "state"
+      ],
+      "title": "BrowserState",
+      "type": "object"
+    },
+    "BrowserStateAck": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "type": {
+          "const": "browser_state_ack",
+          "default": "browser_state_ack",
+          "title": "Type",
+          "type": "string"
+        },
+        "provider_instance_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Provider Instance Id",
+          "type": "string"
+        },
+        "event_sequence": {
+          "pattern": "^\\d{1,20}$",
+          "title": "Event Sequence",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "provider_instance_id",
+        "event_sequence"
+      ],
+      "title": "BrowserStateAck",
+      "type": "object"
+    },
+    "Cancel": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "type": {
+          "const": "cancel",
+          "default": "cancel",
+          "title": "Type",
+          "type": "string"
+        },
+        "request_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "target_operation_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Target Operation Id",
+          "type": "string"
+        },
+        "reason": {
+          "default": "requested",
+          "enum": [
+            "requested",
+            "deadline",
+            "revoked"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "request_id",
+        "target_operation_id"
+      ],
+      "title": "Cancel",
+      "type": "object"
+    },
+    "Capability": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "operations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Operations",
+          "type": "array"
+        },
+        "installed": {
+          "default": true,
+          "title": "Installed",
+          "type": "boolean"
+        },
+        "supported": {
+          "default": true,
+          "title": "Supported",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "healthy": {
+          "default": true,
+          "title": "Healthy",
+          "type": "boolean"
+        },
+        "unavailable_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unavailable Reason"
+        },
+        "attributes": {
+          "additionalProperties": true,
+          "title": "Attributes",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "operations"
+      ],
+      "title": "Capability",
+      "type": "object"
+    },
+    "Context": {
+      "additionalProperties": false,
+      "properties": {
+        "principal_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Principal Id",
+          "type": "string"
+        },
+        "workspace_id": {
+          "default": "default",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+          "title": "Workspace Id",
+          "type": "string"
+        },
+        "execution_profile_id": {
+          "enum": [
+            "read_only",
+            "standard",
+            "trusted_personal"
+          ],
+          "title": "Execution Profile Id",
+          "type": "string"
+        },
+        "policy_revision": {
+          "minimum": 1,
+          "title": "Policy Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "principal_id",
+        "execution_profile_id",
+        "policy_revision"
+      ],
+      "title": "Context",
+      "type": "object"
+    },
+    "ExecutionSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "operation_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "request_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "trace_id": {
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "ACCEPTED",
+            "RUNNING",
+            "CANCEL_REQUESTED"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "job_state": {
+          "anyOf": [
+            {
+              "enum": [
+                "RUNNING",
+                "WAITING"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job State"
+        },
+        "waiting_reason": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Waiting Reason"
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Progress"
+        },
+        "progress_revision": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Progress Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "operation_id",
+        "request_id",
+        "trace_id",
+        "state"
+      ],
+      "title": "ExecutionSnapshot",
+      "type": "object"
+    },
+    "Heartbeat": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "type": {
+          "const": "heartbeat",
+          "default": "heartbeat",
+          "title": "Type",
+          "type": "string"
+        },
+        "health": {
+          "default": "healthy",
+          "enum": [
+            "healthy",
+            "degraded"
+          ],
+          "title": "Health",
+          "type": "string"
+        },
+        "handles": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ResourceHandle"
+              },
+              "maxItems": 128,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Handles"
+        },
+        "capabilities": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Capability"
+              },
+              "maxItems": 16,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Capabilities"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch"
+      ],
+      "title": "Heartbeat",
+      "type": "object"
+    },
+    "Hello": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "hello",
+          "default": "hello",
+          "title": "Type",
+          "type": "string"
+        },
+        "agent_version": {
+          "title": "Agent Version",
+          "type": "string"
+        },
+        "supported_protocols": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Supported Protocols",
+          "type": "array"
+        },
+        "platform": {
+          "title": "Platform",
+          "type": "string"
+        },
+        "architecture": {
+          "title": "Architecture",
+          "type": "string"
+        },
+        "execution_identity": {
+          "title": "Execution Identity",
+          "type": "string"
+        },
+        "capabilities": {
+          "items": {
+            "$ref": "#/$defs/Capability"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "last_event_cursor": {
+          "default": "0",
+          "title": "Last Event Cursor",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "agent_version",
+        "supported_protocols",
+        "platform",
+        "architecture",
+        "execution_identity",
+        "capabilities"
+      ],
+      "title": "Hello",
+      "type": "object"
+    },
+    "JobUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "request_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "operation_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "trace_id": {
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "event",
+          "default": "event",
+          "title": "Type",
+          "type": "string"
+        },
+        "name": {
+          "const": "job.state_changed",
+          "default": "job.state_changed",
+          "title": "Name",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "RUNNING",
+            "WAITING"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "waiting_reason": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Waiting Reason"
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Progress"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "request_id",
+        "operation_id",
+        "trace_id",
+        "state",
+        "revision"
+      ],
+      "title": "JobUpdate",
+      "type": "object"
+    },
+    "OutcomeExpired": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "request_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "operation_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "trace_id": {
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "error",
+          "default": "error",
+          "title": "Type",
+          "type": "string"
+        },
+        "code": {
+          "const": "OPERATION_EXPIRED",
+          "default": "OPERATION_EXPIRED",
+          "title": "Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "request_id",
+        "operation_id",
+        "trace_id"
+      ],
+      "title": "OutcomeExpired",
+      "type": "object"
+    },
+    "OutputDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "size_bytes": {
+          "maximum": 1073741824,
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "media_type": {
+          "enum": [
+            "application/octet-stream",
+            "application/json",
+            "application/vnd.racp.output-stream",
+            "image/png",
+            "image/jpeg",
+            "text/plain"
+          ],
+          "title": "Media Type",
+          "type": "string"
+        },
+        "artifact_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artifact Id"
+        }
+      },
+      "required": [
+        "id",
+        "size_bytes",
+        "sha256",
+        "media_type"
+      ],
+      "title": "OutputDescriptor",
+      "type": "object"
+    },
+    "Reconcile": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "type": {
+          "const": "reconcile",
+          "default": "reconcile",
+          "title": "Type",
+          "type": "string"
+        },
+        "records": {
+          "items": {
+            "$ref": "#/$defs/Result"
+          },
+          "maxItems": 500,
+          "title": "Records",
+          "type": "array"
+        },
+        "complete": {
+          "default": true,
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "handles": {
+          "items": {
+            "$ref": "#/$defs/ResourceHandle"
+          },
+          "maxItems": 128,
+          "title": "Handles",
+          "type": "array"
+        },
+        "active": {
+          "items": {
+            "$ref": "#/$defs/ExecutionSnapshot"
+          },
+          "maxItems": 16,
+          "title": "Active",
+          "type": "array"
+        },
+        "expired": {
+          "items": {
+            "$ref": "#/$defs/OutcomeExpired"
+          },
+          "maxItems": 500,
+          "title": "Expired",
+          "type": "array"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch"
+      ],
+      "title": "Reconcile",
+      "type": "object"
+    },
+    "Request": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "request_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "operation_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "trace_id": {
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "request",
+          "default": "request",
+          "title": "Type",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "operation": {
+          "title": "Operation",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "maximum": 86400000,
+          "minimum": 1,
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "remaining_timeout_ms": {
+          "maximum": 86400000,
+          "minimum": 1,
+          "title": "Remaining Timeout Ms",
+          "type": "integer"
+        },
+        "execution_mode": {
+          "enum": [
+            "sync",
+            "job"
+          ],
+          "title": "Execution Mode",
+          "type": "string"
+        },
+        "idempotency_key": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        },
+        "retain_key": {
+          "default": true,
+          "title": "Retain Key",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "request_id",
+        "operation_id",
+        "trace_id",
+        "timestamp",
+        "operation",
+        "timeout_ms",
+        "remaining_timeout_ms",
+        "execution_mode",
+        "idempotency_key",
+        "context",
+        "payload"
+      ],
+      "title": "Request",
+      "type": "object"
+    },
+    "ResourceHandle": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "terminal",
+            "interactive-process",
+            "browser",
+            "browser-page",
+            "analysis",
+            "debugger"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "owner": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Owner",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "workspace_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Workspace Id"
+        },
+        "provider_instance_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Provider Instance Id",
+          "type": "string"
+        },
+        "resource_revision": {
+          "pattern": "^\\d{1,20}$",
+          "title": "Resource Revision",
+          "type": "string"
+        },
+        "created_at": {
+          "maxLength": 64,
+          "title": "Created At",
+          "type": "string"
+        },
+        "last_access_at": {
+          "maxLength": 64,
+          "title": "Last Access At",
+          "type": "string"
+        },
+        "expires_at": {
+          "maxLength": 64,
+          "title": "Expires At",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "CREATING",
+            "ACTIVE",
+            "CLOSING",
+            "CLOSED",
+            "EXPIRED",
+            "FAILED"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "availability": {
+          "enum": [
+            "available",
+            "unavailable",
+            "offline",
+            "exited"
+          ],
+          "title": "Availability",
+          "type": "string"
+        },
+        "pid": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pid"
+        },
+        "create_time": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Create Time"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exit Code"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "const": "discard",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output"
+        },
+        "ownership": {
+          "anyOf": [
+            {
+              "enum": [
+                "racp_owned",
+                "borrowed",
+                "external_browser_owned_context"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ownership"
+        },
+        "backend": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backend"
+        },
+        "backend_version": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backend Version"
+        },
+        "target_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Sha256"
+        },
+        "architecture": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Architecture"
+        },
+        "image_base": {
+          "anyOf": [
+            {
+              "pattern": "^0x[0-9a-fA-F]{1,16}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Base"
+        },
+        "analysis_database": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analysis Database"
+        },
+        "analysis_state": {
+          "anyOf": [
+            {
+              "enum": [
+                "ANALYZING",
+                "READY",
+                "FAILED",
+                "CLOSED"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analysis State"
+        },
+        "debugger_state": {
+          "anyOf": [
+            {
+              "enum": [
+                "STARTING",
+                "STOPPED",
+                "RUNNING",
+                "DETACHED",
+                "EXITED",
+                "FAILED"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Debugger State"
+        },
+        "stop_sequence": {
+          "anyOf": [
+            {
+              "pattern": "^(0|[1-9][0-9]{0,18})$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stop Sequence"
+        },
+        "stop_reason": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stop Reason"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "device_id",
+        "owner",
+        "agent_boot_id",
+        "provider_instance_id",
+        "resource_revision",
+        "created_at",
+        "last_access_at",
+        "expires_at",
+        "state",
+        "availability"
+      ],
+      "title": "ResourceHandle",
+      "type": "object"
+    },
+    "Result": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "request_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "operation_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "trace_id": {
+          "pattern": "^[0-9a-f]{32}$",
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "result",
+          "default": "result",
+          "title": "Type",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "SUCCEEDED",
+            "FAILED",
+            "TIMED_OUT",
+            "CANCELLED",
+            "UNKNOWN"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/$defs/OutputDescriptor"
+          },
+          "maxItems": 4,
+          "title": "Outputs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "request_id",
+        "operation_id",
+        "trace_id",
+        "state"
+      ],
+      "title": "Result",
+      "type": "object"
+    },
+    "StreamAck": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "stream_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Stream Id",
+          "type": "string"
+        },
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "stream_ack",
+          "default": "stream_ack",
+          "title": "Type",
+          "type": "string"
+        },
+        "byte_offset": {
+          "pattern": "^\\d{1,20}$",
+          "title": "Byte Offset",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "stream_id",
+        "handle_id",
+        "byte_offset"
+      ],
+      "title": "StreamAck",
+      "type": "object"
+    },
+    "StreamData": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "stream_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Stream Id",
+          "type": "string"
+        },
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "stream_data",
+          "default": "stream_data",
+          "title": "Type",
+          "type": "string"
+        },
+        "byte_offset": {
+          "pattern": "^\\d{1,20}$",
+          "title": "Byte Offset",
+          "type": "string"
+        },
+        "next_cursor": {
+          "pattern": "^\\d{1,20}$",
+          "title": "Next Cursor",
+          "type": "string"
+        },
+        "data": {
+          "maxLength": 65536,
+          "title": "Data",
+          "type": "string"
+        },
+        "invalid_byte_replacements": {
+          "default": 0,
+          "maximum": 65536,
+          "minimum": 0,
+          "title": "Invalid Byte Replacements",
+          "type": "integer"
+        },
+        "eof": {
+          "default": false,
+          "title": "Eof",
+          "type": "boolean"
+        },
+        "process_exit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Process Exit"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "stream_id",
+        "handle_id",
+        "byte_offset",
+        "next_cursor",
+        "data"
+      ],
+      "title": "StreamData",
+      "type": "object"
+    },
+    "StreamEnd": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "stream_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Stream Id",
+          "type": "string"
+        },
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "stream_end",
+          "default": "stream_end",
+          "title": "Type",
+          "type": "string"
+        },
+        "byte_offset": {
+          "pattern": "^\\d{1,20}$",
+          "title": "Byte Offset",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "eof",
+            "unsubscribed",
+            "error"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "process_exit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Process Exit"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "stream_id",
+        "handle_id",
+        "byte_offset",
+        "reason"
+      ],
+      "title": "StreamEnd",
+      "type": "object"
+    },
+    "StreamGap": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "stream_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Stream Id",
+          "type": "string"
+        },
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "stream_gap",
+          "default": "stream_gap",
+          "title": "Type",
+          "type": "string"
+        },
+        "byte_offset": {
+          "pattern": "^\\d{1,20}$",
+          "title": "Byte Offset",
+          "type": "string"
+        },
+        "earliest_cursor": {
+          "pattern": "^\\d{1,20}$",
+          "title": "Earliest Cursor",
+          "type": "string"
+        },
+        "lost_bytes": {
+          "pattern": "^\\d{1,20}$",
+          "title": "Lost Bytes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "stream_id",
+        "handle_id",
+        "byte_offset",
+        "earliest_cursor",
+        "lost_bytes"
+      ],
+      "title": "StreamGap",
+      "type": "object"
+    },
+    "StreamOpened": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "stream_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Stream Id",
+          "type": "string"
+        },
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "stream_opened",
+          "default": "stream_opened",
+          "title": "Type",
+          "type": "string"
+        },
+        "cursor": {
+          "pattern": "^\\d{1,20}$",
+          "title": "Cursor",
+          "type": "string"
+        },
+        "max_bytes": {
+          "maximum": 65536,
+          "minimum": 4,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "window_bytes": {
+          "maximum": 262144,
+          "minimum": 1024,
+          "title": "Window Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "stream_id",
+        "handle_id",
+        "cursor",
+        "max_bytes",
+        "window_bytes"
+      ],
+      "title": "StreamOpened",
+      "type": "object"
+    },
+    "StreamSubscribe": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "stream_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Stream Id",
+          "type": "string"
+        },
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "stream_open",
+          "default": "stream_open",
+          "title": "Type",
+          "type": "string"
+        },
+        "cursor": {
+          "pattern": "^\\d{1,20}$",
+          "title": "Cursor",
+          "type": "string"
+        },
+        "max_bytes": {
+          "maximum": 65536,
+          "minimum": 4,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "window_bytes": {
+          "maximum": 262144,
+          "minimum": 1024,
+          "title": "Window Bytes",
+          "type": "integer"
+        },
+        "context": {
+          "$ref": "#/$defs/Context"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "stream_id",
+        "handle_id",
+        "cursor",
+        "max_bytes",
+        "window_bytes",
+        "context"
+      ],
+      "title": "StreamSubscribe",
+      "type": "object"
+    },
+    "StreamUnsubscribe": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "stream_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Stream Id",
+          "type": "string"
+        },
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "stream_unsubscribe",
+          "default": "stream_unsubscribe",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "stream_id",
+        "handle_id"
+      ],
+      "title": "StreamUnsubscribe",
+      "type": "object"
+    },
+    "Welcome": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "type": {
+          "const": "welcome",
+          "default": "welcome",
+          "title": "Type",
+          "type": "string"
+        },
+        "heartbeat_interval_ms": {
+          "default": 5000,
+          "title": "Heartbeat Interval Ms",
+          "type": "integer"
+        },
+        "max_message_bytes": {
+          "default": 1048576,
+          "title": "Max Message Bytes",
+          "type": "integer"
+        },
+        "execution_lease_ttl_ms": {
+          "default": 60000,
+          "title": "Execution Lease Ttl Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch"
+      ],
+      "title": "Welcome",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "ack": "#/$defs/Ack",
+      "browser_state": "#/$defs/BrowserState",
+      "browser_state_ack": "#/$defs/BrowserStateAck",
+      "cancel": "#/$defs/Cancel",
+      "error": "#/$defs/OutcomeExpired",
+      "event": "#/$defs/JobUpdate",
+      "heartbeat": "#/$defs/Heartbeat",
+      "hello": "#/$defs/Hello",
+      "reconcile": "#/$defs/Reconcile",
+      "request": "#/$defs/Request",
+      "result": "#/$defs/Result",
+      "stream_ack": "#/$defs/StreamAck",
+      "stream_data": "#/$defs/StreamData",
+      "stream_end": "#/$defs/StreamEnd",
+      "stream_gap": "#/$defs/StreamGap",
+      "stream_open": "#/$defs/StreamSubscribe",
+      "stream_opened": "#/$defs/StreamOpened",
+      "stream_unsubscribe": "#/$defs/StreamUnsubscribe",
+      "welcome": "#/$defs/Welcome"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Hello"
+    },
+    {
+      "$ref": "#/$defs/Welcome"
+    },
+    {
+      "$ref": "#/$defs/Heartbeat"
+    },
+    {
+      "$ref": "#/$defs/BrowserState"
+    },
+    {
+      "$ref": "#/$defs/BrowserStateAck"
+    },
+    {
+      "$ref": "#/$defs/Request"
+    },
+    {
+      "$ref": "#/$defs/Ack"
+    },
+    {
+      "$ref": "#/$defs/Result"
+    },
+    {
+      "$ref": "#/$defs/OutcomeExpired"
+    },
+    {
+      "$ref": "#/$defs/Cancel"
+    },
+    {
+      "$ref": "#/$defs/Reconcile"
+    },
+    {
+      "$ref": "#/$defs/JobUpdate"
+    },
+    {
+      "$ref": "#/$defs/StreamSubscribe"
+    },
+    {
+      "$ref": "#/$defs/StreamOpened"
+    },
+    {
+      "$ref": "#/$defs/StreamData"
+    },
+    {
+      "$ref": "#/$defs/StreamAck"
+    },
+    {
+      "$ref": "#/$defs/StreamUnsubscribe"
+    },
+    {
+      "$ref": "#/$defs/StreamGap"
+    },
+    {
+      "$ref": "#/$defs/StreamEnd"
+    }
+  ]
+}

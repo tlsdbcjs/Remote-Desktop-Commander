@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "PluginInstallation": {
+      "additionalProperties": false,
+      "properties": {
+        "manifest": {
+          "format": "path",
+          "title": "Manifest",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "permissions": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Permissions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "manifest",
+        "sha256",
+        "permissions"
+      ],
+      "title": "PluginInstallation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "default": 1,
+      "maximum": 1,
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "plugins": {
+      "items": {
+        "$ref": "#/$defs/PluginInstallation"
+      },
+      "maxItems": 4,
+      "title": "Plugins",
+      "type": "array"
+    }
+  },
+  "title": "PluginConfig",
+  "type": "object"
+}

@@ -1,0 +1,1 @@
+"""Payload-free structured logging."""

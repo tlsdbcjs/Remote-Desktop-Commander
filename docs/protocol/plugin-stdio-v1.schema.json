@@ -1,0 +1,257 @@
+{
+  "$defs": {
+    "PluginCancel": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "cancel",
+          "default": "cancel",
+          "title": "Type",
+          "type": "string"
+        },
+        "protocol_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol Version",
+          "type": "integer"
+        },
+        "instance_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Instance Id",
+          "type": "string"
+        },
+        "request_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "instance_id",
+        "request_id"
+      ],
+      "title": "PluginCancel",
+      "type": "object"
+    },
+    "PluginError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "maxLength": 64,
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 4096,
+          "title": "Message",
+          "type": "string"
+        },
+        "execution_state": {
+          "default": "unknown",
+          "enum": [
+            "not_started",
+            "unknown",
+            "completed"
+          ],
+          "title": "Execution State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "PluginError",
+      "type": "object"
+    },
+    "PluginEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "event",
+          "default": "event",
+          "title": "Type",
+          "type": "string"
+        },
+        "protocol_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol Version",
+          "type": "integer"
+        },
+        "instance_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Instance Id",
+          "type": "string"
+        },
+        "sequence": {
+          "pattern": "^(0|[1-9][0-9]{0,19})$",
+          "title": "Sequence",
+          "type": "string"
+        },
+        "kind": {
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_.-]*$",
+          "title": "Kind",
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": true,
+          "title": "Data",
+          "type": "object"
+        }
+      },
+      "required": [
+        "instance_id",
+        "sequence",
+        "kind",
+        "data"
+      ],
+      "title": "PluginEvent",
+      "type": "object"
+    },
+    "PluginRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "request",
+          "default": "request",
+          "title": "Type",
+          "type": "string"
+        },
+        "protocol_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol Version",
+          "type": "integer"
+        },
+        "instance_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Instance Id",
+          "type": "string"
+        },
+        "request_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "operation": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Operation",
+          "type": "string"
+        },
+        "deadline_unix_ms": {
+          "maximum": 9999999999999,
+          "minimum": 0,
+          "title": "Deadline Unix Ms",
+          "type": "integer"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        }
+      },
+      "required": [
+        "instance_id",
+        "request_id",
+        "operation",
+        "deadline_unix_ms",
+        "payload"
+      ],
+      "title": "PluginRequest",
+      "type": "object"
+    },
+    "PluginResult": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "result",
+          "default": "result",
+          "title": "Type",
+          "type": "string"
+        },
+        "protocol_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol Version",
+          "type": "integer"
+        },
+        "instance_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Instance Id",
+          "type": "string"
+        },
+        "request_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "SUCCEEDED",
+            "FAILED"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginError"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "instance_id",
+        "request_id",
+        "state"
+      ],
+      "title": "PluginResult",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "cancel": "#/$defs/PluginCancel",
+      "event": "#/$defs/PluginEvent",
+      "request": "#/$defs/PluginRequest",
+      "result": "#/$defs/PluginResult"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/PluginRequest"
+    },
+    {
+      "$ref": "#/$defs/PluginCancel"
+    },
+    {
+      "$ref": "#/$defs/PluginResult"
+    },
+    {
+      "$ref": "#/$defs/PluginEvent"
+    }
+  ]
+}

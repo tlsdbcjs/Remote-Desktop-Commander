@@ -1,0 +1,198 @@
+{
+  "$defs": {
+    "PluginOperation": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 128,
+          "pattern": "^(re|debugger|external_mcp)\\.[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "capability": {
+          "enum": [
+            "static-analysis",
+            "debugger",
+            "external-mcp"
+          ],
+          "title": "Capability",
+          "type": "string"
+        },
+        "input_schema": {
+          "additionalProperties": true,
+          "title": "Input Schema",
+          "type": "object"
+        },
+        "output_schema": {
+          "additionalProperties": true,
+          "title": "Output Schema",
+          "type": "object"
+        },
+        "permission_scope": {
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9_.-]+$",
+          "title": "Permission Scope",
+          "type": "string"
+        },
+        "side_effect": {
+          "title": "Side Effect",
+          "type": "boolean"
+        },
+        "execution_modes": {
+          "items": {
+            "enum": [
+              "sync",
+              "job"
+            ],
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Execution Modes",
+          "type": "array"
+        },
+        "max_timeout_ms": {
+          "default": 30000,
+          "maximum": 86400000,
+          "minimum": 100,
+          "title": "Max Timeout Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "capability",
+        "input_schema",
+        "output_schema",
+        "permission_scope",
+        "side_effect",
+        "execution_modes"
+      ],
+      "title": "PluginOperation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "title": "Name",
+      "type": "string"
+    },
+    "version": {
+      "maxLength": 64,
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[a-zA-Z0-9.-]+)?$",
+      "title": "Version",
+      "type": "string"
+    },
+    "protocol_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "transport": {
+      "const": "stdio",
+      "default": "stdio",
+      "title": "Transport",
+      "type": "string"
+    },
+    "backend_name": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Backend Name",
+      "type": "string"
+    },
+    "backend_version": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Backend Version",
+      "type": "string"
+    },
+    "capabilities": {
+      "items": {
+        "enum": [
+          "static-analysis",
+          "debugger",
+          "external-mcp"
+        ],
+        "type": "string"
+      },
+      "maxItems": 3,
+      "minItems": 1,
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "operations": {
+      "items": {
+        "$ref": "#/$defs/PluginOperation"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Operations",
+      "type": "array"
+    },
+    "command": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "title": "Command",
+      "type": "array"
+    },
+    "working_directory": {
+      "maxLength": 32768,
+      "minLength": 1,
+      "title": "Working Directory",
+      "type": "string"
+    },
+    "environment": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "maxProperties": 32,
+      "title": "Environment",
+      "type": "object"
+    },
+    "required_permissions": {
+      "items": {
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9_.-]+$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "title": "Required Permissions",
+      "type": "array"
+    },
+    "health_timeout_ms": {
+      "default": 5000,
+      "maximum": 30000,
+      "minimum": 100,
+      "title": "Health Timeout Ms",
+      "type": "integer"
+    },
+    "max_memory_bytes": {
+      "default": 2147483648,
+      "maximum": 8589934592,
+      "minimum": 67108864,
+      "title": "Max Memory Bytes",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "name",
+    "version",
+    "backend_name",
+    "backend_version",
+    "capabilities",
+    "operations",
+    "command",
+    "working_directory",
+    "required_permissions"
+  ],
+  "title": "PluginManifest",
+  "type": "object"
+}

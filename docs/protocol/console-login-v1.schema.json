@@ -1,0 +1,16 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "setup_secret": {
+      "maxLength": 128,
+      "minLength": 20,
+      "title": "Setup Secret",
+      "type": "string"
+    }
+  },
+  "required": [
+    "setup_secret"
+  ],
+  "title": "ConsoleLogin",
+  "type": "object"
+}

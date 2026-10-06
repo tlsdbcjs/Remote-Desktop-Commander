@@ -1,0 +1,103 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "device_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Device Id",
+      "type": "string"
+    },
+    "direction": {
+      "default": "upload",
+      "enum": [
+        "upload",
+        "download"
+      ],
+      "title": "Direction",
+      "type": "string"
+    },
+    "operation_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Operation Id"
+    },
+    "output_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output Id"
+    },
+    "artifact_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Artifact Id"
+    },
+    "size_bytes": {
+      "anyOf": [
+        {
+          "maximum": 1073741824,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Size Bytes"
+    },
+    "sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sha256"
+    },
+    "media_type": {
+      "default": "application/octet-stream",
+      "enum": [
+        "application/octet-stream",
+        "application/json",
+        "application/vnd.racp.output-stream",
+        "image/png",
+        "image/jpeg",
+        "text/plain"
+      ],
+      "title": "Media Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "device_id"
+  ],
+  "title": "TransferCreate",
+  "type": "object"
+}

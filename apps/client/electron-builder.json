@@ -1,0 +1,66 @@
+{
+  "appId": "app.racp.client",
+  "productName": "RACP Client",
+  "directories": {
+    "output": "../../dist/client-desktop-0.1.8-final"
+  },
+  "files": [
+    "main.cjs",
+    "preload.cjs",
+    "backend.cjs",
+    "login.cjs",
+    "controller.cjs",
+    "errors.cjs",
+    "messages.json",
+    "assets/**",
+    "renderer-dist/**",
+    "package.json"
+  ],
+  "asar": true,
+  "beforePack": "./before-pack.cjs",
+  "extraResources": [
+    {
+      "from": "../../dist/client-agent-v8",
+      "to": "agent",
+      "filter": [
+        "runtime/**",
+        "browsers/**",
+        "agent-manifest.json",
+        "!**/__pycache__/**",
+        "!**/*.pyc"
+      ]
+    }
+  ],
+  "win": {
+    "target": [
+      "nsis",
+      "zip"
+    ],
+    "signAndEditExecutable": true,
+    "signExecutable": false,
+    "icon": "assets/app.ico"
+  },
+  "nsis": {
+    "include": "build/installer.nsh",
+    "deleteAppDataOnUninstall": false,
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true
+  },
+  "mac": {
+    "target": [
+      "dmg",
+      "zip"
+    ],
+    "category": "public.app-category.utilities"
+  },
+  "linux": {
+    "executableName": "racp-client",
+    "target": [
+      "AppImage",
+      "deb"
+    ],
+    "category": "Utility",
+    "maintainer": "RACP maintainers"
+  }
+}

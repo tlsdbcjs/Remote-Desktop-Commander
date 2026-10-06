@@ -1,0 +1,9 @@
+[project]
+name = "racp-protocol"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["racp-domain", "pydantic>=2.10,<3"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

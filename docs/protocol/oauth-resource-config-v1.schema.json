@@ -1,0 +1,101 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "issuer": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "title": "Issuer",
+      "type": "string"
+    },
+    "jwks_uri": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "title": "Jwks Uri",
+      "type": "string"
+    },
+    "owner_subject": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Owner Subject",
+      "type": "string"
+    },
+    "client_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Client Ids",
+      "type": "array"
+    },
+    "read_scope": {
+      "default": "racp.read",
+      "pattern": "^[A-Za-z0-9:._-]{1,128}$",
+      "title": "Read Scope",
+      "type": "string"
+    },
+    "execute_scope": {
+      "default": "racp.execute",
+      "pattern": "^[A-Za-z0-9:._-]{1,128}$",
+      "title": "Execute Scope",
+      "type": "string"
+    },
+    "algorithms": {
+      "default": [
+        "RS256"
+      ],
+      "items": {
+        "enum": [
+          "RS256",
+          "ES256"
+        ],
+        "type": "string"
+      },
+      "maxItems": 2,
+      "minItems": 1,
+      "title": "Algorithms",
+      "type": "array"
+    },
+    "ca_file": {
+      "anyOf": [
+        {
+          "format": "path",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ca File"
+    },
+    "jwks_ttl_seconds": {
+      "default": 300,
+      "maximum": 600,
+      "minimum": 30,
+      "title": "Jwks Ttl Seconds",
+      "type": "integer"
+    },
+    "max_token_seconds": {
+      "default": 3600,
+      "maximum": 86400,
+      "minimum": 60,
+      "title": "Max Token Seconds",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "issuer",
+    "jwks_uri",
+    "owner_subject",
+    "client_ids"
+  ],
+  "title": "OAuthResourceConfig",
+  "type": "object"
+}

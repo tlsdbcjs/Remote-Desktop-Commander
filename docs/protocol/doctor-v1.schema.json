@@ -1,0 +1,53 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "enum": [
+        "healthy",
+        "degraded"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "protocol": {
+      "default": 1,
+      "title": "Protocol",
+      "type": "integer"
+    },
+    "owner_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "gateway": {
+      "additionalProperties": true,
+      "title": "Gateway",
+      "type": "object"
+    },
+    "devices": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "maxItems": 500,
+      "title": "Devices",
+      "type": "array"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "status",
+    "owner_id",
+    "gateway",
+    "devices",
+    "limitations"
+  ],
+  "title": "DoctorView",
+  "type": "object"
+}

@@ -1,0 +1,37 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "owner_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "csrf_token": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Csrf Token",
+      "type": "string"
+    },
+    "idle_seconds": {
+      "default": 1800,
+      "title": "Idle Seconds",
+      "type": "integer"
+    },
+    "absolute_seconds": {
+      "default": 43200,
+      "title": "Absolute Seconds",
+      "type": "integer"
+    },
+    "expires_at": {
+      "maxLength": 64,
+      "title": "Expires At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "owner_id",
+    "csrf_token",
+    "expires_at"
+  ],
+  "title": "ConsoleSession",
+  "type": "object"
+}

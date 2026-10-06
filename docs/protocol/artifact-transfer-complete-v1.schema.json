@@ -1,0 +1,22 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "size_bytes": {
+      "maximum": 1073741824,
+      "minimum": 0,
+      "title": "Size Bytes",
+      "type": "integer"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Sha256",
+      "type": "string"
+    }
+  },
+  "required": [
+    "size_bytes",
+    "sha256"
+  ],
+  "title": "TransferComplete",
+  "type": "object"
+}

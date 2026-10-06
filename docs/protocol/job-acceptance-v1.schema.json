@@ -1,0 +1,62 @@
+{
+  "$defs": {
+    "JobState": {
+      "enum": [
+        "QUEUED",
+        "RUNNING",
+        "WAITING",
+        "CANCEL_REQUESTED",
+        "RECONCILING",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED",
+        "TIMED_OUT",
+        "UNKNOWN"
+      ],
+      "title": "JobState",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "operation_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "job_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "device_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Device Id",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/JobState"
+    },
+    "poll_after_ms": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Poll After Ms"
+    }
+  },
+  "required": [
+    "operation_id",
+    "job_id",
+    "device_id",
+    "state",
+    "poll_after_ms"
+  ],
+  "title": "JobAcceptance",
+  "type": "object"
+}

@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "WorkspaceSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "path": {
+          "format": "path",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "path"
+      ],
+      "title": "WorkspaceSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "default": 1,
+      "maximum": 1,
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "gateway": {
+      "maxLength": 2048,
+      "title": "Gateway",
+      "type": "string"
+    },
+    "device_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Device Id",
+      "type": "string"
+    },
+    "workspace": {
+      "format": "path",
+      "title": "Workspace",
+      "type": "string"
+    },
+    "allowed_workspaces": {
+      "items": {
+        "$ref": "#/$defs/WorkspaceSpec"
+      },
+      "maxItems": 15,
+      "title": "Allowed Workspaces",
+      "type": "array"
+    },
+    "data_dir": {
+      "format": "path",
+      "title": "Data Dir",
+      "type": "string"
+    },
+    "profile": {
+      "default": "read_only",
+      "enum": [
+        "read_only",
+        "standard",
+        "trusted_personal"
+      ],
+      "title": "Profile",
+      "type": "string"
+    },
+    "ca_file": {
+      "anyOf": [
+        {
+          "format": "path",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ca File"
+    },
+    "desktop_enabled": {
+      "default": false,
+      "title": "Desktop Enabled",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "gateway",
+    "device_id",
+    "workspace",
+    "data_dir"
+  ],
+  "title": "AgentSettings",
+  "type": "object"
+}

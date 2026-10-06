@@ -1,0 +1,168 @@
+{
+  "$defs": {
+    "JobState": {
+      "enum": [
+        "QUEUED",
+        "RUNNING",
+        "WAITING",
+        "CANCEL_REQUESTED",
+        "RECONCILING",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED",
+        "TIMED_OUT",
+        "UNKNOWN"
+      ],
+      "title": "JobState",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "operation_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "job_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "device_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Device Id",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/JobState"
+    },
+    "poll_after_ms": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Poll After Ms"
+    },
+    "id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "owner_id": {
+      "pattern": "^[A-Za-z0-9_-]{1,96}$",
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "progress": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Progress"
+    },
+    "waiting_reason": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Waiting Reason"
+    },
+    "progress_revision": {
+      "minimum": 0,
+      "title": "Progress Revision",
+      "type": "integer"
+    },
+    "operation": {
+      "title": "Operation",
+      "type": "string"
+    },
+    "timeout_ms": {
+      "maximum": 86400000,
+      "minimum": 1,
+      "title": "Timeout Ms",
+      "type": "integer"
+    },
+    "result": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Result"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Error"
+    },
+    "created_at": {
+      "maxLength": 64,
+      "title": "Created At",
+      "type": "string"
+    },
+    "updated_at": {
+      "maxLength": 64,
+      "title": "Updated At",
+      "type": "string"
+    },
+    "outcome_available": {
+      "default": true,
+      "title": "Outcome Available",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "operation_id",
+    "job_id",
+    "device_id",
+    "state",
+    "poll_after_ms",
+    "id",
+    "owner_id",
+    "revision",
+    "progress",
+    "waiting_reason",
+    "progress_revision",
+    "operation",
+    "timeout_ms",
+    "result",
+    "error",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "JobView",
+  "type": "object"
+}
