@@ -1,8 +1,8 @@
 # RACP 구현 작업 및 검증 현황 (Implementation Status)
 
-> **문서 ID**: `DOC-QA-STATUS`  
-> **상태**: Active · **기준 버전**: v0.1.8  
-> **최종 개정일**: 2026-10-07 · **분류**: Quality Assurance & Implementation Status (SSOT)
+> **Document ID**: `DOC-QA-STATUS`  
+> **Status**: Active · **Target Version**: v0.1.9  
+> **Last Updated**: 2026-10-07 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
 
@@ -30,6 +30,7 @@
 - [4. 요구사항 추적 매트릭스 (Requirements Traceability)](#4-요구사항-추적-매트릭스-requirements-traceability)
 - [5. 시스템 한도 및 제약 사항 (System Constraints)](#5-시스템-한도-및-제약-사항-system-constraints)
 - [6. 관련 문서](#6-관련-문서)
+- [7. Windows 작업 계획서 기준선 증거](#windows-plan-baseline)
 
 ---
 
@@ -161,3 +162,34 @@
 - [Windows 릴리스 인수 게이트](windows-release-gates.md)
 - [데스크톱 클라이언트 가이드](../guides/desktop-client-guide.md)
 - [2-PC 실증 랩 가이드](../guides/two-pc-lab-guide.md)
+- [Windows 작업 및 테스트 계획서](../spec/windows-engineering-plan.md)
+
+<a id="windows-plan-baseline"></a>
+
+## 7. Windows 작업 계획서 기준선 증거
+
+> [!NOTE]
+> 아래는 2026-10-06 계획 작성 시 기록한 기준선 증거를 2026-10-07 공식 계획서 재발행 과정에서 이관한 것이다. 이번 문서 작업 중 기능 시험을 다시 실행한 결과가 아니며, v0.1.9의 전체 인수 통과를 의미하지 않는다.
+
+| 기능/검사 | 당시 확인된 결과와 출처 | 남은 확인 |
+|---|---|---|
+| Windows 기본 검사 | 당시 `dist/test-results.xml`: 총 359, 341 passed, 18 skipped, failure/error 0 | 변경 후보 재실행, skipped 사유·후속 결과 분리 |
+| Console E2E | 당시 `dist/console-test-results.xml`: 14 passed | 최종 후보 사용자 흐름 재검 |
+| 로컬 Windows GUI | 사용자 첨부 실행 기록: 선택형 11개 통과 | 실제 141의 입력·표시·session 조합 |
+| Client E2E/Node | 사용자 첨부 기록: Client E2E 및 Node 10개 통과 | 최종 packaged 후보와 clean PC 수명 |
+| 실제 두 PC 기본 작업 | 파일·명령·ConPTY·Job 취소·Artifact·재연결 확인 | 동일 후보의 묶음 workflow 회귀 |
+| 실제 141 desktop 읽기 | session/window/monitor 조회, 3840×2160·150% 캡처 확인 | 입력·다중 monitor/DPI·잠금/RDP |
+| 실제 141 process/memory | 최신 사용자 첨부 기록: spawn 성공, 자체 fixture 메모리 32바이트 예상값 일치, 정리 완료 | 큰 읽기·Artifact·취소·identity·권한 경계 |
+| 실제 141 desktop 입력 | 호스트 차단으로 click/type 인수시험 미완료 | 실제 Codex 도구 전달·입력·독립 결과 검증 |
+| Linux 컨테이너 | 사용자 첨부 기록: 293 passed / 40 skipped / 21 failed / 5 errors | 원인별 backlog 유지, Windows 이후 검증 |
+
+첨부 기록의 원본은 당시 사용자가 제공한 `붙여넣은 텍스트.txt`이며, 로컬 보관 위치는 `C:/Users/GhostShell/.codex/attachments/21687dc6-d281-497e-abcb-5cd3473e3b2c/붙여넣은 텍스트.txt`다. 로컬 XML 수치는 당시 계획 작성 시 집계한 값이고, 다른 수치는 사용자 첨부 실행 기록에 따른 것이다. 원본 보관 경로는 각 환경에서 달라질 수 있다.
+
+메모리 읽기 실행 전 차단 기록 뒤에 위의 제한된 후속 성공이 추가됐으므로, 이전 `NOT_RUN`과 현재 확인 범위를 구분한다. 32바이트 성공으로 큰 결과/Artifact·전체 dump·debugger 연결을 통과 처리하지 않는다. 로컬 GUI 통과와 실제 원격 input 통과도 구분한다.
+
+> [!IMPORTANT]
+> 본 문서 위쪽의 개별 Phase/검사 PASS는 해당 구현·시험 범위의 증거다. 전체 Windows 핵심 인수 또는 정식 릴리스 완료는 [작업 계획의 종료 기준](../spec/windows-engineering-plan.md#section-11)에 따라 별도로 판정한다.
+
+공식 계획서는 `docs/spec/windows-engineering-plan.md`에 재발행했다. 과거 한글 경로의 동일 본문을 중복 생성하지 않는다. 이번 수정의 검증 범위는 문서 구조·링크·계획 항목 보존이며, 실제 기능 검사는 W01부터 후보를 고정해 진행한다.
+
+2026-10-07 문서 재발행 검증: 변경 문서 4개의 메타데이터·목차·코드 fence와 상대 파일/anchor 링크 81개를 확인해 오류 0건이었다. 기존 계획의 작업 ID 12개, 시험 ID 54개, display/session 조합 ID 8개를 변경·중복 없이 보존했다. 명령에 참조한 script/test 파일도 존재함을 확인했고 `docs/protocol/`은 변경하지 않았다. `scripts/version.py show` 결과는 0.1.9이며 제품 버전은 변경하지 않았다.

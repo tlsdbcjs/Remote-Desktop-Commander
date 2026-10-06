@@ -1,8 +1,8 @@
 # RACP 시스템 설계 및 엔지니어링 명세서 (Specifications)
 
-> **문서 ID**: `DOC-SPEC-INDEX`  
-> **상태**: Active · **기준 버전**: v0.1.8  
-> **최종 개정일**: 2026-10-07 · **분류**: Specification Index
+> **Document ID**: `DOC-SPEC-INDEX`  
+> **Status**: Active · **Target Version**: v0.1.9  
+> **Last Updated**: 2026-10-07 · **Classification**: Specification Index
 
 ---
 
@@ -17,7 +17,7 @@
 | 문서명 | 문서 ID | 상태 | 설명 |
 | :--- | :--- | :--- | :--- |
 | [RACP 종합 개발정의서 v1.1](racp-specification-v1.1.md) | `DOC-SPEC-CORE-v1.1` | **Active** | 전체 시스템의 마스터 설계 명세서 (통신 프로토콜, 보안 경계, 실행 엔진, 도메인 모델, 부록 E 상세) |
-| [Windows 작업 및 테스트 계획서 v1.0](windows-engineering-plan.md) | `DOC-SPEC-WIN-v1.0` | **Active** | Windows 데스크톱/백그라운드 에이전트 릴리스 계획 및 341개 검사 항목과 인수 테스트 계획서 |
+| [Windows 작업 및 테스트 계획서](windows-engineering-plan.md) | `DOC-SPEC-WIN-v1.0` | **Active** | 문서 개정 1.1 / 코드 기준 v0.1.9 · 작업 12개, 상세 시험 54개, 화면·세션 조합 8개, 실제 두 PC 인수 3개 |
 
 ---
 

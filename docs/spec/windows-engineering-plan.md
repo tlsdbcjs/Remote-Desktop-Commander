@@ -1,12 +1,42 @@
-# RACP Windows 엔지니어링 및 테스트 계획서 (Windows Engineering Plan)
+# RACP Windows 작업 및 테스트 계획서 (Windows Engineering Plan)
 
-> **문서 ID**: `DOC-SPEC-WIN-v1.0`  
-> **상태**: Active · **기준 버전**: v0.1.8  
-> **최초 작성일**: 2026-10-06 · **최종 개정일**: 2026-10-07  
-> **분류**: Engineering & Verification Plan  
+> **Document ID**: `DOC-SPEC-WIN-v1.0`  
+> **Status**: Active · **Target Version**: v0.1.9  
+> **Last Updated**: 2026-10-07 · **Classification**: Architecture Specification / Engineering & Verification Plan  
+> **문서 개정**: 1.1 · 최초 작성 2026-10-06 · 문서 경로 정리 이후 재발행  
 > **참조 문서**: [RACP 개발정의서 v1.1](racp-specification-v1.1.md) · [Windows 릴리스 인수 게이트](../quality/windows-release-gates.md) · [구현 현황](../quality/implementation-status.md)
 
 ---
+
+## 개요
+
+Windows 원격 PC 제어를 완성하기 위한 구현·개선 작업 12개, 상세 시험 54개, 화면·세션 조합 8개와 실제 A→B 인수 시나리오 3개를 정의한다. 각 항목에 선행 조건, 실행 절차, 합격 기준, 증거와 정리 방법을 연결한다. 핵심 인수, Windows 배포 검증, 전체 제품 완료를 별도로 판정한다.
+
+> [!NOTE]
+> 이전 `docs/RACP-Windows-작업및테스트계획서-v1.0.md`의 내용은 문서 분류 정리 후 이 공식 경로에서 유지한다. 앞으로 계획서는 **`docs/spec/windows-engineering-plan.md`**를 기준으로 열고 수정한다. [문서 포털](../README.md)과 [명세서 목록](README.md)에서 바로 찾을 수 있다.
+
+> [!IMPORTANT]
+> 첫 핵심 과제는 **실제 Codex→141 PC의 마우스·키보드 입력 완주**다. 로컬 GUI 성공이나 화면 캡처 성공만으로 실제 원격 입력을 통과 처리하지 않는다. 이 문서의 재발행은 테스트 실행이나 제품 버전 변경을 의미하지 않는다.
+
+## 목차
+
+- [1. 목적과 완료의 의미](#section-01)
+- [2. 기준선과 확인된 사실](#section-02)
+- [3. 범위와 우선순위](#section-03)
+- [4. 작업 분해와 산출물](#section-04)
+- [5. 시험 시작 조건과 환경 준비](#section-05)
+- [6. 상태 판정과 호스트 차단 처리](#section-06)
+- [7. 상세 시험 항목](#section-07)
+- [8. 실제 A→B 묶음 인수 시나리오](#section-08)
+- [9. 기존 자동 검사와 실행 안내](#section-09)
+- [10. 증거·결함·정리 관리](#section-10)
+- [11. 요구사항 추적과 종료 기준](#section-11)
+- [12. 실행 시작 체크리스트](#section-12)
+- [13. 개정 이력과 관련 문서](#section-13)
+
+---
+
+<a id="section-01"></a>
 
 ## 1. 목적과 완료의 의미
 
@@ -26,6 +56,8 @@
 
 현재는 **주요 기능 구현 및 부분 인수 검증 상태**다. 테스트 개수만으로 위 수준을 승격하지 않는다. Windows 우선 범위의 완료와 전체 제품 완료를 각각 보고한다.
 
+<a id="section-02"></a>
+
 ## 2. 기준선과 확인된 사실
 
 ### 2.1 환경과 통신 경로
@@ -38,7 +70,7 @@
 | Gateway | `https://192.168.29.140:8765` | listener PID/생성 시각, TLS 인증서 유효기간·신뢰, readiness |
 | Codex MCP | `https://127.0.0.1:18765/mcp` | OAuth 초기화·scope, 도구 목록과 실제 호출 |
 | B 허용 폴더 | `E:\01_RE-Lab\01_Project` | 현재 저장한 workspace ID/path, 실제 존재·권한 |
-| Client | Windows 0.1.8 EXE/ZIP | 실행 EXE·ASAR·내장 Agent가 시험 후보와 일치 |
+| Client/코드 | 현재 코드 기준 v0.1.9, 과거 배포·검증 기준은 별도 기록 | 실제 B의 EXE·ASAR·내장 Agent 버전/hash와 시험 후보 일치; v0.1.9 설치를 추정하지 않음 |
 | 실행 권한 | `standard` | 작업별 owner 승인, read-only/trusted 시험은 별도 fixture |
 
 ```mermaid
@@ -52,23 +84,13 @@ flowchart LR
 
 Agent→Gateway 연결 방향과 인증서 검증을 유지한다. 서로 다른 PC에 있는 GUI끼리 직접 통신하는 구조로 변경하지 않는다. 인증 비밀, Windows 로그인 비밀번호, 등록 토큰을 이 계획서·증거·명령행에 적지 않는다.
 
-### 2.2 시험 기록의 출처와 최신 상태
+### 2.2 검증 현황의 참조와 갱신
 
-| 기능/검사 | 기준선에서 확인된 결과 | 이번 계획에서 남은 확인 |
-|---|---|---|
-| Windows 기본 검사 | `dist/test-results.xml`: 총 359, 341 passed, 18 skipped, failure/error 0 | 변경 후보 기준 재실행 및 skipped 사유 분리 |
-| Console E2E | `dist/console-test-results.xml`: 14 passed | 변경한 사용자 흐름과 최종 후보 재검 |
-| 로컬 Windows GUI | 최신 첨부 기록: 선택형 11개 통과 | 실제 141의 입력·표시·session 조합 |
-| Client E2E/Node | 첨부 기록: Client E2E 및 Node 10개 통과 | 최종 packaged 후보와 clean PC 수명 |
-| 실제 두 PC 기본 작업 | 파일·명령·ConPTY·Job 취소·Artifact·재연결 확인 | 동일 후보에서 묶음 workflow 회귀 |
-| 실제 141 desktop 읽기 | session/window/monitor 조회, 3840×2160·150% 캡처 확인 | 입력과 다중 monitor/DPI·잠금/RDP |
-| 실제 141 process/memory | 최신 첨부 기록: spawn 성공, 자체 fixture의 32바이트 메모리가 예상값과 일치, 정리 완료 | 큰 읽기·Artifact·중단·대상 identity·권한 경계 |
-| 실제 141 desktop 입력 | 호스트 차단으로 click/type 인수시험 미완료 | 개별 MCP 요청의 실제 전달·입력·결과 검증 |
-| Linux 컨테이너 | 첨부 기록: 293 passed / 40 skipped / 21 failed / 5 errors | 원인별 backlog 유지, Windows 이후 검증 |
+기존 자동 검사 수치, 실제 두 PC 시험, 메모리 읽기의 후속 성공과 호스트 차단 기록은 모두 [구현 현황의 계획서 기준선 기록](../quality/implementation-status.md#windows-plan-baseline)에 보관한다. 이 계획서는 시험 방법·합격 기준을 정의하고, 실행 결과는 그 단일 현황 문서에 누적한다.
 
-첨부 기록은 `C:/Users/GhostShell/.codex/attachments/21687dc6-d281-497e-abcb-5cd3473e3b2c/붙여넣은 텍스트.txt`다. Windows 기본·Console 결과는 이 계획 작성 시 저장된 XML의 집계를 확인했다. 기타 수치는 첨부 실행 기록에 따른 것으로, 이 문서 작성 중 재시험한 결과가 아니다.
+W01에서 후보 source/lock/package hash와 과거 증거의 적용 범위를 확인한다. 코드 버전 변경, 도구 목록 노출, capability 보고, 실제 실행 성공을 각각 구분한다. 과거 성공을 현재 후보의 자동 PASS로 사용하지 않는다.
 
-기존 [2-PC 실증 랩 가이드](../guides/two-pc-lab-guide.md), [구현 현황](../quality/implementation-status.md), [배포 gate](../quality/windows-release-gates.md)에는 최신 첨부보다 이전 상태가 남아 있다. 특히 메모리 읽기 `NOT_RUN`은 최신 32바이트 성공과 구분해 갱신해야 한다. 과거 차단 기록을 삭제하지 않고 후속 성공의 범위와 출처를 추가한다.
+<a id="section-03"></a>
 
 ## 3. 범위와 우선순위
 
@@ -90,6 +112,8 @@ macOS/Linux 배포, 추가 AI 앱, 전용 디버거·Frida 같은 확장은 후�
 | P2 | 추가 OS·AI 앱·SCM·확장 기능·선택적인 편의 개선 | 지원 범위 확대 시 별도 milestone |
 
 구현이 이미 존재하는 항목은 새 기능을 중복 구현하지 않고, 동작·패키지 포함·실제 인수 증거부터 확인한다. 검사에서 확인한 결함만 구체적인 수정 작업으로 전환한다.
+
+<a id="section-04"></a>
 
 ## 4. 작업 분해와 산출물
 
@@ -123,6 +147,8 @@ W04의 화면 개선안은 **현황 / 최근 작업 / 연결·화면 상태 / �
 
 이는 1명의 구현·시험 수행 기준 계획 추정치이며 확정 납기가 아니다. 실제 B 접근 가능 시간, 추가 display/VM, 호스트 차단과 발견 결함에 따라 조정한다. 핵심 원격 제어 인수 M1–M2와 전체 Windows 배포 검증 M5를 별도로 보고한다.
 
+<a id="section-05"></a>
+
 ## 5. 시험 시작 조건과 환경 준비
 
 ### 5.1 실행 전 공통 확인
@@ -155,6 +181,8 @@ Node 22.23.0, pnpm 11.19.0, Python 3.12.11과 `uv.lock`/`pnpm-lock.yaml`을 기�
 
 GUI 결과는 screenshot만으로 판정하지 않는다. TextBox 값, 클릭 횟수, 드래그 최종 위치, 저장된 결과 같은 독립적인 관측을 함께 사용한다.
 
+<a id="section-06"></a>
+
 ## 6. 상태 판정과 호스트 차단 처리
 
 | 결과 | 사용 조건 | 후속 처리 |
@@ -171,6 +199,8 @@ GUI 결과는 screenshot만으로 판정하지 않는다. TextBox 값, 클릭 �
 호스트 차단 시 다른 도구·shell·직접 API로 **차단된 동일 동작을 우회하지 않는다**. 시험을 보류하고 허용된 절차의 확인이나 호스트 환경 조치 후 재개한다. 별도로 이미 허용된 로컬/provider/API 검증 결과는 그 경로의 증거로만 기록하며, 실제 Codex 경로의 PASS로 대체하지 않는다.
 
 기능적으로 지원하는 동작이 호스트 차단으로 미검증이면 Windows 핵심 인수는 조건부/미완료 상태다. 반복 재시도를 무제한 수행하지 않고 차단 사유와 필요한 다음 조치를 남긴다.
+
+<a id="section-07"></a>
 
 ## 7. 상세 시험 항목
 
@@ -292,6 +322,8 @@ DPAPI secret은 다른 Windows 사용자/환경에 파일 복사만 해서 복�
 
 동시성·크기·시간을 줄인 시험은 smoke로 보고한다. 두 물리 PC에서 여러 Agent를 띄운 10 Device 시험은 논리 부하 증거이며, 10 물리 PC나 별도 OS 검증으로 표현하지 않는다. 앱 실행/명령 자체 시간, network RTT, PNG 저장/Artifact 회수 포함 범위를 분리한다. 기준 변경은 측정 근거와 ADR을 남긴다.
 
+<a id="section-08"></a>
+
 ## 8. 실제 A→B 묶음 인수 시나리오
 
 ### E2E-A: 문서·파일·프로그램 작업
@@ -326,6 +358,8 @@ DPAPI secret은 다른 Windows 사용자/환경에 파일 복사만 해서 복�
 
 **합격:** 재접속 후 새 작업 성공, 기존 확정 부작용의 중복 0, UNKNOWN·stale Handle·gap을 계약대로 표시한다.
 
+<a id="section-09"></a>
+
 ## 9. 기존 자동 검사와 실행 안내
 
 아래는 확인한 기존 entry point다. **이 계획 작성 중에는 실행하지 않았다.** 실제 실행 때 별도 시험 venv, frozen 의존성, 후보 일치, evidence 보관을 먼저 준비한다. `pnpm`은 pinned Node/Pnpm 환경에서 사용한다.
@@ -350,11 +384,15 @@ DPAPI secret은 다른 Windows 사용자/환경에 파일 복사만 해서 복�
 
 기존 inspector와 process identity API는 시험 대상 선택·정리에 사용한다. 실제 MCP 입력은 현재 대화에 노출된 목적별 도구로 수행한다. raw shell로 원격 화면을 조작한 결과를 desktop MCP 검증으로 집계하지 않는다.
 
+<a id="section-10"></a>
+
 ## 10. 증거·결함·정리 관리
 
 ### 10.1 실행별 증거 디렉터리
 
 권장 위치는 `dist/acceptance/<run-id>/`다. 기존 증거를 덮어쓰지 않는다.
+
+실행 디렉터리는 원시 증거를 보관하는 Artifact 영역이다. 아래 `acceptance-report.md`와 `defects.md`는 그 실행의 산출물이며 `docs/`에 임시 결과 문서로 복제하지 않는다. 검증 집계·완료 판정·결함/증거 링크는 [단일 구현 현황](../quality/implementation-status.md)에 반영한다.
 
 ```text
 <run-id>/
@@ -394,6 +432,8 @@ DPAPI secret은 다른 Windows 사용자/환경에 파일 복사만 해서 복�
 4. own 파일만 revision/hash를 확인해 정리한다. A의 evidence는 유지한다.
 5. 바꾼 foreground·display·startup/profile 같은 시험 설정은 정한 baseline으로 되돌리고 결과를 기록한다.
 6. 정리 실패는 PASS에 숨기지 않는다. 정확한 소유 범위가 확인된 resource만 후속 정리한다.
+
+<a id="section-11"></a>
 
 ## 11. 요구사항 추적과 종료 기준
 
@@ -435,6 +475,8 @@ Linux의 Chromium sandbox/RE/TLS 실패·symlink 예외 계약 불일치는 환�
 
 계획을 변경할 때 문서 version·날짜·변경 이유·영향 작업/시험 ID를 기록한다. 개발정의서의 요구사항을 삭제하거나 측정 기준을 임의로 낮추지 않는다. 현황 문서에는 링크와 최신 결과를 추가하고 과거 실행 근거는 보존한다.
 
+<a id="section-12"></a>
+
 ## 12. 실행 시작 체크리스트
 
 - [ ] W01 기준선·최신 첨부 기록·후보 source/lock/package hash 확보
@@ -450,3 +492,19 @@ Linux의 Chromium sandbox/RE/TLS 실패·symlink 예외 계약 불일치는 환�
 - [ ] W10 성능·부하·8시간 soak·release 증거 수집
 - [ ] W11 후보 전체 판정·결함 재검·소유 resource 정리 완료
 - [ ] Windows 완료 수준 및 W12 후순위 범위를 사용자에게 보고
+
+<a id="section-13"></a>
+
+## 13. 개정 이력과 관련 문서
+
+| 개정 | 일자 | 변경 내용 |
+|---|---|---|
+| 1.0 | 2026-10-06 | Windows 우선 작업 분해, 상세 시험, 두 PC 인수, 배포·복구·성능 기준 작성 |
+| 1.1 | 2026-10-07 | 공식 경로에서 재발행, v0.1.9 코드 기준 명시, 목차·고정 anchor·포털 연결, 시험 결과를 현황 SSOT로 이관 |
+
+- [문서 포털](../README.md) · [명세서 목록](README.md)
+- [개발정의서 v1.1](racp-specification-v1.1.md)
+- [구현 및 검증 현황](../quality/implementation-status.md)
+- [Windows 배포 인수 gate](../quality/windows-release-gates.md)
+- [두 PC 시험 환경 안내](../guides/two-pc-lab-guide.md)
+- [Windows Client 사용 안내](../guides/desktop-client-guide.md)

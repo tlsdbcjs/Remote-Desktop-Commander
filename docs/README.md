@@ -1,12 +1,21 @@
 # RACP 기술 문서 포털 (Documentation Portal)
 
-> **문서 ID**: `DOC-HUB-INDEX`  
-> **상태**: Active · **기준 버전**: v0.1.8  
-> **최종 개정일**: 2026-10-07 · **분류**: Documentation Portal & Index
+> **Document ID**: `DOC-HUB-INDEX`  
+> **Status**: Active · **Target Version**: v0.1.9  
+> **Last Updated**: 2026-10-07 · **Classification**: Documentation Portal & Index
 
 ---
 
+## 목차
+
+- [1. 개요](#1-개요-overview)
+- [2. 문서 분류 및 디렉터리 안내](#2-문서-분류-및-디렉터리-안내)
+- [3. 문서 작성 및 거버넌스 규칙](#3-문서-작성-및-거버넌스-규칙)
+
 ## 1. 개요 (Overview)
+
+> [!IMPORTANT]
+> **[Windows 작업 및 테스트 계획서 바로 열기](spec/windows-engineering-plan.md)** — 공식 위치는 `docs/spec/windows-engineering-plan.md`다. 이전 한글 파일 경로 대신 이 링크를 사용한다.
 
 **Remote-Desktop-Commander (RACP - Remote Access and Control Protocol)**의 공식 기술 문서 포털입니다.  
 RACP는 원격 PC(Windows / Linux / macOS)를 AI 에이전트(Codex, ChatGPT 등) 및 데스크톱 관리자가 안전하게 원격 제어, 파일 관리, 프로세스 실행, 콘솔 스트리밍, 화면 관측 및 분석할 수 있도록 설계된 엔터프라이즈급 원격 제어 프로토콜 및 런타임 플랫폼입니다.
@@ -47,7 +56,7 @@ graph TD
 ### 2.1 [시스템 설계 명세 (docs/spec/)](spec/README.md)
 RACP 플랫폼의 핵심 설계 원칙, 프로토콜 계약, 상태 머신, 권한 모델 및 엔지니어링 계획을 수록합니다.
 - [RACP 종합 개발정의서 v1.1](spec/racp-specification-v1.1.md) (`DOC-SPEC-CORE-v1.1`): 시스템 마스터 설계서
-- [Windows 작업 및 테스트 계획서 v1.0](spec/windows-engineering-plan.md) (`DOC-SPEC-WIN-v1.0`): Windows 릴리스 및 검증 상세 계획
+- [Windows 작업 및 테스트 계획서](spec/windows-engineering-plan.md) (`DOC-SPEC-WIN-v1.0`): 문서 개정 1.1 / 코드 기준 v0.1.9 · 작업·시험·실제 두 PC 인수·배포 완료 기준
 
 ### 2.2 [운영 및 사용자 가이드 (docs/guides/)](guides/README.md)
 실제 사용자 및 운영자를 위한 실전 가이드라인입니다.
