@@ -9,7 +9,8 @@
 [![Python Version](https://img.shields.io/badge/python-3.12-3776AB.svg?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
 [![Electron](https://img.shields.io/badge/electron-44.5-47848F.svg?style=flat-square&logo=electron&logoColor=white)](apps/client)
 [![Protocol](https://img.shields.io/badge/protocol-MCP%20%7C%20WSS-purple.svg?style=flat-square)](docs/protocol)
-[![Platform](https://img.shields.io/badge/platform-Windows%20(Verified)%20%7C%20Linux%20%7C%20macOS-222222.svg?style=flat-square)](docs/compatibility.md)
+[![Platform](https://img.shields.io/badge/platform-Windows%20(Verified)%20%7C%20Linux%20%7C%20macOS-222222.svg?style=flat-square)](docs/quality/compatibility.md)
+
 
 <p align="center">
   <a href="#주요-특징">주요 특징</a> •
@@ -218,14 +219,19 @@ RACP는 시스템 손상 및 비인가 접근을 차단하기 위해 3단계 실
 
 ## 문서 및 가이드
 
-상세한 아키텍처 및 세부 운영 가이드는 `docs/` 디렉터리에서 확인할 수 있습니다.
+상세한 아키텍처 및 세부 운영 가이드는 [`docs/`](docs/README.md) 디렉터리에서 확인할 수 있습니다.
 
-- **클라이언트 가이드**: [데스크톱 클라이언트 사용 설명서](docs/desktop-client-guide.md)
-- **온보딩 가이드**: [PC 등록 및 에이전트 연결 절차](docs/pc-connect-guide.md)
-- **워크스페이스 보안**: [다중 작업 폴더 격리 가이드](docs/named-workspaces-guide.md)
-- **프로토콜 사양**: [MCP 및 원격 프로토콜 정의](docs/remote-mcp-oauth-setup.md)
-- **구현 현황**: [단계별 개발 현황 및 테스트 검증 매트릭스](docs/implementation-status.md)
-- **호환성 기준**: [OS 및 플랫폼 호환성 보고서](docs/compatibility.md)
+- **시스템 설계 명세**: [RACP 마스터 개발정의서 v1.1](docs/spec/racp-specification-v1.1.md) · [Windows 엔지니어링 계획서](docs/spec/windows-engineering-plan.md)
+- **클라이언트 가이드**: [데스크톱 클라이언트 사용 설명서](docs/guides/desktop-client-guide.md)
+- **온보딩 가이드**: [PC 등록 및 에이전트 연결 절차](docs/guides/pc-connect-guide.md)
+- **워크스페이스 보안**: [다중 작업 폴더 격리 가이드](docs/guides/named-workspaces-guide.md)
+- **백그라운드 에이전트**: [백그라운드 에이전트 수명주기 가이드](docs/guides/background-agent-guide.md)
+- **프로토콜 및 인증**: [MCP 및 OAuth/OIDC 인증 설정 가이드](docs/guides/remote-mcp-oauth-setup.md)
+- **2-PC 실증 가이드**: [물리 2-PC 테스트 랩 구축 매뉴얼](docs/guides/two-pc-lab-guide.md)
+- **구현 현황 (SSOT)**: [단계별 개발 현황 및 테스트 검증 매트릭스](docs/quality/implementation-status.md)
+- **품질 및 호환성**: [OS 및 플랫폼 호환성 보고서](docs/quality/compatibility.md) · [Windows 릴리스 인수 게이트](docs/quality/windows-release-gates.md)
+- **아키텍처 결정 레코드**: [ADR 총람 (ADR-0001 ~ ADR-0029)](docs/adr/README.md)
+
 
 ---
 

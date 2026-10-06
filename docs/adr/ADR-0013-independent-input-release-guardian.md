@@ -70,7 +70,7 @@ release gate를 확인했다. Job termination/hold timeout/RPC 취소 뒤에는 
 Guardian native exit code 0은 직접 process handle로 또는 cleanup_status=complete의 경로에서 확인했다.
 fixture의 hold 동작은 tests에만 있으며 production allowlist/명령에는 포함하지 않는다.
 최신 회귀는 고유 10개를 확인했고 Job termination은 OS 자체 창 활성화 거부로 skip이다.
-현재 report와 이전 검증 구분은 [Phase 8 결과](../phase-8-broker-result.md)에 기록한다.
+현재 report와 이전 검증 구분은 [구현 및 검증 현황](../quality/implementation-status.md)에 기록한다.
 일반 검사에도 실제 Agent crash 뒤 Guardian의 독립 종료와 임시 task/config 제거 시험을 포함했다.
 Ledger의 Unicode/extended/modifier/mouse/bounds, parent/controller/server identity,
 정리 ownership 경계 4개를 검증한다. 로그온 등록/Agent wire/launcher 복구 실제 시험 3개와

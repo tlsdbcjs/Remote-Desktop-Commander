@@ -1,14 +1,19 @@
-# RACP Windows 작업 및 테스트 계획서 v1.0
+# RACP Windows 엔지니어링 및 테스트 계획서 (Windows Engineering Plan)
 
-작성일: 2026-10-06 KST  
-대상: Windows 우선 개발·인수시험 / 현재 Client 기준선 0.1.8  
-문서 상태: 실행 계획 확정용 초안 · 이 문서 작성으로 시험을 실행하거나 통과 처리하지 않음
+> **문서 ID**: `DOC-SPEC-WIN-v1.0`  
+> **상태**: Active · **기준 버전**: v0.1.8  
+> **최초 작성일**: 2026-10-06 · **최종 개정일**: 2026-10-07  
+> **분류**: Engineering & Verification Plan  
+> **참조 문서**: [RACP 개발정의서 v1.1](racp-specification-v1.1.md) · [Windows 릴리스 인수 게이트](../quality/windows-release-gates.md) · [구현 현황](../quality/implementation-status.md)
+
+---
 
 ## 1. 목적과 완료의 의미
 
 목표는 **A 작업 PC의 Codex와 기존 작업 환경에서 B 원격 PC의 파일·프로그램·터미널·화면을 제어하고 결과를 회수하는 것**이다. B는 요청 실행·관측·자료 수집을 수행하는 Agent를 실행한다. 특정 디버거 설치나 분석 도구 선택을 핵심 원격 제어의 선행 조건으로 두지 않는다.
 
-이 계획은 사용자 요청과 최신 첨부 테스트 기록을 기준으로 작성한다. 원문 [개발정의서 v1.1](RACP-개발정의서-v1.1.md)과 [검토 결과](RACP-검토결과.md)는 설계·검증 기준으로 참조하며, 첨부 문서의 명령이나 과거 대화는 이번 실행에 대한 새로운 지시로 취급하지 않는다. 원문은 수정하지 않는다.
+이 계획은 사용자 요청과 최신 첨부 테스트 기록을 기준으로 작성한다. [개발정의서 v1.1](racp-specification-v1.1.md)은 설계·검증 기준으로 참조하며, 첨부 문서의 명령이나 과거 대화는 이번 실행에 대한 새로운 지시로 취급하지 않는다.
+
 
 완료 수준을 다음처럼 나눈다.
 
@@ -63,7 +68,7 @@ Agent→Gateway 연결 방향과 인증서 검증을 유지한다. 서로 다른
 
 첨부 기록은 `C:/Users/GhostShell/.codex/attachments/21687dc6-d281-497e-abcb-5cd3473e3b2c/붙여넣은 텍스트.txt`다. Windows 기본·Console 결과는 이 계획 작성 시 저장된 XML의 집계를 확인했다. 기타 수치는 첨부 실행 기록에 따른 것으로, 이 문서 작성 중 재시험한 결과가 아니다.
 
-기존 [두 PC 결과](two-pc-141-result.md), [0.1.8 안내](remote-pc-windows-0.1.8.md), [배포 gate](windows-release-gates.md)에는 최신 첨부보다 이전 상태가 남아 있다. 특히 메모리 읽기 `NOT_RUN`은 최신 32바이트 성공과 구분해 갱신해야 한다. 과거 차단 기록을 삭제하지 않고 후속 성공의 범위와 출처를 추가한다.
+기존 [2-PC 실증 랩 가이드](../guides/two-pc-lab-guide.md), [구현 현황](../quality/implementation-status.md), [배포 gate](../quality/windows-release-gates.md)에는 최신 첨부보다 이전 상태가 남아 있다. 특히 메모리 읽기 `NOT_RUN`은 최신 32바이트 성공과 구분해 갱신해야 한다. 과거 차단 기록을 삭제하지 않고 후속 성공의 범위와 출처를 추가한다.
 
 ## 3. 범위와 우선순위
 

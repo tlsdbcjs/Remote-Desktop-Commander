@@ -60,4 +60,4 @@ owned plugin tree를 정리한다. 별도 debugger event의 durable replay/ACK�
 실제 Agent/Gateway/SQLite/HTTP/MCP SDK/CLI를 synthetic domain fixture와 연결해 검증했다.
 known-source native C fixture와 설치 GDB의 직접 breakpoint/register/detach 시험도 별도로 수행했다.
 후자는 RACP GDB adapter의 완료를 대신하지 않는다.
-현재 수치와 남은 요구사항은 [Phase 9 결과](../phase-9-plugin-result.md)에 기록한다.
+현재 수치와 남은 요구사항은 [구현 및 검증 현황](../quality/implementation-status.md)에 기록한다.

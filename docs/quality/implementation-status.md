@@ -1,0 +1,163 @@
+# RACP 구현 작업 및 검증 현황 (Implementation Status)
+
+> **문서 ID**: `DOC-QA-STATUS`  
+> **상태**: Active · **기준 버전**: v0.1.8  
+> **최종 개정일**: 2026-10-07 · **분류**: Quality Assurance & Implementation Status (SSOT)
+
+---
+
+## 개요 (Overview)
+
+본 문서는 **RACP (Remote Access and Control Protocol)** 프로젝트의 전체 단계별(Phase 0~9 및 확장 마일스톤) 구현 현황, 자동화 테스트 검증 수치, 물리 2-PC 실증 증거, 그리고 배포 패키징 상태를 총망라한 **단일 진실 공급원(Single Source of Truth, SSOT)**입니다.
+
+과거 각 페이즈마다 작성되었던 개별 임시 결과 파일들을 본 문서로 완전히 통합 집대성하여, 개발 진행 상황과 검증 매트릭스를 일관되게 추적할 수 있도록 제공합니다.
+
+---
+
+## 목차 (Table of Contents)
+
+- [1. 전체 단계별 구현 및 검증 요약표](#1-전체-단계별-구현-및-검증-요약표)
+- [2. 단계별 상세 구현 및 검증 결과](#2-단계별-상세-구현-및-검증-결과)
+  - [2.1 Phase 0~2: 기반 아키텍처 및 원격 RPC/보안](#21-phase-02-기반-아키텍처-및-원격-rpc보안)
+  - [2.2 Phase 3: 파일 시스템 및 바이너리 아티팩트 전송](#22-phase-3-파일-시스템-및-바이너리-아티팩트-전송)
+  - [2.3 Phase 4~5: ConPTY 지속 터미널 및 백그라운드 Job](#23-phase-45-conpty-지속-터미널-및-백그라운드-job)
+  - [2.4 Phase 6: Gateway Web Console 및 실시간 이벤트 스트림](#24-phase-6-gateway-web-console-및-실시간-이벤트-스트림)
+  - [2.5 Phase 7: 격리 브라우저 자동화 (Playwright)](#25-phase-7-격리-브라우저-자동화-playwright)
+  - [2.6 Phase 8: 로컬 데스크톱 세션 Broker 및 입력 Guardian](#26-phase-8-로컬-데스크톱-세션-broker-및-입력-guardian)
+  - [2.7 Phase 9: 리버싱 플러그인 (GDB / Ghidra)](#27-phase-9-리버싱-플러그인-gdb--ghidra)
+  - [2.8 Phase 11~12 및 확장: 데스크톱 클라이언트 (0.1.0 ~ 0.1.8)](#28-phase-1112-및-확장-데스크톱-클라이언트-010--018)
+- [3. 물리 2-PC 및 실제 AI 호스트(Codex) 실증 증거](#3-물리-2-pc-및-실제-ai-호스트codex-실증-증거)
+- [4. 요구사항 추적 매트릭스 (Requirements Traceability)](#4-요구사항-추적-매트릭스-requirements-traceability)
+- [5. 시스템 한도 및 제약 사항 (System Constraints)](#5-시스템-한도-및-제약-사항-system-constraints)
+- [6. 관련 문서](#6-관련-문서)
+
+---
+
+## 1. 전체 단계별 구현 및 검증 요약표
+
+| 단계 | 구현 내용 | 현재 검증 상태 | 합격 및 미완료 게이트 |
+| :--- | :--- | :---: | :--- |
+| **Phase 0** | uv/pnpm 모노레포, 공통 도메인/프로토콜 스키마, CI 워크플로, ADR 수립 | **PASS** | Windows 10 로컬 품질 및 Node 22 빌드 통과. Windows 11/Ubuntu 참조 OS 검증 대기 |
+| **Phase 1** | Owner/Device 분리 인증, 외부 OAuth MCP Resource Server, WSS 연결/Epoch/Revoke | **PASS** | HTTPS 등록, WSS 재연결, Keycloak OIDC 실증 통과. 공개 OAuth 운영 배포 대기 |
+| **Phase 2** | 명시적 Shell/Argv, cwd/env, 타임아웃/취소, 저널 멱등성(Deduplication), 최소 Job/Artifact | **PASS** | 동일 key 100회 동시 요청 side-effect=1 통과. 프로세스 트리 완전 회수 검증 |
+| **Phase 3** | 파일 시스템 도구, 네임드 워크스페이스 격리, 범위 지정 100 MiB 재개 전송 | **PASS** | 네임드 워크스페이스 13개 테스트 및 100 MiB 끊김 재개(Resume) 통과 |
+| **Phase 4** | ConPTY 지속 터미널, WebSocket 스트림 크레딧(Flow Control), 백프레셔 제어 | **PASS** | 대화형 셸 스트리밍, 윈도우 크레딧 제어, 세션 재접속 통과 |
+| **Phase 5** | 영속 Job 큐, 마감시간(Deadline), 대용량 출력 스풀링 및 사후 첨부 복구 | **PASS** | 장기 실행 Job 폴링, 취소, 만료 출력 아티팩트 승격 통과 |
+| **Phase 6** | Gateway Web Console (React + Vite), SSE 이벤트 피드, 터미널 뷰어 | **PASS** | 실제 Chromium 기반 E2E 14개 흐름 통과, OpenAPI 클라이언트 동기화 완료 |
+| **Phase 7** | 격리 Playwright 브라우저 워커, 폼 자동화, 스크린샷 아티팩트, CDP opt-in | **PASS** | Chromium HTTP/CLI/CDP 프레임 및 스크린샷 아티팩트 통과 |
+| **Phase 8** | 대화형 세션 Broker, Win32 UIA 관측, 사용자 물리 입력 감지 및 Guardian 해제 | **PASS** | 데스크톱 Broker IPC, 자체 GUI 10개 통과, 물리 입력 감지 시 원격 입력 즉시 차단 |
+| **Phase 9** | 엄격한 플러그인 수퍼바이저, GNU GDB/MI 어댑터, Ghidra Headless 분석 연동 | **PASS** | 실제 GDB 중단점/메모리 덤프 10개 및 Ghidra 8개 테스트 통과 |
+| **Phase 11~12**| Electron 44 데스크톱 클라이언트, 시스템 트레이, NSIS 설치 및 포터블 패키징 | **PASS** | Windows 10 x64 패키지 smoke 통과, 0.1.0 ~ 0.1.8 누적 릴리스 완료 |
+
+---
+
+## 2. 단계별 상세 구현 및 검증 결과
+
+### 2.1 Phase 0~2: 기반 아키텍처 및 원격 RPC/보안
+- **워크스페이스 구성**: `uv` 기반 8개 Python 패키지(`apps/agent`, `apps/cli`, `apps/gateway`, `packages/*`) 및 `pnpm` 기반 2개 프론트엔드 패키지(`apps/client`, `apps/console`).
+- **상태 머신 및 멱등성**: SQLite 선행 저널 트랜잭션을 통해 클라이언트가 제공한 `idempotency_key`를 1회만 실행하고, 재시작 시 미확정 상태는 `UNKNOWN`으로 보존하여 자동 오실행을 방지.
+- **인증 분리**: 소유자(Owner)와 기기(Device) 자격 증명을 물리적으로 분리하고 DPAPI/0600으로 암호화 보존.
+
+### 2.2 Phase 3: 파일 시스템 및 바이너리 아티팩트 전송
+- **네임드 워크스페이스**: 기본 `default` 외 최대 15개 폴더 인가. 인가 폴더 상위 탈출(`..`, Symlink, Junction, UNC) 원천 차단.
+- **아티팩트 전송**: 100 MiB 대용량 바이너리 파일을 청크 분할하여 전송하고, 네트워크 단절 시 Range 요청을 통해 안전 재개(Resume) 성공 확인 (최종 SHA-256 일치).
+
+### 2.3 Phase 4~5: ConPTY 지속 터미널 및 백그라운드 Job
+- **ConPTY 지속 터미널**: Windows 가상 터미널(ConPTY)을 바인딩하여 네트워크 단절 시에도 세션을 보존하며, 재접속 시 버퍼 재생(Replay) 제공.
+- **스트림 크레딧**: 슬라이딩 윈도우 크레딧 메커니즘을 적용하여 수신자 버퍼 오버플로 방지.
+- **비동기 Job**: 장기 작업에 대해 Job ID를 발급하고 비동기 폴링, 타임아웃, 취소 영수증 수집 지원.
+
+### 2.4 Phase 6: Gateway Web Console 및 실시간 이벤트 스트림
+- React 19 + Vite 기반 SPA 콘솔.
+- Server-Sent Events (SSE) 기반 실시간 장비 상태 피드, 토큰 발급 폼, 웹 소켓 터미널 스트리밍 뷰어 지원.
+- 실제 Chromium E2E 14개 자동화 검증 완료.
+
+### 2.5 Phase 7: 격리 브라우저 자동화 (Playwright)
+- Playwright Chromium 인스턴스를 격리된 자식 프로세스로 실행.
+- 웹 페이지 관측, 폼 요소 자동 입력, Full-page PNG 스크린샷 캡처 및 아티팩트 저장 검증.
+
+### 2.6 Phase 8: 로컬 데스크톱 세션 Broker 및 입력 Guardian
+- 세션 0 서비스 격리 우회를 위한 대화형 데스크톱 Broker 및 보안 IPC 파이프.
+- UI Automation (UIA) 트리 탐색 및 화면 요소 상호작용.
+- **입력 안전 가디언 (Guardian)**: 원격 입력 중 사용자가 물리 마우스/키보드를 조작하면 원격 입력을 즉시 인터럽트하고, Broker 비정상 종료 시 입력 키 고착을 즉시 해제.
+
+### 2.7 Phase 9: 리버싱 플러그인 (GDB / Ghidra)
+- 엄격한 화이트리스트 JSON-RPC 플러그인 수퍼바이저.
+- GNU GDB 17.1 연동: 프로그램 시작, 중단점 설정, 레지스터 조회, 메모리 덤프 수집 검증.
+- Ghidra 12.1.4 Headless 연동: 바이너리 자동 분석, 디컴파일 정보 조회 및 프로세스 크래시 복구 검증.
+
+### 2.8 Phase 11~12 및 확장: 데스크톱 클라이언트 (0.1.0 ~ 0.1.8)
+- **v0.1.0**: Electron 44 기반 최초 GUI 및 포터블 런타임 번들링.
+- **v0.1.1**: Windows 사용자 로그인 시 자동 시작(HKCU Run) 옵션 추가.
+- **v0.1.2**: 시스템 트레이(Tray) 최소화, 실시간 활동 대시보드(최근 40개 이벤트), 안전한 완전 종료 추가.
+- **v0.1.3**: NSIS 설치/업그레이드/제거 수명주기 관리 및 상태 파일 SHA-256 자동 백업 추가.
+- **v0.1.4**: 최초 온보딩 진단 강화 (오류 코드별 안전 분기 및 손상 설정 보존).
+- **v0.1.5**: 단일 `.racp` 연결 파일 드롭을 통한 원클릭 온보딩 추가.
+- **v0.1.6**: 등록 정보 수정 및 자동 복구 백엔드 구현.
+- **v0.1.7**: 설정 오류 발생 시 [등록 정보 편집] 폼으로 즉시 진입하는 다이렉트 UX 개편.
+- **v0.1.8**: 현재 Windows 로그인 세션의 화면 캡처 및 관측, 일반 프로세스 메모리 안전 읽기 추가.
+
+---
+
+## 3. 물리 2-PC 및 실제 AI 호스트(Codex) 실증 증거
+
+### 3.1 물리 2-PC LAN 환경 실증
+- **호스트 PC (Gateway)**: `192.168.29.140:8765`
+- **원격 대상 PC (Agent)**: `192.168.29.141`
+- **실증 내역**:
+  - 원격 141 PC에서 포터블 클라이언트 실행 후 아웃바운드 WSS 연결 수립.
+  - 원격 파일 시스템 한글 파일 읽기/쓰기 및 해시 검증 통과.
+  - 원격 ConPTY 대화형 셸 실행 및 출력 스트리밍 통과.
+  - 동일 `idempotency_key` 100회 중복 요청 시 부작용 카운터 1회 유지(counter=1) 확인.
+  - 100 MiB 대용량 아티팩트 전송 중단 및 재개 통과.
+
+### 3.2 실제 AI 호스트 (OpenAI Codex) 연동 실증
+- **연동 방식**: Loopback HTTPS + OAuth MCP Resource Server (PKCE S256).
+- **실증 내역**:
+  - Codex 클라이언트에서 RACP 84개 이상의 MCP 도구 카탈로그 자동 인식.
+  - 실제 원격 141 PC를 타깃으로 `fs_read`, `fs_write`, `shell_exec`, `job_poll`, `conpty` 호출 및 성공 응답 수신.
+  - 격리 브라우저 조작 및 MCP 인라인 PNG 화면 미리보기 반환 확인.
+  - Windows 화면 관측 기능(3840×2160 해상도 화면 캡처) 실제 수신 확인.
+  - 증거 로그: `dist/codex-chat-141-20261006.json`.
+
+---
+
+## 4. 요구사항 추적 매트릭스 (Requirements Traceability)
+
+| 요구 ID | 검증 대상 테스트 및 실증 증거 | 검증 상태 |
+| :--- | :--- | :---: |
+| **AUTH-01** | `test_auth_01_device_token_cannot_control_owner_api` (등록 재사용 차단) | **PASS** |
+| **AUTH-02** | Keycloak OAuth PKCE 실연동, CSRF/Cookie/Origin 방어 테스트 | **PASS** |
+| **AUTH-03** | Lease Watchdog 만료 및 토큰 취소(Revoke) 시 프로세스 정리 테스트 | **PASS** |
+| **RPC-01** | `test_rpc_01_one_hundred_concurrent_mutations_execute_once` (100 동시 호출 1회 실행) | **PASS** |
+| **RPC-02** | Lost-result 재연결 테스트, Agent 저널 재시작 UNKNOWN 보존 테스트 | **PASS** |
+| **RPC-03** | 엄격한 Discriminated Schema, 프레임 초과 차단 단위/통합 테스트 | **PASS** |
+| **SHELL-01**| 한글/공백 argv, stdout/stderr 분리, nonzero exit 수집 테스트 | **PASS** |
+| **LIFE-01** | 자식/손자 프로세스 타임아웃, Job 취소, Job Object 완전 회수 테스트 | **PASS** |
+| **POLICY-01**| Default deny, 승인 토큰 만료/재사용 방지 테스트 | **PASS** |
+| **FS-01**   | Junction/Symlink 차단, Atomic Write, Unicode/BOM 보존 테스트 | **PASS** |
+| **ART-01**  | 100 MiB HTTP 끊김 재개(Range Resume), 최종 SHA-256 일치 테스트 | **PASS** |
+| **PTY-01**  | ConPTY 지속 세션, 슬라이딩 윈도우 크레딧 백프레셔 테스트 | **PASS** |
+| **UI-01**   | Chromium E2E 콘솔 로그인, 승인, 취소, SSE 스트림 갭 복구 테스트 | **PASS** |
+| **RE-01**   | GDB/MI launch 10개, Ghidra Headless 8개 단위/통합 테스트 | **PASS** |
+
+---
+
+## 5. 시스템 한도 및 제약 사항 (System Constraints)
+
+- **출력 인라인 텍스트 한도**: 기본 64 KiB (초과 시 아티팩트로 자동 스풀링).
+- **셸 원본 수집 상한**: stdout + stderr 합계 최대 64 MiB.
+- **바이너리 파일 아티팩트 스트리밍**: 1 GiB 상한.
+- **에이전트 스풀 스토리지 예약**: 최대 10 GiB / 64건, 기기당 동시 활성 전송 최대 2건.
+- **동시 인가 워크스페이스**: 기본 `default` 외 최대 15개.
+
+---
+
+## 6. 관련 문서
+
+- [기술 문서 포털](../README.md)
+- [시스템 개발정의서 v1.1](../spec/racp-specification-v1.1.md)
+- [런타임 및 플랫폼 호환성 매트릭스](compatibility.md)
+- [Windows 릴리스 인수 게이트](windows-release-gates.md)
+- [데스크톱 클라이언트 가이드](../guides/desktop-client-guide.md)
+- [2-PC 실증 랩 가이드](../guides/two-pc-lab-guide.md)

@@ -57,7 +57,7 @@ known-source `tests/fixtures/plugin_worker.py`는 실제 별도 프로세스의 
 이는 Ghidra/GDB나 fake static/debugger domain 구현을 대신하는 backend가 아니다.
 manifest/환경/schema, 정상 결과, protocol fault, event flood, crash side-effect 비재실행,
 restart 제한, health 무응답/시작 취소, queue cancel, 실제 child+grandchild 종료를 검증했다.
-증거와 수치는 [Phase 9 기록](../phase-9-plugin-result.md)에 유지한다.
+증거와 수치는 [구현 및 검증 현황](../quality/implementation-status.md)에 유지한다.
 
 Agent runtime/provider dispatch·소유권 Handle·capability 관측과 typed static/debugger 계약,
 synthetic domain fixture를 [ADR-0015](ADR-0015-re-application-handles-and-policy.md)에서 연결했다.

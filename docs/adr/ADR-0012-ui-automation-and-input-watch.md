@@ -62,7 +62,7 @@ Broker 내부 drag는 10ms 단위로 foreground/관측/input interruption을 검
 실제 Broker/Agent/HTTP/MCP의 UIA 관측, 창 destroy hook과 별도 프로세스 mutex 경쟁도 검증했다.
 초기 foreground 거부는 skip했고 이후 OS가 허용한 자체 창 show/activation에서 초기 4개와
 Guardian/취소/HTTP drag 후속 시험을 포함한 11개를 통과했다. 최신 회귀에서는 Job termination의
-OS 활성화 거부 skip이 있어 현재 고유 10개 확인과 구분한다([Phase 8 결과](../phase-8-broker-result.md)).
+OS 활성화 거부 skip이 있어 현재 고유 10개 확인과 구분한다([구현 및 검증 현황](../quality/implementation-status.md)).
 현재 단일 4K display의 150% scale을 확인했다. foreground 제한을 우회하는 입력은 사용하지 않는다.
 UIA focus의 자체 provider 재진입 진단이 발생한 경로는 제거했다.
 Notepad/Calculator, SCM/다른 계정, 나머지 DPI/RDP/UAC/locked/참조 OS gate는 계속 남아 있다.

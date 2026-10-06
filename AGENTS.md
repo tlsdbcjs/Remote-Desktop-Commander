@@ -10,7 +10,7 @@ This document defines repository instructions, operational principles, and seman
 - **Architecture**:
   - Python workspace (`uv` workspace): `apps/agent`, `apps/cli`, `apps/gateway`, `packages/domain`, `packages/protocol`, `packages/policy`, `packages/observability`, `packages/sdk`
   - Node / Web / Desktop workspace (`pnpm` workspace): `apps/client` (Electron + React), `apps/console` (React + Vite)
-- **Current Baseline Version**: `0.1.8`
+- **Current Baseline Version**: `0.1.9`
 
 ---
 
@@ -134,3 +134,25 @@ Before completing any version-related change or release:
    ```bash
    uv run pytest tests/unit/test_version.py -v
    ```
+
+---
+
+## 7. Technical Documentation Governance (`documentation-standards` Skill)
+
+All agents working on the RACP repository must follow the technical documentation governance defined in [`.agents/skills/documentation-standards/SKILL.md`](.agents/skills/documentation-standards/SKILL.md).
+
+### 7.1 Documentation Directory Taxonomy
+All technical documents MUST be placed in their dedicated category under `docs/`:
+- `docs/spec/`: System architecture, protocol design, master engineering specifications.
+- `docs/guides/`: User, deployment, operations, and testing guides.
+- `docs/quality/`: Quality assurance, platform compatibility matrix, implementation status, and release gates.
+- `docs/adr/`: Architecture Decision Records (`ADR-XXXX-*.md`).
+- `docs/protocol/`: JSON schemas and OpenAPI contracts (strictly immutable file paths required by contract tests).
+
+### 7.2 Anti-Bloat & Aggregation Policy
+- **No Transient Result Files**: Agents must **NOT** create ad-hoc milestone files (such as `phase-*-result.md`, `core-*-result.md`, or temporary review notes).
+- **Single Source of Truth for Progress**: All verification logs, test counts, passing metrics, and milestone achievements MUST be recorded directly in [`docs/quality/implementation-status.md`](docs/quality/implementation-status.md).
+
+### 7.3 Standardized Document Template
+Every markdown document must include the standard metadata header block (Document ID, Status, Target Version, Last Updated, Classification), structured headings, callouts (`> [!NOTE]`, `> [!IMPORTANT]`, `> [!WARNING]`), and verified relative links.
+

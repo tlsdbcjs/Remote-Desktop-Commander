@@ -1,6 +1,6 @@
 {
   "name": "@racp/client",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "description": "RACP cross-platform PC client",
   "main": "main.cjs",

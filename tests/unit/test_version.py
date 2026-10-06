@@ -7,8 +7,8 @@ from scripts.version import calculate_next_version, parse_semver
 
 
 def test_package_version_constants() -> None:
-    assert VERSION == "0.1.8"
-    assert __version__ == "0.1.8"
+    assert VERSION == "0.1.9"
+    assert __version__ == VERSION
 
     import racp_agent
     import racp_cli
@@ -18,13 +18,14 @@ def test_package_version_constants() -> None:
     import racp_protocol
     import racp_sdk
 
-    assert racp_agent.__version__ == "0.1.8"
-    assert racp_cli.__version__ == "0.1.8"
-    assert racp_gateway.__version__ == "0.1.8"
-    assert racp_protocol.__version__ == "0.1.8"
-    assert racp_policy.__version__ == "0.1.8"
-    assert racp_observability.__version__ == "0.1.8"
-    assert racp_sdk.__version__ == "0.1.8"
+    assert racp_agent.__version__ == VERSION
+    assert racp_cli.__version__ == VERSION
+    assert racp_gateway.__version__ == VERSION
+    assert racp_protocol.__version__ == VERSION
+    assert racp_policy.__version__ == VERSION
+    assert racp_observability.__version__ == VERSION
+    assert racp_sdk.__version__ == VERSION
+
 
 
 def test_parse_semver() -> None:

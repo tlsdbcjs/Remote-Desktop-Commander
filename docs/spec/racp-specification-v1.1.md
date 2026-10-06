@@ -1,25 +1,22 @@
-# Remote AI Control Platform (RACP)
-## 소프트웨어 개발 정의서 / Software Design & Development Specification
+# Remote AI Control Platform (RACP) 마스터 소프트웨어 개발 정의서
 
-> 문서 버전: **1.1 검토 반영본** · 개정일: **2026-10-01 KST**
->
-> 문서 상태: **설계 기준선 수립 · Phase 0 검증 후 구현 기준선 확정**
->
-> 원문의 Python 중심 구조, 외부 MCP 경계, outbound Agent, 명시적 Handle과 Artifact 원칙을 유지한다. 부록 E는 누락된 실행 계약과 검증 기준을 구체화한다. 구현과 배포가 검증되었다는 의미는 아니다.
->
-> 읽는 순서: §2 범위 → §78 지원표 → §79–91 단계 → 부록 E 상세 계약. 검토 이유와 변경 내역은 `RACP-검토결과.md`를 참조한다.
->
-> 모든 수치 기본값과 신규 제약은 이 개정본의 설계 결정이며 측정된 성능이나 외부 표준의 요구값이 아니다. 변경 시 ADR과 관련 검증 기준을 함께 수정한다.
->
-> 목적: 본 문서는 AI 개발자(Codex, ChatGPT, Claude Code 등)에게 그대로 전달하여 저장소 생성부터 구현, 테스트, 빌드, 패키징, 배포까지 수행하도록 하기 위한 개발 기준서이다.
->
-> 핵심 목표: **AI가 원격 PC의 파일시스템, 셸, 프로세스, 터미널, 브라우저, 데스크톱 GUI, 리버싱 도구를 로컬 PC를 다루는 것과 최대한 유사한 사용성으로 제어**할 수 있는 개인용 원격 제어 플랫폼을 구축한다.
->
-> 주 사용 목적: 개인 소유 또는 명시적으로 허가된 시스템의 개발, 디버깅, 정적/동적 분석, 리버스 엔지니어링, 브라우저 자동화 및 연구 환경 제어.
->
-> 이 문서의 규범적 용어 `MUST`, `SHOULD`, `MAY`는 각각 필수, 권장, 선택 구현을 의미한다.
+> **문서 ID**: `DOC-SPEC-CORE-v1.1`  
+> **상태**: Active · **기준 버전**: v0.1.8  
+> **최초 작성일**: 2026-10-01 · **최종 개정일**: 2026-10-07  
+> **분류**: Software Design & Master Architecture Specification  
+> **참조 문서**: [Windows 엔지니어링 계획서](windows-engineering-plan.md) · [구현 및 검증 현황](../quality/implementation-status.md) · [ADR 색인](../adr/README.md)
 
 ---
+
+## 메타데이터 및 설계 기준 안내
+
+- **문서 상태**: 설계 기준선 수립 및 구현 검증 완료 (v0.1.8 기준선 유지).
+- **아키텍처 원칙**: Python 중심 모노레포, 엄격한 외부 MCP 경계, 아웃바운드 WSS Agent, 명시적 Handle과 Artifact 원칙 준수.
+- **규범적 용어**: 본 문서의 `MUST`, `SHOULD`, `MAY`는 각각 RFC 2119에 준하는 필수, 권장, 선택 사항을 의미합니다.
+- **단일 진실 공급원**: 변경 사항 발생 시 [ADR](../adr/README.md) 및 [구현 현황](../quality/implementation-status.md)에 동기화하여 기록합니다.
+
+---
+
 
 # 0. AI 개발자에게 주는 최상위 지시
 

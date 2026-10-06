@@ -56,7 +56,7 @@ source/target SHA-256을 비교하며 자기 소유 임시 process만 사용한�
 두 native 시험과 parser/hash unit 8개는 `dist/gdb-native-results.xml`에 **10 passed**다.
 일반 전체 검사에서는 native GDB 2개를 opt-in skip하며 PASS로 합산하지 않는다.
 기본 setup은 `python -m racp_agent.plugins.gdb_installation`으로 실제 실행하여 config/manifest/provenance
-생성을 확인했다. test command와 남은 gate는 [Phase 9 결과](../phase-9-plugin-result.md)에 기록한다.
+생성을 확인했다. test command와 남은 gate는 [구현 및 검증 현황](../quality/implementation-status.md)에 기록한다.
 
 ## 제한과 남은 작업
 

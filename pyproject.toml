@@ -1,6 +1,6 @@
 [project]
 name = "racp-workspace"
-version = "0.1.8"
+version = "0.1.9"
 requires-python = ">=3.12,<3.13"
 dependencies = ["racp-gateway", "racp-agent", "racp-cli"]
 
@@ -50,4 +50,6 @@ ignore_missing_imports = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = ["workspaces: configure additional named folders on the fixture Agent", "browser_cdp: explicitly enable loopback CDP on the fixture Agent", "desktop: explicitly enable the current session Broker on the fixture Agent", "desktop_login: enable the configured user-login registration fixture", "native_gui: opt-in GUI acceptance confined to temporary owned test windows", "re_plugin: explicitly install the synthetic RE domain contract fixture", "gdb_native: explicitly enable installed native GDB against the known-source fixture", "ghidra_native: explicitly enable installed Ghidra against the known-source fixture", "remote_tls: real HTTPS/WSS listener with a temporary private CA", "oauth_keycloak: opt-in real local Keycloak OAuth authorization-code/PKCE integration"]
+
