@@ -5,6 +5,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 import uvicorn
+from racp_domain.version import __version__
 from racp_sdk.connection_file import validate_ca_pem
 
 from racp_gateway.app import create_app
@@ -14,6 +15,7 @@ from racp_gateway.oauth import load_oauth_config
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="RACP authenticated local/remote control plane")
+    parser.add_argument("--version", action="version", version=f"racp-gateway {__version__}")
     parser.add_argument("--data-dir", type=Path, default=Path(".racp/gateway"))
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--host", default="127.0.0.1")

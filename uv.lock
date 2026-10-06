@@ -707,7 +707,7 @@ wheels = [
 
 [[package]]
 name = "racp-agent"
-version = "0.1.0"
+version = "0.1.8"
 source = { editable = "apps/agent" }
 dependencies = [
     { name = "comtypes", marker = "sys_platform == 'win32'" },
@@ -746,7 +746,7 @@ requires-dist = [
 
 [[package]]
 name = "racp-cli"
-version = "0.1.0"
+version = "0.1.8"
 source = { editable = "apps/cli" }
 dependencies = [
     { name = "httpx" },
@@ -767,12 +767,12 @@ requires-dist = [
 
 [[package]]
 name = "racp-domain"
-version = "0.1.0"
+version = "0.1.8"
 source = { editable = "packages/domain" }
 
 [[package]]
 name = "racp-gateway"
-version = "0.1.0"
+version = "0.1.8"
 source = { editable = "apps/gateway" }
 dependencies = [
     { name = "fastapi" },
@@ -803,12 +803,12 @@ requires-dist = [
 
 [[package]]
 name = "racp-observability"
-version = "0.1.0"
+version = "0.1.8"
 source = { editable = "packages/observability" }
 
 [[package]]
 name = "racp-policy"
-version = "0.1.0"
+version = "0.1.8"
 source = { editable = "packages/policy" }
 dependencies = [
     { name = "racp-domain" },
@@ -823,7 +823,7 @@ requires-dist = [
 
 [[package]]
 name = "racp-protocol"
-version = "0.1.0"
+version = "0.1.8"
 source = { editable = "packages/protocol" }
 dependencies = [
     { name = "pydantic" },
@@ -838,7 +838,7 @@ requires-dist = [
 
 [[package]]
 name = "racp-sdk"
-version = "0.1.0"
+version = "0.1.8"
 source = { editable = "packages/sdk" }
 dependencies = [
     { name = "httpx" },
@@ -861,7 +861,7 @@ requires-dist = [
 
 [[package]]
 name = "racp-workspace"
-version = "0.1.0"
+version = "0.1.8"
 source = { virtual = "." }
 dependencies = [
     { name = "racp-agent" },

@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import "./style.css";
 import messages from "../messages.json";
 
+const CLIENT_VERSION = "0.1.8";
+
 function failureMessage(error: unknown): string {
   if (error instanceof Error) {
     // Electron adds an IPC prefix. Only retain an exact known diagnostic suffix.
@@ -175,7 +177,9 @@ function Client() {
     <main>
       <header>
         <span className="eyebrow">REMOTE PC CLIENT</span>
-        <h1>RACP Client</h1>
+        <h1>
+          RACP Client <span className="version-badge">v{CLIENT_VERSION}</span>
+        </h1>
         <p>이 PC를 연결하고 AI가 사용할 폴더와 실행 권한을 선택합니다.</p>
       </header>
       <section className="state">

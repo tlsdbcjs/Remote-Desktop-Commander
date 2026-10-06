@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
+from racp_domain.version import __version__
 from racp_sdk.security import SecretStore, digest
 
 from racp_agent.instance_lock import InstanceLock, InstanceRunningError
@@ -20,6 +21,7 @@ from racp_agent.workspaces import workspace_argument
 
 def parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="RACP outbound device Agent")
+    parser.add_argument("--version", action="version", version=f"racp-agent {__version__}")
     parser.add_argument("--credentials", type=Path)
     parser.add_argument("--data-dir", type=Path)
     parser.add_argument("--workspace", type=Path)

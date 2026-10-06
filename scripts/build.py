@@ -5,6 +5,8 @@ import json
 import subprocess
 from pathlib import Path
 
+from racp_domain.version import VERSION
+
 
 def main() -> None:
     subprocess.run(["uv", "build", "--all-packages", "--wheel"], check=True)
@@ -20,7 +22,7 @@ def main() -> None:
     Path("dist/build-manifest.json").write_text(
         json.dumps(
             {
-                "version": "0.1.0",
+                "version": VERSION,
                 "kind": "development-wheels",
                 "signed": False,
                 "lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),

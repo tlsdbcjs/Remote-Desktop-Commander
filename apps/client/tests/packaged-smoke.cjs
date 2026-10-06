@@ -48,8 +48,9 @@ async function main() {
             version: app.getVersion(),
             userData: app.getPath("userData"),
         }));
+        const expectedVersion = require("../package.json").version;
         assert.equal(version.packaged, true);
-        assert.equal(version.version, "0.1.7");
+        assert.equal(version.version, expectedVersion);
         assert.equal(
             path.join(version.userData, "agent", "credential.bin"),
             credential,

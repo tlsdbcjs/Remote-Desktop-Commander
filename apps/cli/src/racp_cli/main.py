@@ -13,6 +13,7 @@ from urllib.parse import urlencode
 
 import httpx
 from racp_domain.models import RACPError
+from racp_domain.version import __version__
 from racp_protocol.registry import INPUT_MODELS, REGISTRY
 from racp_sdk.artifacts import ArtifactClient
 from racp_sdk.journal import Journal
@@ -22,6 +23,7 @@ from racp_sdk.terminal import TerminalStreamClient
 
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description="RACP authenticated management CLI")
+    root.add_argument("--version", action="version", version=f"racp {__version__}")
     root.add_argument("--gateway", default="http://127.0.0.1:8765")
     root.add_argument(
         "--ca-file", type=Path, help="Additional CA certificate for the Gateway TLS connection"

@@ -70,10 +70,19 @@ def main() -> None:
             destination = site / origin.relative_to(installed_site)
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(origin, destination)
-    wheels = [
-        Path("dist") / f"racp_{name}-0.1.0-py3-none-any.whl"
-        for name in ["agent", "domain", "protocol", "policy", "observability", "sdk"]
-    ]
+    from racp_domain.version import VERSION
+
+    wheel_names = ["agent", "domain", "protocol", "policy", "observability", "sdk"]
+    wheels = []
+    for name in wheel_names:
+        exact = Path("dist") / f"racp_{name}-{VERSION}-py3-none-any.whl"
+        if exact.exists():
+            wheels.append(exact)
+        else:
+            candidates = sorted(Path("dist").glob(f"racp_{name}-*-py3-none-any.whl"))
+            if not candidates:
+                raise FileNotFoundError(f"Missing wheel for racp_{name} in dist/")
+            wheels.append(candidates[-1])
     for wheel in wheels:
         with zipfile.ZipFile(wheel) as archive:
             for item in archive.infolist():
