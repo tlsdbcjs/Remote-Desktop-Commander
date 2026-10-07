@@ -1,9 +1,6 @@
 {
   "appId": "app.racp.client",
   "productName": "RACP Client",
-  "directories": {
-    "output": "../../dist/client-desktop-0.1.8-final"
-  },
   "files": [
     "main.cjs",
     "preload.cjs",
@@ -18,22 +15,10 @@
   ],
   "asar": true,
   "beforePack": "./before-pack.cjs",
-  "extraResources": [
-    {
-      "from": "../../dist/client-agent-v8",
-      "to": "agent",
-      "filter": [
-        "runtime/**",
-        "browsers/**",
-        "agent-manifest.json",
-        "!**/__pycache__/**",
-        "!**/*.pyc"
-      ]
-    }
-  ],
   "win": {
     "target": [
       "nsis",
+      "portable",
       "zip"
     ],
     "signAndEditExecutable": true,
@@ -41,12 +26,18 @@
     "icon": "assets/app.ico"
   },
   "nsis": {
+    "artifactName": "RACP-Client-${version}-win-${arch}-setup.${ext}",
     "include": "build/installer.nsh",
     "deleteAppDataOnUninstall": false,
     "oneClick": false,
     "perMachine": false,
     "allowToChangeInstallationDirectory": true
   },
+  "portable": {
+    "artifactName": "RACP-Client-${version}-win-${arch}-portable.${ext}",
+    "requestExecutionLevel": "user"
+  },
+  "artifactName": "RACP-Client-${version}-${os}-${arch}.${ext}",
   "mac": {
     "target": [
       "dmg",

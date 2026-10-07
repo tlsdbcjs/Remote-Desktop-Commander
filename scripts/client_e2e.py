@@ -5,6 +5,7 @@ import asyncio
 import importlib.util
 import json
 import os
+import platform
 import socket
 import subprocess
 import tempfile
@@ -14,6 +15,7 @@ from pathlib import Path
 import httpx
 import psutil
 import uvicorn
+from racp_domain.version import VERSION
 from racp_gateway.app import create_app
 from racp_gateway.store import GatewayStore
 from racp_sdk.connection_file import ConnectionFile
@@ -150,7 +152,13 @@ async def run(node: Path, backend: Path, screenshot: Path) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--node", required=True, type=Path)
-    parser.add_argument("--backend", type=Path, default=Path("dist/client-agent-v8"))
+    target = {"Windows": "win", "Darwin": "mac", "Linux": "linux"}[platform.system()]
+    arch = {"amd64": "x64", "x86_64": "x64", "arm64": "arm64", "aarch64": "arm64"}[
+        platform.machine().lower()
+    ]
+    parser.add_argument(
+        "--backend", type=Path, default=Path("dist/client-agent") / VERSION / f"{target}-{arch}"
+    )
     args = parser.parse_args()
     raise SystemExit(
         asyncio.run(

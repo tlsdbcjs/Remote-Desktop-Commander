@@ -1,4 +1,4 @@
-// Native packaged smoke only when this Windows user's production client is unregistered.
+// Native packaged smoke uses a new profile and checks isolation before IPC calls.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -7,25 +7,11 @@ const { _electron, expect } = require("@playwright/test");
 const messages = require("../messages.json");
 async function main() {
     const executable = path.resolve(process.argv[2]);
-    const credential = path.join(
-        process.env.APPDATA,
-        "@racp",
-        "client",
-        "agent",
-        "credential.bin",
-    );
-    try {
-        await fs.access(credential);
-        throw Error(
-            "Packaged smoke requires an unregistered local user; refusing existing Device state",
-        );
-    } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-    }
     const offerFolder = await fs.mkdtemp(
         path.join(os.tmpdir(), "racp-packaged-offer-"),
     );
     const offerPath = path.join(offerFolder, "RACP-connection.racp");
+    const profile = path.join(offerFolder, "profile");
     const fixtureToken =
         "unused-native-offer-" + require("node:crypto").randomUUID();
     await fs.writeFile(
@@ -40,21 +26,24 @@ async function main() {
     );
     let application;
     try {
-        application = await _electron.launch({ executablePath: executable });
-        const page = await application.firstWindow();
-        await page.getByRole("heading", { name: "새 PC 연결" }).waitFor();
-        const version = await application.evaluate(({ app }) => ({
-            packaged: app.isPackaged,
-            version: app.getVersion(),
-            userData: app.getPath("userData"),
-        }));
+        application = await _electron.launch({
+            executablePath: executable,
+            args: ["--user-data-dir=" + profile],
+            timeout: 120000,
+        });
+        const version = await application.evaluate(({ app }) => {
+            return {
+                packaged: app.isPackaged,
+                version: app.getVersion(),
+                userData: app.getPath("userData"),
+            };
+        });
         const expectedVersion = require("../package.json").version;
         assert.equal(version.packaged, true);
         assert.equal(version.version, expectedVersion);
-        assert.equal(
-            path.join(version.userData, "agent", "credential.bin"),
-            credential,
-        );
+        assert.equal(path.resolve(version.userData).toLowerCase(), profile.toLowerCase());
+        const page = await application.firstWindow();
+        await page.getByRole("heading", { name: "새 PC 연결" }).waitFor();
         const info = await page.evaluate(() => window.racpClient.info());
         assert.equal(info.configured, false);
         assert.ok(info.execution_identity);
@@ -109,12 +98,13 @@ async function main() {
         await application.close();
         application = null;
         console.log(
-            "PASS: packaged 0.1.7 connection-file preview/token isolation, runtime, safe CA diagnosis and full exit",
+            `PASS: packaged ${expectedVersion} isolated profile, connection-file preview/token isolation, runtime, safe CA diagnosis and full exit`,
         );
     } finally {
         if (application) await application.close();
-        await fs.unlink(offerPath);
-        await fs.rmdir(offerFolder);
+        assert.equal(path.dirname(offerFolder), path.resolve(os.tmpdir()));
+        assert.ok(path.basename(offerFolder).startsWith("racp-packaged-offer-"));
+        await fs.rm(offerFolder, { recursive: true, force: true });
     }
 }
 main().catch((error) => {

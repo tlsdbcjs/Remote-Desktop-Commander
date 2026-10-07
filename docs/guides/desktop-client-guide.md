@@ -1,8 +1,8 @@
 # RACP 데스크톱 클라이언트 운용 가이드 (Desktop Client Guide)
 
-> **문서 ID**: `DOC-GDE-DESKTOP`  
-> **상태**: Active · **기준 버전**: v0.1.8  
-> **최종 개정일**: 2026-10-07 · **분류**: User & Operations Guide
+> **Document ID**: `DOC-GDE-DESKTOP`\
+> **Status**: Active · **Target Version**: v0.1.10\
+> **Last Updated**: 2026-10-07 · **Classification**: User & Operations Guide
 
 ---
 
@@ -54,14 +54,19 @@ flowchart LR
 
 | 플랫폼 | 배포 패키지 포맷 | 런타임 번들 구성 | 검증 상태 |
 | :--- | :--- | :--- | :---: |
-| **Windows x64** | NSIS 설치형 EXE / 포터블 ZIP | Electron 44, CPython 3.12, Chromium 1243 | **실증 검증 완료 (Verified)** |
-| **macOS** | DMG / 포터블 ZIP | Electron 44, macOS Python/Chromium | 구성 완료 (Native CI 작성) |
-| **Linux (Ubuntu)** | AppImage / deb | Electron 44, Linux Python/Chromium | 구성 완료 (Native CI 작성) |
+| **Windows x64** | NSIS 설치형 EXE / 단일 포터블 EXE / 포터블 ZIP | Electron 44, CPython 3.12.11, pinned Chromium | 현재 빌드 대상; 최신 검증은 구현 현황 참고 |
+| **macOS x64 / arm64** | 설치용 DMG / `.app` 포터블 ZIP | 동일 OS·아키텍처의 Python/Chromium | 구조 정의 완료, 네이티브 빌드 보류 |
+| **Linux x64 / arm64** | 설치용 deb / 포터블 AppImage | 동일 OS·아키텍처의 Python/Chromium | 구조 정의 완료, 네이티브 빌드 보류 |
 
 > [!IMPORTANT]
-> Windows용 공식 산출물은 `dist/client-desktop-0.1.7-final/` (또는 최신 빌드 산출 디렉터리)에서 제공됩니다:
-> - 설치형: `RACP Client Setup 0.1.8.exe`
-> - 포터블형: `RACP Client-0.1.8-win.zip` (압축 해제 후 `RACP Client.exe` 즉시 실행 가능)
+> 산출물은 `dist/client-desktop/<version>/<win|mac|linux>-<arch>/`에 저장합니다. Windows 예시:
+> - 설치형: `RACP-Client-<version>-win-x64-setup.exe`
+> - 단일 포터블: `RACP-Client-<version>-win-x64-portable.exe` (실행 시 임시 폴더에 번들 추출)
+> - 포터블 ZIP: `RACP-Client-<version>-win-x64.zip` (압축 해제 후 `RACP Client.exe` 실행)
+> - `build-manifest.json`: 버전, OS·아키텍처, 파일 크기, SHA-256 기록
+
+> [!NOTE]
+> 포터블은 설치 없이 실행하는 배포 방식입니다. 등록 정보는 설치형과 같이 현재 사용자 데이터 디렉터리에 저장합니다. macOS/Linux에는 EXE 대신 각 OS의 네이티브 실행 형식을 사용합니다.
 
 ---
 
@@ -124,29 +129,35 @@ stateDiagram-v2
 
 ## 6. 개발 빌드 및 패키징 절차
 
-개발 환경에서 데스크톱 클라이언트를 빌드하고 패키징하는 표준 절차입니다:
+기본 빌드는 **Windows x64만** 수행합니다. [빌드 스킬](../../.agents/skills/desktop-build/SKILL.md)과 [AGENTS.md](../../AGENTS.md#8-desktop-build-definition-desktop-build-skill)에 같은 실행 정책이 정의되어 있습니다.
 
 ```powershell
-# 1. 의존성 동기화
-uv sync --all-packages --frozen
-pnpm install --frozen-lockfile
+# 변경/빌드 묶음당 PATCH 1회 증가; 재시도에서는 같은 버전 사용
+uv run python scripts/version.py bump
+uv sync --all-packages
 
-# 2. Electron 네이티브 바인딩 및 런타임 빌드
-node apps/client/node_modules/electron/install.js
-uv run python scripts/build.py
-uv run python -m playwright install --with-deps chromium
+# Python 3.12.11 / Node 22.23.0 / pnpm 11.19.0 사용
+uv run python scripts/build_client.py --platform win --arch x64 --node .tools/node-v22.23.0-win-x64/node.exe
 
-# 3. 클라이언트 Agent 스테이징
-uv run python scripts/stage_client_agent.py
-
-# 4. 프론트엔드 빌드 및 단위 테스트
-pnpm --dir apps/client build
-pnpm --dir apps/client test
-
-# 5. E2E 통합 테스트 및 Windows 설치본 패키징
-uv run python scripts/client_e2e.py
-pnpm --dir apps/client package --win --publish never
+# 새로 스테이징한 Agent를 사용하는 격리 E2E
+uv run python scripts/client_e2e.py --node .tools/node-v22.23.0-win-x64/node.exe
 ```
+
+통합 스크립트는 frozen 의존성 동기화, workspace wheel 빌드, Chromium 설치, Agent 스테이징, 프론트엔드 빌드/Node 테스트, 설치형·포터블 패키징과 Windows unpacked/단일 포터블 smoke 검사를 수행합니다. 기존 산출물 경로가 있으면 보존을 위해 중단합니다. 실패한 묶음만 확인 후 별도 보관 경로로 이동하고 같은 버전으로 재시도합니다.
+
+`apps/client/electron-builder.json`은 포맷 설정, `electron-builder.cjs`는 현재 버전·네이티브 경로 해석을 담당합니다. Agent 스테이징 경로는 `dist/client-agent/<version>/<target>-<arch>/`이며, pre-pack hook은 OS·아키텍처·버전·lock digest와 파일 해시를 검증합니다.
+
+macOS/Linux 구조만 확인할 때는 아래 명령을 사용합니다. 실제 빌드는 실행하지 않습니다:
+
+```bash
+uv run python scripts/build_client.py --platform mac --arch arm64 --dry-run
+uv run python scripts/build_client.py --platform linux --arch x64 --dry-run
+```
+
+사용자가 향후 해당 플랫폼 빌드를 요청하면 일치하는 네이티브 호스트에서 `--dry-run`을 제거합니다. CI의 push/PR 및 기본 수동 실행은 Windows만 빌드하며, 수동 실행에서 `include_deferred_platforms=true`를 선택했을 때만 macOS arm64/Linux x64 빌드를 추가합니다. [설정된 타깃](https://www.electron.build/win/)에 따라 Windows 단일 포터블 EXE도 생성합니다.
+
+> [!NOTE]
+> 개발 산출물은 unsigned이며 `--publish never`를 적용합니다. macOS 서명·notarization, clean PC 설치/업그레이드/제거 인수는 별도 검증입니다. 실제 시험 결과는 [구현 현황](../quality/implementation-status.md)에 기록합니다.
 
 ---
 

@@ -31,7 +31,7 @@ def main() -> None:
             str(node),
             "node_modules/electron-builder/cli.js",
             "--config",
-            "electron-builder.json",
+            "electron-builder.cjs",
             "--win",
             "--x64",
             "--publish",
@@ -41,6 +41,7 @@ def main() -> None:
             "--config.extraMetadata.name=" + metadata["package"],
             "--config.extraMetadata.version=" + version,
             "--config.directories.output=" + str(output),
+            "--config.nsis.artifactName=${productName} Setup ${version}.${ext}",
         ]
         subprocess.run([*common, "--dir"], cwd="apps/client", env=environment, check=True)
         subprocess.run(

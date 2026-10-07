@@ -14,11 +14,12 @@ from pathlib import Path
 
 import playwright
 from packaging.requirements import Requirement
+from racp_domain.version import VERSION
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", type=Path, default=Path("dist/client-agent-v8"))
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--browser-cache", type=Path, required=True)
     args = parser.parse_args()
     if sys.version_info[:3] != (3, 12, 11):
@@ -27,7 +28,10 @@ def main() -> None:
     architectures = {"amd64": "x64", "x86_64": "x64", "arm64": "arm64", "aarch64": "arm64"}
     target = systems[platform.system()]
     arch = architectures[platform.machine().lower()]
-    output = args.output.absolute()
+    directory_target = {"win32": "win", "darwin": "mac", "linux": "linux"}[target]
+    output = (
+        args.output or Path("dist/client-agent") / VERSION / f"{directory_target}-{arch}"
+    ).absolute()
     output.mkdir(parents=True, exist_ok=False)
     runtime = output / "runtime"
     shutil.copytree(
@@ -77,7 +81,7 @@ def main() -> None:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(origin, destination)
     for name in ["agent", "domain", "protocol", "policy", "observability", "sdk"]:
-        with zipfile.ZipFile(Path("dist") / f"racp_{name}-0.1.0-py3-none-any.whl") as archive:
+        with zipfile.ZipFile(Path("dist") / f"racp_{name}-{VERSION}-py3-none-any.whl") as archive:
             for item in archive.infolist():
                 destination = (site / item.filename).resolve()
                 if not destination.is_relative_to(site.resolve()):
@@ -121,6 +125,7 @@ def main() -> None:
     (output / "agent-manifest.json").write_text(
         json.dumps(
             {
+                "version": VERSION,
                 "platform": target,
                 "arch": arch,
                 "python": "3.12.11",

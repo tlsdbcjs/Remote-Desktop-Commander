@@ -7,7 +7,7 @@ from scripts.version import calculate_next_version, parse_semver
 
 
 def test_package_version_constants() -> None:
-    assert VERSION == "0.1.9"
+    assert VERSION == "0.1.10"
     assert __version__ == VERSION
 
     import racp_agent

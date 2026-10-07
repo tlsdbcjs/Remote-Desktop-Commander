@@ -8,7 +8,18 @@ description: >-
 
 # RACP Version Manager Skill
 
+> **Document ID**: `DOC-SKILL-VERSION`\
+> **Status**: Active · **Target Version**: v0.1.10\
+> **Last Updated**: 2026-10-07 · **Classification**: Version Operations
+
 This skill provides step-by-step procedures for managing semantic versioning in the RACP project.
+
+## Table of Contents
+
+- [Version Numbering Rules](#version-numbering-rules)
+- [Quick Reference CLI](#quick-reference-cli)
+- [Automated File Synchronization](#automated-file-synchronization)
+- [Verification Runbook](#verification-runbook)
 
 ## Version Numbering Rules
 
@@ -16,6 +27,13 @@ This skill provides step-by-step procedures for managing semantic versioning in 
 - **MAJOR**: User-defined. Increment or set **only** when the user explicitly requests a major version update.
 - **MINOR**: User-defined. Increment or set **only** when the user explicitly requests a minor version update.
 - **PATCH**: Auto-incremented. Default behavior when bumping versions (increments by 1 on routine fixes, builds, and releases).
+
+For desktop setup/portable builds, use [Desktop Build](../desktop-build/SKILL.md).
+Bump once per change/build batch, reuse the version for retries and formats, and run
+`uv sync --all-packages` after the bump to refresh local workspace versions in `uv.lock`.
+
+> [!NOTE]
+> Setup and portable artifacts in the same build batch share one workspace version.
 
 ---
 

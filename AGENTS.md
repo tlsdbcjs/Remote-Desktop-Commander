@@ -1,6 +1,21 @@
 # RACP Agent Guidelines & Version Management
 
+> **Document ID**: `DOC-GOV-AGENTS`\
+> **Status**: Active · **Target Version**: v0.1.10\
+> **Last Updated**: 2026-10-07 · **Classification**: Repository Agent Guidelines
+
 This document defines repository instructions, operational principles, and semantic versioning policies for AI agents (Codex, Antigravity, Gemini, etc.) and contributors working on the **Remote-Desktop-Commander (RACP)** codebase.
+
+## Table of Contents
+
+- [1. Project Overview](#1-project-overview)
+- [2. Version Management Policy](#2-version-management-policy-semver--auto-increment)
+- [3. Version Tool](#3-version-tool-scriptsversionpy)
+- [4. Synchronized Targets](#4-single-source-of-truth--synchronized-targets)
+- [5. Version References](#5-how-code-references-the-version)
+- [6. Release Checklist](#6-pre-commit--release-checklist-for-agents)
+- [7. Documentation Governance](#7-technical-documentation-governance-documentation-standards-skill)
+- [8. Desktop Build Definition](#8-desktop-build-definition-desktop-build-skill)
 
 ---
 
@@ -10,7 +25,7 @@ This document defines repository instructions, operational principles, and seman
 - **Architecture**:
   - Python workspace (`uv` workspace): `apps/agent`, `apps/cli`, `apps/gateway`, `packages/domain`, `packages/protocol`, `packages/policy`, `packages/observability`, `packages/sdk`
   - Node / Web / Desktop workspace (`pnpm` workspace): `apps/client` (Electron + React), `apps/console` (React + Vite)
-- **Current Baseline Version**: `0.1.9`
+- **Current Baseline Version**: Read `packages/domain/src/racp_domain/version.py` (SSOT).
 
 ---
 
@@ -155,4 +170,31 @@ All technical documents MUST be placed in their dedicated category under `docs/`
 
 ### 7.3 Standardized Document Template
 Every markdown document must include the standard metadata header block (Document ID, Status, Target Version, Last Updated, Classification), structured headings, callouts (`> [!NOTE]`, `> [!IMPORTANT]`, `> [!WARNING]`), and verified relative links.
+
+---
+
+## 8. Desktop Build Definition (`desktop-build` Skill)
+
+Use [`.agents/skills/desktop-build/SKILL.md`](.agents/skills/desktop-build/SKILL.md) for desktop build, setup/portable packaging, runtime staging, or build CI changes. The maintained user procedure is [Desktop Client Guide](docs/guides/desktop-client-guide.md#6-개발-빌드-및-패키징-절차).
+
+| Platform | Setup | Portable | Current execution policy |
+| :--- | :--- | :--- | :--- |
+| Windows x64 | NSIS `*-setup.exe` | `*-portable.exe`; ZIP with executable and resources | Build and verify now; default local/CI target |
+| macOS x64 / arm64 | DMG containing `.app` | ZIP containing `.app` | Defined; defer native builds until explicitly requested |
+| Linux x64 / arm64 | deb | AppImage | Defined; defer native builds until explicitly requested |
+
+> [!IMPORTANT]
+> Build only Windows by default. Do not start macOS/Linux builds, containers, or their CI jobs during routine builds. Their native runners can be enabled explicitly using the workflow dispatch input `include_deferred_platforms`.
+
+- Entry point: `uv run python scripts/build_client.py --platform win --arch x64`. Use `--node <path>` when the pinned Node is not on PATH; `--dry-run` prints paths/targets without building.
+- Build Python, Chromium, and native dependencies on the matching OS and architecture. Reject mismatched bundles instead of copying Windows binaries to macOS/Linux. `.exe` applies to Windows; macOS/Linux use their native executable formats.
+- Packaging SSOT: `apps/client/electron-builder.json`; `apps/client/electron-builder.cjs` resolves the current workspace version and native paths.
+- Staging: `dist/client-agent/<version>/<win|mac|linux>-<arch>/`; output: `dist/client-desktop/<version>/<win|mac|linux>-<arch>/`.
+- Bump PATCH once per build/change batch with `scripts/version.py`, refresh `uv.lock`, and reuse that version for retries and all platform artifacts. Never bump once per output format.
+- Bundle Electron, CPython 3.12.11, current workspace wheels and pinned Playwright Chromium. Never package enrollment tokens, credentials, gateway-specific settings, or local device state.
+- Preserve existing outputs. On a failed build, inspect and move only the failed batch into a sibling quarantine path before retrying; do not delete unrelated `dist/` contents.
+- Verify lint/types/version tests, frontend build/Node tests, native Agent imports, Windows unpacked/portable smoke and packaging manifest integrity. Record checksums, passed checks and deferred platforms in [Implementation Status](docs/quality/implementation-status.md).
+
+> [!NOTE]
+> Development builds are unsigned and use `--publish never`; successful packaging does not establish clean-machine installation, upgrade/uninstall, signing, notarization, or native macOS/Linux acceptance.
 

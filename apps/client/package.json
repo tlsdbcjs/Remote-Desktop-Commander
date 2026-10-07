@@ -1,13 +1,16 @@
 {
   "name": "@racp/client",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "private": true,
   "description": "RACP cross-platform PC client",
   "main": "main.cjs",
   "scripts": {
     "build": "tsc --noEmit && vite build",
     "start": "electron .",
-    "package": "electron-builder --config electron-builder.json",
+    "package": "electron-builder --config electron-builder.cjs",
+    "package:win": "pnpm run package --win --x64 --publish never",
+    "package:mac": "pnpm run package --mac --publish never",
+    "package:linux": "pnpm run package --linux --publish never",
     "test": "node --test tests/*.test.cjs"
   },
   "dependencies": {

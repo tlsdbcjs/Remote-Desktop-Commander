@@ -1,7 +1,7 @@
 # RACP 구현 작업 및 검증 현황 (Implementation Status)
 
-> **Document ID**: `DOC-QA-STATUS`  
-> **Status**: Active · **Target Version**: v0.1.9  
+> **Document ID**: `DOC-QA-STATUS`\
+> **Status**: Active · **Target Version**: v0.1.10\
 > **Last Updated**: 2026-10-07 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
@@ -31,6 +31,7 @@
 - [5. 시스템 한도 및 제약 사항 (System Constraints)](#5-시스템-한도-및-제약-사항-system-constraints)
 - [6. 관련 문서](#6-관련-문서)
 - [7. Windows 작업 계획서 기준선 증거](#windows-plan-baseline)
+- [8. v0.1.10 설치형·포터블 빌드 정의 및 검증](#desktop-build-0110)
 
 ---
 
@@ -193,3 +194,50 @@
 공식 계획서는 `docs/spec/windows-engineering-plan.md`에 재발행했다. 과거 한글 경로의 동일 본문을 중복 생성하지 않는다. 이번 수정의 검증 범위는 문서 구조·링크·계획 항목 보존이며, 실제 기능 검사는 W01부터 후보를 고정해 진행한다.
 
 2026-10-07 문서 재발행 검증: 변경 문서 4개의 메타데이터·목차·코드 fence와 상대 파일/anchor 링크 81개를 확인해 오류 0건이었다. 기존 계획의 작업 ID 12개, 시험 ID 54개, display/session 조합 ID 8개를 변경·중복 없이 보존했다. 명령에 참조한 script/test 파일도 존재함을 확인했고 `docs/protocol/`은 변경하지 않았다. `scripts/version.py show` 결과는 0.1.9이며 제품 버전은 변경하지 않았다.
+
+<a id="desktop-build-0110"></a>
+
+## 8. v0.1.10 설치형·포터블 빌드 정의 및 검증
+
+2026-10-07 변경에서는 [AGENTS.md](../../AGENTS.md#8-desktop-build-definition-desktop-build-skill), [Desktop Build 스킬](../../.agents/skills/desktop-build/SKILL.md), [운용 가이드](../guides/desktop-client-guide.md#6-개발-빌드-및-패키징-절차)에 플랫폼별 빌드 정의를 반영했다. PATCH는 `0.1.9 → 0.1.10`으로 한 번 증가했고 `uv.lock`의 workspace 버전을 동기화했다.
+
+| 플랫폼 | 설치형 | 포터블 | 이번 실행 범위 |
+| :--- | :--- | :--- | :--- |
+| Windows x64 | NSIS setup EXE | 단일 portable EXE 및 ZIP | 네이티브 개발 빌드 |
+| macOS x64 / arm64 | DMG | `.app` ZIP | 구조 정의; mac-arm64 dry-run만 수행 |
+| Linux x64 / arm64 | deb | AppImage | 구조 정의; linux-x64 dry-run만 수행 |
+
+공통 진입점은 `scripts/build_client.py`이며 기본 대상은 Windows x64다. 출력은 `dist/client-desktop/<version>/<target>-<arch>/`, Agent 스테이징은 `dist/client-agent/<version>/<target>-<arch>/`로 분리했다. `stage_client_agent.py`의 `0.1.0` wheel 고정 참조와 이전 `client-agent-v8` 경로를 제거했다. pre-pack hook은 OS·아키텍처·현재 버전·lock digest·파일 해시를 검사한다.
+
+Desktop CI의 push/PR/기본 수동 실행은 Windows만 선택한다. 수동 실행의 `include_deferred_platforms=true`는 이후 사용자가 요청한 macOS arm64/Linux x64 빌드를 활성화할 때 사용한다. 이번 작업에서는 해당 runner나 Linux 컨테이너를 실행하지 않았다.
+
+| 검사 | 실제 결과 |
+| :--- | :--- |
+| Ruff (저장소 필수 범위 + 변경 Python 빌드 스크립트) | PASS |
+| Mypy | 135 source files, 오류 0 |
+| 버전 및 Desktop Control Python 테스트 | 16 passed (버전 6, Desktop Control 10) |
+| 프론트엔드 TypeScript/Vite 빌드 | PASS |
+| Client Node 테스트 | 11 passed, 실패 0; 플랫폼/버전/lock/변조/경로 탈출 거절 포함 |
+| 독립 Agent import | `native Agent imports OK` |
+| HTTPS/WSS Client E2E | PASS: 연결 파일, 만료/변경 거절, 토큰 재시도, 등록 복구, 실행 중 설정 수정 거절, 트레이·종료·Job 정리 |
+| Packaged Windows smoke | PASS: 새로운 `--user-data-dir` 격리 확인 후 패키지 버전·Agent bridge·연결 파일 preview·토큰 비노출·CA 진단·종료 |
+| 단일 portable EXE smoke | PASS: 런처 추출·실행, 프로필 인자 격리, v0.1.10 표시, native Agent bridge 및 완전 종료 |
+| Desktop Build / Version Manager 스킬 validator | 두 스킬 PASS (`python -X utf8`) |
+| 문서 메타데이터 및 상대 파일 링크 | 최종 AGENTS/두 스킬/가이드/구현 현황 5개 문서, 상대 파일 링크 31개 정상 |
+| Desktop CI YAML | 구문 파싱 PASS; 원격 CI 실행은 수행하지 않음 |
+| macOS/Linux | `build_executed=false` dry-run; 네이티브 빌드 및 인수 미실행 |
+| Windows ZIP | CRC PASS; 포함된 Agent 파일 4,766개의 SHA-256이 manifest와 일치 |
+
+Windows x64 실제 산출물은 `dist/client-desktop/0.1.10/win-x64/`에 생성했다. `build-manifest.json`에도 아래 크기와 SHA-256을 저장했다.
+
+| 산출물 | 크기 (bytes) | SHA-256 |
+| :--- | ---: | :--- |
+| `RACP-Client-0.1.10-win-x64-setup.exe` | 398774108 | `36ac1ab5dcc47e37cdd76a2131387f19a706f670be8be4603e1253ade9871c8c` |
+| `RACP-Client-0.1.10-win-x64-portable.exe` | 398561456 | `d35eeea164873681de9e0e86cbcccc6819df8e6657d02ff46a7eac2b07c96f56` |
+| `RACP-Client-0.1.10-win-x64.zip` | 542667560 | `b3588846d6eec40e636595545c5b1475a9828b824adde1cb962493273044e8b3` |
+
+> [!NOTE]
+> 패키지 smoke는 기존 사용자 등록 상태에 접근하지 않는 새 프로필로 실행했다. 첫 시험의 숨긴 창에서 click/screenshot timeout이 발생해, 격리 프로필을 유지한 채 창을 표시하는 시험 방식으로 수정하고 최종 PASS를 확인했다. 단일 EXE는 `_electron.launch`의 inspector pipe를 런처가 전달하지 않아 직접 연결 timeout이 발생했으므로, 전용 `portable-smoke.cjs`의 loopback Chromium 연결로 추출·실행·Agent IPC·종료를 확인했다. 실패한 시험의 소유 프로세스가 남지 않았음을 확인했다. 제품 연결 오류로 판정하지 않았다.
+
+> [!IMPORTANT]
+> 이번 증거는 unsigned 개발 빌드 및 해당 시험 범위다. clean PC 설치/업그레이드/제거, 실제 두 PC 전체 인수, 서명/notarization 또는 macOS/Linux 실행 통과를 의미하지 않는다.

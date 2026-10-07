@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./style.css";
 import messages from "../messages.json";
 
-const CLIENT_VERSION = "0.1.9";
+const CLIENT_VERSION = "0.1.10";
 
 function failureMessage(error: unknown): string {
   if (error instanceof Error) {
