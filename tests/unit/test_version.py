@@ -7,7 +7,7 @@ from scripts.version import calculate_next_version, parse_semver
 
 
 def test_package_version_constants() -> None:
-    assert VERSION == "0.1.10"
+    assert VERSION == "0.1.20"
     assert __version__ == VERSION
 
     import racp_agent
@@ -25,7 +25,6 @@ def test_package_version_constants() -> None:
     assert racp_policy.__version__ == VERSION
     assert racp_observability.__version__ == VERSION
     assert racp_sdk.__version__ == VERSION
-
 
 
 def test_parse_semver() -> None:
@@ -65,8 +64,5 @@ def test_calculate_next_version_major() -> None:
 
 
 def test_calculate_next_version_combinations() -> None:
-    assert (
-        calculate_next_version("0.1.8", major_val=2, minor_val=3, patch_val=4)
-        == "2.3.4"
-    )
+    assert calculate_next_version("0.1.8", major_val=2, minor_val=3, patch_val=4) == "2.3.4"
     assert calculate_next_version("0.1.8", patch_val=12) == "0.1.12"

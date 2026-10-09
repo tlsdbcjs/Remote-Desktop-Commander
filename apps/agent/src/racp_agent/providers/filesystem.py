@@ -8,12 +8,13 @@ import secrets
 import stat
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from racp_agent.providers.paths import Parent, PathGuard, is_link, revision, windows_os_error
+from racp_agent.providers.text_files import patch_batch, search_content
 from racp_agent.workspaces import WorkspacePaths, WorkspaceSpec
 from racp_domain.models import ExecutionContext, RACPError
 from racp_sdk.pagination import CursorCodec
@@ -23,8 +24,11 @@ from racp_sdk.pagination import CursorCodec
 class Budget:
     deadline: float
     cancelled: threading.Event
+    gate: Callable[[], None] | None = None
 
     def check(self) -> None:
+        if self.gate is not None:
+            self.gate()
         if self.cancelled.is_set():
             raise RACPError("CANCELLED", "file operation cancelled", layer="provider")
         if time.monotonic() >= self.deadline:
@@ -501,9 +505,13 @@ class FilesystemProvider:
         payload: dict[str, Any],
         context: ExecutionContext,
         cancelled: threading.Event,
+        gate: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
-        budget = Budget(time.monotonic() + context.timeout_ms / 1000, cancelled)
+        budget = Budget(time.monotonic() + context.timeout_ms / 1000, cancelled, gate)
         budget.check()
+        if operation == "filesystem.patch":
+            with self.lock:
+                return patch_batch(self, payload, budget)
         target = self.guard.path(payload.get("path", payload.get("source", ".")))
         if operation in {"filesystem.delete", "filesystem.move"} and any(
             guard.root.is_relative_to(target) for guard in self.guard.guards.values()
@@ -571,6 +579,8 @@ class FilesystemProvider:
                 "max_results": payload["max_results"],
                 "mode": "literal",
             }
+        if operation == "filesystem.search_content":
+            return search_content(self, target, payload, budget)
         with self.lock:
             if operation == "filesystem.write":
                 return self.write(target, payload, budget)
@@ -727,16 +737,18 @@ class FilesystemProvider:
         payload: dict[str, Any],
         context: ExecutionContext,
         cancelled: threading.Event,
+        gate: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
         with self.guard.select(context.workspace_id, payload.get("destination_workspace_id")):
-            return self._execute(operation, payload, context, cancelled)
+            return self._execute(operation, payload, context, cancelled, gate)
 
     async def execute(
-        self, operation: str, payload: dict[str, Any], context: ExecutionContext
+        self, operation: str, payload: dict[str, Any], context: ExecutionContext,
+        *, gate: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
         cancelled = threading.Event()
         work = asyncio.create_task(
-            asyncio.to_thread(self.selected_execute, operation, payload, context, cancelled)
+            asyncio.to_thread(self.selected_execute, operation, payload, context, cancelled, gate)
         )
         try:
             try:

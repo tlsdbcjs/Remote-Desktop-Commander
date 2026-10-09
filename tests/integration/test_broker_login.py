@@ -61,6 +61,16 @@ async def test_user_login_registration_actual_pipe_job_lifetime_and_descriptor(
         assert broker is not None and broker.login_managed and broker.config is not None
         assert broker.config.user_sid == actor.sid and broker.config.agent_pid == actor.pid
         assert broker.job is not None
+        # Adoption publishes the peer before the worker finishes its guardian bootstrap.
+        # Exercise the five-second RPC budget only after actual IPC/guardian readiness.
+        ready_deadline = asyncio.get_running_loop().time() + 15
+        while broker.guardian is None:
+            await provider.probe()
+            if worker.poll() is not None:
+                pytest.fail("owned login Broker exited during guardian initialization")
+            if asyncio.get_running_loop().time() >= ready_deadline:
+                pytest.fail("owned login Broker guardian did not become ready")
+            await asyncio.sleep(0.025)
         status = await broker.rpc(
             "broker.status", {}, broker.private_context(), asyncio.get_running_loop().time() + 5
         )

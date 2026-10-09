@@ -2,7 +2,6 @@
 
 import argparse
 import asyncio
-import getpass
 import json
 import os
 import ssl
@@ -13,6 +12,7 @@ from typing import Annotated, Any, Literal
 import httpx
 from pydantic import Field, TypeAdapter, ValidationError
 from racp_domain.models import RACPError
+from racp_policy.permissions import LocalPermissions
 from racp_protocol.models import StrictModel
 from racp_sdk.security import SecretStore, tls_context
 
@@ -20,6 +20,7 @@ from racp_agent.background import launch_arguments, start, status, stop
 from racp_agent.client_activity import activity
 from racp_agent.connect import enroll
 from racp_agent.connection_import import imported_ca, load_connection
+from racp_agent.execution_identity import execution_identity
 from racp_agent.main import parser as agent_parser
 from racp_agent.settings import gateway_origin, local_path, saved_settings
 from racp_agent.settings_edit import editable_settings, update_settings
@@ -38,6 +39,8 @@ class Enrollment(StrictModel):
     profile: Literal["read_only", "standard", "trusted_personal"] = "read_only"
     token: str = Field(min_length=20, max_length=128, repr=False)
     allowed_workspaces: list[WorkspaceSpec] = Field(default_factory=list, max_length=15)
+    desktop_enabled: bool = False
+    permissions: LocalPermissions | None = None
 
 
 class InspectConnection(StrictModel):
@@ -52,6 +55,8 @@ class ImportConnection(StrictModel):
     workspace: Path
     profile: Literal["read_only", "standard", "trusted_personal"] = "read_only"
     allowed_workspaces: list[WorkspaceSpec] = Field(default_factory=list, max_length=15)
+    desktop_enabled: bool = False
+    permissions: LocalPermissions | None = None
 
 
 class SettingsUpdate(StrictModel):
@@ -63,6 +68,7 @@ class SettingsUpdate(StrictModel):
     profile: Literal["read_only", "standard", "trusted_personal"]
     allowed_workspaces: list[WorkspaceSpec] = Field(default_factory=list, max_length=15)
     desktop_enabled: bool | None = None
+    permissions: LocalPermissions | None = None
 
 
 DesktopRequest = Command | Enrollment | InspectConnection | ImportConnection | SettingsUpdate
@@ -92,6 +98,8 @@ def failure_code(error: Exception, request: DesktopRequest | None) -> str:
     if request is not None and request.action in {"info", "settings"}:
         return "CONFIG_UNREADABLE"
     if isinstance(error, ValidationError):
+        if any("permissions" in item["loc"] for item in error.errors(include_input=False)):
+            return "PERMISSIONS_INVALID"
         if any("token" in item["loc"] for item in error.errors(include_input=False)):
             return "TOKEN_INVALID"
         return "REQUEST_INVALID"
@@ -132,7 +140,7 @@ def enrollment_preflight(request: Enrollment) -> None:
 def information(credentials: Path) -> dict[str, Any]:
     value: dict[str, Any] = {
         "configured": False,
-        "execution_identity": getpass.getuser(),
+        "execution_identity": execution_identity(),
         "desktop_supported": os.name == "nt",
     }
     if credentials.exists():
@@ -150,6 +158,7 @@ def information(credentials: Path) -> dict[str, Any]:
             ],
             ca_file=str(settings.ca_file) if settings.ca_file else None,
             desktop_enabled=settings.desktop_enabled,
+            permissions=settings.permissions.model_dump(mode="json"),
         )
     return value
 
@@ -178,6 +187,7 @@ async def execute(request: DesktopRequest, state_dir: Path) -> dict[str, Any]:
             request.ca_file,
             request.allowed_workspaces,
             request.desktop_enabled,
+            request.permissions,
         )
         return information(credentials)
     if isinstance(request, InspectConnection):
@@ -194,6 +204,8 @@ async def execute(request: DesktopRequest, state_dir: Path) -> dict[str, Any]:
             token=value.token,
             profile=request.profile,
             allowed_workspaces=request.allowed_workspaces,
+            desktop_enabled=request.desktop_enabled,
+            permissions=request.permissions,
         )
         await asyncio.to_thread(enrollment_preflight, pending)
         pending.ca_file = await asyncio.to_thread(imported_ca, root, value)
@@ -209,6 +221,8 @@ async def execute(request: DesktopRequest, state_dir: Path) -> dict[str, Any]:
             profile=request.profile,
             ca_file=request.ca_file,
             allowed_workspaces=tuple(request.allowed_workspaces),
+            desktop_enabled=request.desktop_enabled,
+            permissions=request.permissions,
         )
         return information(credentials)
     if request.action == "info":

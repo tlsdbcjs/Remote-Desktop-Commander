@@ -37,6 +37,8 @@ async def terminal_socket(
         input = StreamOpenInput.model_validate(
             input_json(await asyncio.wait_for(socket.receive_text(), 10))
         )
+        if authenticate is not None:
+            authenticate()
         relay = await control.streams.open(device, handle, owner, input)
 
         async def receive() -> None:
@@ -56,6 +58,9 @@ async def terminal_socket(
                     frame = await asyncio.wait_for(relay.queue.get(), 1)
                 except TimeoutError:
                     continue
+                # Revocation can happen while waiting for the next frame.
+                if authenticate is not None:
+                    authenticate()
                 if isinstance(frame, StreamData):
                     # A frame may be consumed as soon as its first bytes are sent.
                     relay.delivered.add(int(frame.next_cursor))

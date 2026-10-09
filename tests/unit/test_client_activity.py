@@ -65,5 +65,7 @@ def test_activity_does_not_follow_log_link(tmp_path: Path) -> None:
         (folder / "agent.log").symlink_to(target)
     except OSError:
         pytest.skip("Local OS does not allow symlink creation")
-    with pytest.raises(ValueError):
+    with pytest.raises(PermissionError, match="cannot follow links or reparse points"):
         activity(tmp_path / "credential.bin")
+    assert target.read_text(encoding="utf-8") == '{"event":"agent_connected"}'
+    assert (folder / "agent.log").is_symlink()

@@ -1,8 +1,8 @@
 # RACP 런타임 및 플랫폼 호환성 매트릭스 (Compatibility Matrix)
 
 > **문서 ID**: `DOC-QA-COMPAT`  
-> **상태**: Active · **기준 버전**: v0.1.8  
-> **최종 개정일**: 2026-10-07 · **분류**: Quality Assurance & Compatibility
+> **상태**: Active · **기준 버전**: v0.1.18\
+> **최종 개정일**: 2026-10-08 · **분류**: Quality Assurance & Compatibility
 
 ---
 
@@ -70,6 +70,8 @@ CI 및 배포 환경에서는 임의의 버전 플로팅(Version Floating)을 �
 | :--- | :--- | :---: | :--- |
 | **Electron** | 44.5.1 | **PASS** | 네이티브 시스템 트레이, 렌더러 격리, 내부 IPC 보안 검증 |
 | **electron-builder**| 26.15.3 | **PASS** | Windows x64 NSIS 설치 패키지 및 무설치 포터블 ZIP 생성 완료 |
+| **Gateway Portable** | v0.1.18 / Windows x64 / CPython 3.12.11 | **PASS** | 현재 source ZIP build·4,354 file hash·CRC·TLS/Console/1회 등록·loopback MCP 86 tools smoke 통과 |
+| **Gateway Setup (NSIS)** | v0.1.18 계약 정의 | **BLOCKED_ENV** | installer/dry-run 계약은 PASS. 현재 검증 host에 `makensis`가 없어 Setup EXE·SCM clean install/reboot/uninstall은 미실행 |
 | **물리 2-PC 통신** | 192.168.29.140 ↔ 192.168.29.141 | **PASS** | 물리 LAN 환경에서 파일 쓰기, ConPTY 셸 실행, 멱등성 1회 보장 실증 통과 |
 
 ---

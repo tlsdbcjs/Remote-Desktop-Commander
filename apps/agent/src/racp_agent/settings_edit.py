@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from racp_domain.models import RACPError
+from racp_policy.permissions import LocalPermissions, legacy_permissions
 from racp_sdk.security import SecretStore, digest
 
 from racp_agent.connect import credential_document
@@ -49,6 +50,7 @@ def editable_settings(credentials: Path) -> dict[str, Any]:
             "ca_file": str(settings.ca_file) if settings.ca_file else None,
             "revision": revision,
             "desktop_enabled": settings.desktop_enabled,
+            "permissions": settings.permissions.model_dump(mode="json"),
         }
 
 
@@ -61,6 +63,7 @@ def update_settings(
     ca_file: Path | None,
     allowed_workspaces: list[WorkspaceSpec],
     desktop_enabled: bool | None = None,
+    permissions: LocalPermissions | None = None,
 ) -> None:
     try:
         with InstanceLock(settings_lock(credentials)):
@@ -84,6 +87,22 @@ def update_settings(
                 )
                 if desktop_enabled is not None:
                     pending["desktop_enabled"] = desktop_enabled
+                    if permissions is None and desktop_enabled != previous.desktop_enabled:
+                        grants = dict(previous.permissions.grants)
+                        grants.update(
+                            {
+                                identity: grant
+                                for identity, grant in legacy_permissions(
+                                    desktop_enabled=desktop_enabled
+                                ).grants.items()
+                                if identity.startswith("desktop.")
+                            }
+                        )
+                        pending["permissions"] = previous.permissions.model_copy(
+                            update={"grants": grants}
+                        ).model_dump()
+                if permissions is not None:
+                    pending["permissions"] = permissions.model_dump()
                 settings = AgentSettings.model_validate(pending)
                 replacement = credential_document(settings, value["credential"])
                 if len(settings.model_dump_json().encode("utf-8")) > 16384:

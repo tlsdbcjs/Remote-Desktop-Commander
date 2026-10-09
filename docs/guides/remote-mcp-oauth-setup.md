@@ -1,8 +1,8 @@
 # RACP 원격 MCP 및 OAuth/OIDC 인증 설정 가이드 (Remote MCP & OAuth Setup)
 
 > **문서 ID**: `DOC-GDE-OAUTH`  
-> **상태**: Active · **기준 버전**: v0.1.8  
-> **최종 개정일**: 2026-10-07 · **분류**: Integration & Security Guide
+> **상태**: Active · **기준 버전**: v0.1.19\
+> **최종 개정일**: 2026-10-09 · **분류**: Integration & Security Guide
 
 ---
 
@@ -81,6 +81,8 @@ sequenceDiagram
 
 ## 3. Gateway OAuth 구동 명령어
 
+Setup/서비스형 Gateway는 운영자가 관리 Console의 상태·설정 화면과 배포 설정 파일을 통해 OAuth resource 구성을 준비한 뒤 서비스를 재기동한다. Portable도 배포본의 PowerShell 진입점과 동일한 versioned config를 사용한다. 아래 `uv run` 명령은 **source 개발/진단 실행 예시**이며 Setup/Portable 운영자가 Python·uv 개발 환경을 준비해야 한다는 뜻이 아니다. 배포 절차는 [Windows Gateway 배포 및 운영](gateway-deployment-guide.md)을 따른다.
+
 Gateway 기동 시 `--oauth-config` 옵션을 전달하여 OAuth 보호 리소스 모드로 실행합니다:
 
 ```powershell
@@ -118,6 +120,8 @@ uv run racp doctor --gateway https://gateway.example:8765
 ```
 
 진단 결과에서 인증 모드(`OAuth 2.0`), Metadata URL 수신 여부, IdP Issuer 및 지원 Scope 목록이 정상 표기되는지 확인합니다.
+
+외부 IdP, callback, TLS trust 또는 실제 AI client가 준비되지 않은 환경에서는 MCP 운영 인수를 `BLOCKED_ENV`로 남긴다. v0.1.19 final-native3 Portable smoke에서 loopback owner-bearer MCP catalog **86 tools**는 확인했지만, local-owner Console 로그인이나 loopback catalog 성공을 외부 OAuth/Codex 인수 PASS로 대체하지 않는다. 2026-10-09 실제 검증 host의 Codex CLI에는 `racp` MCP server가 등록되어 있지 않아 `codex mcp get racp`가 `No MCP server named 'racp' found`를 반환했다. 따라서 이 상태에서는 먼저 실제 IdP/TLS/callback과 Codex MCP 등록·로그인을 완료해야 하며, Overview의 `MCP not_configured`도 readiness와 별개인 인증 준비 상태로 처리한다.
 
 ---
 

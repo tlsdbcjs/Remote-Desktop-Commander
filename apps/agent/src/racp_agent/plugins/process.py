@@ -2,15 +2,32 @@ import asyncio
 import json
 import os
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from racp_domain.models import RACPError
 from racp_protocol.models import MAX_MESSAGE_BYTES
-from racp_protocol.plugins import PluginManifest
 
 from racp_agent.providers.containment import kill_group
 from racp_agent.providers.shell import execution_env
+
+
+class ProcessCommand(Protocol):
+    command: list[str]
+    working_directory: str
+    environment: dict[str, str]
+    max_memory_bytes: int
+
+
+@dataclass
+class ContainedCommand:
+    """Fixed Agent recipes may reuse process containment without a plugin manifest."""
+
+    command: list[str]
+    working_directory: str
+    environment: dict[str, str] = field(default_factory=dict)
+    max_memory_bytes: int = 256 * 1024**2
 
 
 class OwnedPluginProcess:
@@ -21,7 +38,7 @@ class OwnedPluginProcess:
         self.pin_failed = False
 
     @classmethod
-    async def start(cls, manifest: PluginManifest) -> "OwnedPluginProcess":
+    async def start(cls, manifest: ProcessCommand) -> "OwnedPluginProcess":
         spawned = asyncio.create_task(cls._spawn(manifest))
         cancelled = False
         while not spawned.done():
@@ -44,7 +61,7 @@ class OwnedPluginProcess:
         return owned
 
     @classmethod
-    async def _spawn(cls, manifest: PluginManifest) -> "OwnedPluginProcess":
+    async def _spawn(cls, manifest: ProcessCommand) -> "OwnedPluginProcess":
         process = None
         job: Any = None
         argv = manifest.command

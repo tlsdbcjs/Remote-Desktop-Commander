@@ -2,8 +2,15 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 import messages from "../messages.json";
+import { PermissionsEditor } from "./PermissionsEditor";
+import {
+  defaultPermissions,
+  desktopEnabled as permissionDesktopEnabled,
+  LocalPermissions,
+  setDesktop,
+} from "./permissions";
 
-const CLIENT_VERSION = "0.1.10";
+const CLIENT_VERSION = "0.1.20";
 
 function failureMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -29,6 +36,7 @@ type Info = {
   profile?: Profile;
   allowed_workspaces?: Workspace[];
   desktop_enabled?: boolean;
+  permissions?: LocalPermissions;
 };
 type Status = {
   state: "RUNNING" | "STOPPING" | "STOPPED";
@@ -38,8 +46,16 @@ type Status = {
   connection_epoch?: number;
   connection_phase?: string;
   active_operations?: number;
-  desktop?: { enabled: boolean; healthy: boolean; unavailable_reason?: string | null;
-    sessions: { session_id: number; available: boolean; input_ready: boolean }[] };
+  desktop?: {
+    enabled: boolean;
+    healthy: boolean;
+    unavailable_reason?: string | null;
+    sessions: {
+      session_id: number;
+      available: boolean;
+      input_ready: boolean;
+    }[];
+  };
   operations?: { operation_id: string; operation: string; state: string }[];
 };
 type Activity = {
@@ -64,6 +80,8 @@ type Enrollment = {
   profile: Profile;
   token: string;
   allowed_workspaces: Workspace[];
+  desktop_enabled: boolean;
+  permissions: LocalPermissions;
 };
 type EditableSettings = Omit<Enrollment, "token"> & {
   device_id: string;
@@ -83,9 +101,7 @@ type API = {
   setLogin(enabled: boolean): Promise<LoginSettings>;
   info(): Promise<Info>;
   settings(): Promise<EditableSettings>;
-  updateSettings(
-    value: Omit<EditableSettings, "device_id">,
-  ): Promise<Info>;
+  updateSettings(value: Omit<EditableSettings, "device_id">): Promise<Info>;
   status(): Promise<Status>;
   start(): Promise<Status>;
   stop(): Promise<Status>;
@@ -96,6 +112,8 @@ type API = {
     workspace: string;
     profile: Profile;
     allowed_workspaces: Workspace[];
+    desktop_enabled: boolean;
+    permissions: LocalPermissions;
   }): Promise<Info>;
   enroll(value: Enrollment): Promise<Info>;
 };
@@ -119,6 +137,9 @@ function Client() {
     [token, setToken] = useState(""),
     [profile, setProfile] = useState<Profile>("read_only");
   const [folders, setFolders] = useState<Workspace[]>([]);
+  const [permissions, setPermissions] =
+    useState<LocalPermissions>(defaultPermissions);
+  const desktopEnabled = permissionDesktopEnabled(permissions);
   const [login, setLogin] = useState<LoginSettings | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [tab, setTab] = useState<"activity" | "settings">("activity");
@@ -367,12 +388,18 @@ function Client() {
                 <dt>실행 권한</dt>
                 <dd>{info.profile}</dd>
                 <dt>Windows 화면</dt>
-                <dd>{info.desktop_enabled
-                  ? status?.desktop?.healthy && !status.desktop.unavailable_reason
-                    ? status.desktop.sessions.some((item) => item.available && item.input_ready)
-                      ? "화면 제어 준비됨" : "화면 조회 가능 · 입력 준비 확인 필요"
-                    : "허용됨 · 로그인 화면 확인 필요"
-                  : "화면 제어 꺼짐"}</dd>
+                <dd>
+                  {info.desktop_enabled
+                    ? status?.desktop?.healthy &&
+                      !status.desktop.unavailable_reason
+                      ? status.desktop.sessions.some(
+                          (item) => item.available && item.input_ready,
+                        )
+                        ? "화면 제어 준비됨"
+                        : "화면 조회 가능 · 입력 준비 확인 필요"
+                      : "허용됨 · 로그인 화면 확인 필요"
+                    : "화면 제어 꺼짐"}
+                </dd>
               </dl>
               {info.allowed_workspaces?.map((item) => (
                 <p key={item.id}>
@@ -429,6 +456,8 @@ function Client() {
                       workspace: folder,
                       profile,
                       allowed_workspaces: folders,
+                      desktop_enabled: desktopEnabled,
+                      permissions,
                     });
                   } finally {
                     setConnection(null);
@@ -441,6 +470,8 @@ function Client() {
                   profile,
                   token,
                   allowed_workspaces: folders,
+                  desktop_enabled: desktopEnabled,
+                  permissions,
                 });
               });
             }}
@@ -624,6 +655,19 @@ function Client() {
               명령은 현재 OS 계정의 권한으로 실행됩니다. 폴더 선택은 shell의 OS
               권한을 격리하지 않습니다.
             </p>
+            <DesktopPermission
+              enabled={desktopEnabled}
+              disabled={busy}
+              onChange={(enabled) =>
+                setPermissions(setDesktop(permissions, enabled))
+              }
+            />
+            <PermissionsEditor
+              value={permissions}
+              onChange={setPermissions}
+              disabled={busy}
+              profile={profile}
+            />
             <button disabled={busy || !folder || (!manualSetup && !connection)}>
               {busy ? "연결 요청 중…" : "PC 등록"}
             </button>
@@ -663,6 +707,33 @@ function stateLabel(value: string): string {
         RECONCILING: "상태 복구 중",
       } as Record<string, string>
     )[value] ?? value
+  );
+}
+function DesktopPermission({
+  enabled,
+  disabled,
+  onChange,
+}: {
+  enabled: boolean;
+  disabled: boolean;
+  onChange(enabled: boolean): void;
+}) {
+  return (
+    <>
+      <label className="desktop-setting">
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        이 PC의 Windows 화면 캡처·마우스·키보드 조작 허용
+      </label>
+      <p className="hint">
+        다음 Agent 시작부터 현재 Windows 로그인 화면에 적용됩니다. 입력 작업에는
+        선택한 실행 권한과 승인 정책이 적용됩니다.
+      </p>
+    </>
   );
 }
 function SettingsEditor({
@@ -735,6 +806,7 @@ function SettingsEditor({
                 ca_file: value.ca_file,
                 allowed_workspaces: value.allowed_workspaces,
                 desktop_enabled: value.desktop_enabled,
+                permissions: value.permissions,
               });
               await onSaved();
             } catch (error) {
@@ -912,12 +984,29 @@ function SettingsEditor({
             명령은 현재 OS 계정의 권한으로 실행됩니다. 폴더 선택은 shell의 OS
             권한을 격리하지 않습니다.
           </p>
-          <label className="desktop-setting">
-            <input type="checkbox" checked={value.desktop_enabled ?? false} disabled={busy}
-              onChange={(event) => setValue({ ...value, desktop_enabled: event.target.checked })} />
-            이 PC의 Windows 화면 캡처·마우스·키보드 조작 허용
-          </label>
-          <p className="hint">다음 Agent 시작부터 현재 Windows 로그인 화면에 적용됩니다. 입력 작업에는 선택한 실행 권한과 승인 정책이 적용됩니다.</p>
+          <DesktopPermission
+            enabled={permissionDesktopEnabled(value.permissions)}
+            disabled={busy}
+            onChange={(enabled) =>
+              setValue({
+                ...value,
+                desktop_enabled: enabled,
+                permissions: setDesktop(value.permissions, enabled),
+              })
+            }
+          />
+          <PermissionsEditor
+            value={value.permissions}
+            disabled={busy}
+            profile={value.profile}
+            onChange={(permissions) =>
+              setValue({
+                ...value,
+                permissions,
+                desktop_enabled: permissionDesktopEnabled(permissions),
+              })
+            }
+          />
           <div className="actions">
             <button
               type="button"

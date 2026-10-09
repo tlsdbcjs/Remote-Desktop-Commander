@@ -7,6 +7,15 @@ import httpx2
 from conftest import shell_request
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
+from racp_domain.version import VERSION
+
+
+async def test_agent_advertises_running_workspace_version(live: dict[str, Any]) -> None:
+    response = await live["client"].get("/api/v1/devices/" + live["device_id"])
+    assert response.status_code == 200
+    info = response.json()["info"]
+    assert info["status"] == "ONLINE"
+    assert info["agent_version"] == VERSION
 
 
 async def test_auth_01_device_token_cannot_control_owner_api(live: dict[str, Any]) -> None:

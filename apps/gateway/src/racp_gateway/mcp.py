@@ -8,6 +8,7 @@ from mcp.server.auth.settings import AuthSettings
 from mcp.types import CallToolResult, ContentBlock, ImageContent, TextContent
 from pydantic import AnyHttpUrl, ValidationError
 from racp_domain.models import RACPError
+from racp_domain.version import VERSION
 from racp_protocol.models import OperationInput
 from racp_protocol.registry import INPUT_MODELS, REGISTRY, OperationSpec
 
@@ -18,7 +19,7 @@ from racp_gateway.service import ControlPlane
 def create_mcp(control: ControlPlane, oauth: OAuthTokenVerifier | None = None) -> MCPServer[Any]:
     server: MCPServer[Any] = MCPServer(
         "RACP",
-        version="0.1.0",
+        version=VERSION,
         token_verifier=oauth,
         auth=AuthSettings(
             issuer_url=AnyHttpUrl(oauth.config.issuer),
@@ -64,7 +65,8 @@ def create_mcp(control: ControlPlane, oauth: OAuthTokenVerifier | None = None) -
             return CallToolResult(
                 content=content,
                 structured_content=value,
-                is_error=value.get("state") in {"FAILED", "TIMED_OUT", "CANCELLED", "UNKNOWN"},
+                is_error=bool(value.get("error"))
+                or value.get("state") in {"FAILED", "TIMED_OUT", "CANCELLED", "UNKNOWN"},
             )
         except RACPError as exc:
             error = asdict(exc.error)

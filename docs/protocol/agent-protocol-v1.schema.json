@@ -736,6 +736,298 @@
       "title": "JobUpdate",
       "type": "object"
     },
+    "NativeOpened": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "stream_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Stream Id",
+          "type": "string"
+        },
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "native_opened",
+          "default": "native_opened",
+          "title": "Type",
+          "type": "string"
+        },
+        "scope": {
+          "additionalProperties": true,
+          "title": "Scope",
+          "type": "object"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "stream_id",
+        "handle_id",
+        "scope"
+      ],
+      "title": "NativeOpened",
+      "type": "object"
+    },
+    "NativePacket": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "stream_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Stream Id",
+          "type": "string"
+        },
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "native_packet",
+          "default": "native_packet",
+          "title": "Type",
+          "type": "string"
+        },
+        "frame": {
+          "additionalProperties": true,
+          "title": "Frame",
+          "type": "object"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "stream_id",
+        "handle_id",
+        "frame"
+      ],
+      "title": "NativePacket",
+      "type": "object"
+    },
+    "NativeStopped": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "stream_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Stream Id",
+          "type": "string"
+        },
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "native_stopped",
+          "default": "native_stopped",
+          "title": "Type",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "closed",
+            "error",
+            "revoked",
+            "disconnected",
+            "expired",
+            "overflow"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "stream_id",
+        "handle_id",
+        "reason"
+      ],
+      "title": "NativeStopped",
+      "type": "object"
+    },
+    "NativeSubscribe": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "stream_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Stream Id",
+          "type": "string"
+        },
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "native_subscribe",
+          "default": "native_subscribe",
+          "title": "Type",
+          "type": "string"
+        },
+        "principal_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Principal Id",
+          "type": "string"
+        },
+        "workspace_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+          "title": "Workspace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "stream_id",
+        "handle_id",
+        "principal_id",
+        "workspace_id"
+      ],
+      "title": "NativeSubscribe",
+      "type": "object"
+    },
+    "NativeUnsubscribe": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": 1,
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "device_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Device Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "connection_epoch": {
+          "minimum": 1,
+          "title": "Connection Epoch",
+          "type": "integer"
+        },
+        "stream_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Stream Id",
+          "type": "string"
+        },
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "native_unsubscribe",
+          "default": "native_unsubscribe",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "device_id",
+        "agent_boot_id",
+        "connection_epoch",
+        "stream_id",
+        "handle_id"
+      ],
+      "title": "NativeUnsubscribe",
+      "type": "object"
+    },
     "OutcomeExpired": {
       "additionalProperties": false,
       "properties": {
@@ -821,6 +1113,7 @@
         "media_type": {
           "enum": [
             "application/octet-stream",
+            "application/vnd.tcpdump.pcap",
             "application/json",
             "application/vnd.racp.output-stream",
             "image/png",
@@ -2052,6 +2345,11 @@
       "event": "#/$defs/JobUpdate",
       "heartbeat": "#/$defs/Heartbeat",
       "hello": "#/$defs/Hello",
+      "native_opened": "#/$defs/NativeOpened",
+      "native_packet": "#/$defs/NativePacket",
+      "native_stopped": "#/$defs/NativeStopped",
+      "native_subscribe": "#/$defs/NativeSubscribe",
+      "native_unsubscribe": "#/$defs/NativeUnsubscribe",
       "reconcile": "#/$defs/Reconcile",
       "request": "#/$defs/Request",
       "result": "#/$defs/Result",
@@ -2123,6 +2421,21 @@
     },
     {
       "$ref": "#/$defs/StreamEnd"
+    },
+    {
+      "$ref": "#/$defs/NativeSubscribe"
+    },
+    {
+      "$ref": "#/$defs/NativeOpened"
+    },
+    {
+      "$ref": "#/$defs/NativePacket"
+    },
+    {
+      "$ref": "#/$defs/NativeUnsubscribe"
+    },
+    {
+      "$ref": "#/$defs/NativeStopped"
     }
   ]
 }

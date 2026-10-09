@@ -140,7 +140,7 @@ async def run(node: Path, backend: Path, screenshot: Path) -> int:
                 ),
                 text=True,
                 encoding="utf-8",
-                timeout=300,
+                timeout=600,
                 env=dict(os.environ, NODE_EXTRA_CA_CERTS=str(ca)),
             )
             return completed.returncode

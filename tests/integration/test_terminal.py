@@ -212,11 +212,26 @@ async def test_mcp_terminal_uses_registry_and_authenticated_handle(live: dict[st
             )
             assert not opened.is_error, opened
             handle = opened.structured_content["result"]["handle_id"]
-            read = await client.call_tool(
-                "terminal_read",
-                {"device_id": live["device_id"], "handle_id": handle, "wait_ms": 1000},
-            )
-            assert not read.is_error and ">>>" in read.structured_content["result"]["data"]
+            # The first ConPTY chunk can contain only terminal mode sequences.
+            # Follow the cursor until the REPL prompt is actually observed.
+            cursor, output = "0", ""
+            for _ in range(10):
+                read = await client.call_tool(
+                    "terminal_read",
+                    {
+                        "device_id": live["device_id"],
+                        "handle_id": handle,
+                        "cursor": cursor,
+                        "wait_ms": 500,
+                    },
+                )
+                assert not read.is_error, read
+                chunk = read.structured_content["result"]
+                output += chunk["data"]
+                cursor = chunk["next_cursor"]
+                if ">>>" in output:
+                    break
+            assert ">>>" in output, output
             closed = await client.call_tool(
                 "terminal_close",
                 {

@@ -147,7 +147,9 @@ async def test_bounded_queue_queued_cancel_timeout_and_fifo(
     calls: list[str] = []
     original = live["agent"].filesystem.execute
 
-    async def blocked(operation: str, payload: dict[str, Any], context: Any) -> dict[str, Any]:
+    async def blocked(
+        operation: str, payload: dict[str, Any], context: Any, **kwargs: Any
+    ) -> dict[str, Any]:
         nonlocal count
         calls.append(payload["path"])
         if payload["path"].startswith("held-"):
@@ -155,7 +157,7 @@ async def test_bounded_queue_queued_cancel_timeout_and_fifo(
             if count == 16:
                 started.set()
             await gate.wait()
-        return await original(operation, payload, context)
+        return await original(operation, payload, context, **kwargs)
 
     monkeypatch.setattr(live["agent"].filesystem, "execute", blocked)
     held = []
@@ -274,7 +276,9 @@ async def test_queued_jobs_survive_gateway_restart_without_redispatching_active_
     original = live["agent"].filesystem.execute
     calls: list[str] = []
 
-    async def held(operation: str, payload: dict[str, Any], context: Any) -> dict[str, Any]:
+    async def held(
+        operation: str, payload: dict[str, Any], context: Any, **kwargs: Any
+    ) -> dict[str, Any]:
         nonlocal count
         calls.append(payload["path"])
         if payload["path"].startswith("restart-held-"):
@@ -282,7 +286,7 @@ async def test_queued_jobs_survive_gateway_restart_without_redispatching_active_
             if count == 16:
                 full.set()
             await gate.wait()
-        return await original(operation, payload, context)
+        return await original(operation, payload, context, **kwargs)
 
     monkeypatch.setattr(live["agent"].filesystem, "execute", held)
     work = []

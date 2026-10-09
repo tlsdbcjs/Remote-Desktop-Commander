@@ -20,6 +20,7 @@ class TransferCreate(StrictModel):
     sha256: Sha256 | None = None
     media_type: Literal[
         "application/octet-stream",
+        "application/vnd.tcpdump.pcap",
         "application/json",
         "application/vnd.racp.output-stream",
         "image/png",

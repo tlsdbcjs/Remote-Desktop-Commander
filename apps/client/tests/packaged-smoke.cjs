@@ -41,9 +41,17 @@ async function main() {
         const expectedVersion = require("../package.json").version;
         assert.equal(version.packaged, true);
         assert.equal(version.version, expectedVersion);
-        assert.equal(path.resolve(version.userData).toLowerCase(), profile.toLowerCase());
+        assert.equal(
+            path.resolve(version.userData).toLowerCase(),
+            profile.toLowerCase(),
+        );
         const page = await application.firstWindow();
         await page.getByRole("heading", { name: "새 PC 연결" }).waitFor();
+        await expect(
+            page.getByRole("checkbox", {
+                name: "이 PC의 Windows 화면 캡처·마우스·키보드 조작 허용",
+            }),
+        ).not.toBeChecked();
         const info = await page.evaluate(() => window.racpClient.info());
         assert.equal(info.configured, false);
         assert.ok(info.execution_identity);
@@ -103,7 +111,9 @@ async function main() {
     } finally {
         if (application) await application.close();
         assert.equal(path.dirname(offerFolder), path.resolve(os.tmpdir()));
-        assert.ok(path.basename(offerFolder).startsWith("racp-packaged-offer-"));
+        assert.ok(
+            path.basename(offerFolder).startsWith("racp-packaged-offer-"),
+        );
         await fs.rm(offerFolder, { recursive: true, force: true });
     }
 }

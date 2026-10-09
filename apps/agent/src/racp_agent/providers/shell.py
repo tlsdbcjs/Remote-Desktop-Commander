@@ -23,6 +23,7 @@ PROTECTED_ENV = {
     "SYSTEMROOT",
     "WINDIR",
 }
+WINDOWS_OS_ENV = {"SYSTEMDRIVE", "ALLUSERSPROFILE"}
 
 
 def execution_env(overrides: Mapping[str, str | None]) -> dict[str, str]:
@@ -40,9 +41,23 @@ def execution_env(overrides: Mapping[str, str | None]) -> dict[str, str]:
         "HOME",
         "USERPROFILE",
     }
+    if os.name == "nt":
+        # Native known-folder APIs expand registry paths such as
+        # %SystemDrive%\\ProgramData in the child process environment.
+        allowed.update(WINDOWS_OS_ENV)
     env = {key: value for key, value in os.environ.items() if key.upper() in allowed}
+    if os.name == "nt" and not any(key.upper() == "SYSTEMDRIVE" for key in env):
+        import win32api
+
+        # The Agent itself can have been launched in a sanitized environment.
+        # Query the OS rather than guessing C: or trusting a caller override.
+        env["SystemDrive"] = os.path.splitdrive(win32api.GetWindowsDirectory())[0]
     for key, value in overrides.items():
-        if key.upper() in PROTECTED_ENV or key.upper().startswith(("RACP_", "OPENAI_", "AWS_")):
+        if (
+            key.upper() in PROTECTED_ENV
+            or (os.name == "nt" and key.upper() in WINDOWS_OS_ENV)
+            or key.upper().startswith(("RACP_", "OPENAI_", "AWS_"))
+        ):
             raise RACPError("PERMISSION_DENIED", "protected environment variable", layer="provider")
         if os.name == "nt":
             for previous in list(env):

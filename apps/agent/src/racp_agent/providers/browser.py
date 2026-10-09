@@ -447,8 +447,9 @@ class BrowserProvider:
             import win32event
             import win32job
 
+            cleanup_deadline = time.monotonic() + 5
             # Accounting reaches zero before every process handle is signalled.
-            # Retain kernel handles before kill so PID reuse cannot affect the wait.
+            # Retain handles before graceful exit can reparent children or retire PIDs.
             process_handles = []
             try:
                 descendants = psutil.Process(session.process.pid).children(recursive=True)
@@ -465,8 +466,22 @@ class BrowserProvider:
                         child_handle.Close()
                 except OSError:
                     pass  # Already exited or inaccessible sandbox process; Job still owns it.
+            if (
+                session.cdp_scope is None
+                and session.process.returncode is None
+                and session.process.stdin is not None
+            ):
+                # EOF lets Playwright close Chromium and drain native I/O before kill.
+                # An unresponsive worker still uses the same total cleanup budget.
+                session.process.stdin.close()
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(session.process.wait()),
+                        min(2, max(0.001, cleanup_deadline - time.monotonic())),
+                    )
+                except (TimeoutError, BrokenPipeError, ConnectionResetError):
+                    pass
             win32job.TerminateJobObject(session.job, 1)
-            cleanup_deadline = time.monotonic() + 5
             try:
                 while win32job.QueryInformationJobObject(
                     session.job, win32job.JobObjectBasicAccountingInformation

@@ -285,10 +285,19 @@ class ProcessProvider:
     async def close(self, managed: ManagedProcess) -> None:
         if managed.closed:
             return
+        cleanup_deadline = time.monotonic() + 5
         if managed.job is not None:
             import win32job
 
             win32job.TerminateJobObject(managed.job, 1)
+            # Job termination is asynchronous. The spawn gate can exit before
+            # the actual target/descendants, so its wait alone is insufficient.
+            while win32job.QueryInformationJobObject(
+                managed.job, win32job.JobObjectBasicAccountingInformation
+            )["ActiveProcesses"]:
+                if time.monotonic() >= cleanup_deadline:
+                    raise TimeoutError("owned process tree cleanup did not complete")
+                await asyncio.sleep(0.01)
             managed.job.Close()
             managed.job = None
         elif os.name != "nt":
@@ -301,7 +310,9 @@ class ProcessProvider:
                 managed.process.kill()
             except ProcessLookupError:
                 pass
-        await asyncio.wait_for(managed.process.wait(), 5)
+        await asyncio.wait_for(
+            managed.process.wait(), max(0.001, cleanup_deadline - time.monotonic())
+        )
         managed.closed = True
 
     async def cleanup(self, *, expired_only: bool = False) -> None:

@@ -108,7 +108,7 @@ def test_standalone_broker_process_and_native_session_gate(tmp_path: Path) -> No
     import ctypes
 
     import win32pipe
-    from racp_agent.broker.windows import Input, WindowsDesktop
+    from racp_agent.broker.windows import Input
 
     identity = process_identity(os.getpid())
     config = BrokerConfig.pair(identity, identity, secrets.token_hex(16))
@@ -131,11 +131,22 @@ def test_standalone_broker_process_and_native_session_gate(tmp_path: Path) -> No
                     time.sleep(0.025)
             else:
                 pytest.fail("standalone Broker did not open its pipe")
-            desktop = WindowsDesktop(identity.session)
-            try:
-                status = desktop.status()
-            finally:
-                desktop.close()
+            # Native COM belongs to the Broker's MTA process, not the pytest thread.
+            # Query actual status through the same authenticated, bounded pipe.
+            observed = request(
+                config,
+                {
+                    "operation": "broker.status",
+                    "payload": {},
+                    "context": {
+                        "owner_id": "owner_test",
+                        "device_id": "device_test",
+                        "operation_id": "op_status",
+                    },
+                },
+            )
+            assert observed["state"] == "SUCCEEDED"
+            status = observed["result"]
             response = request(
                 config,
                 {
@@ -154,6 +165,19 @@ def test_standalone_broker_process_and_native_session_gate(tmp_path: Path) -> No
             else:
                 assert response["state"] == "FAILED"
                 assert response["error"]["code"] == status["error_code"]
+            wrong = request(
+                config,
+                {
+                    "operation": "desktop.monitors",
+                    "payload": {"session_id": identity.session + 1},
+                    "context": {
+                        "owner_id": "owner_test",
+                        "device_id": "device_test",
+                        "operation_id": "op_wrong_session",
+                    },
+                },
+            )
+            assert wrong["state"] == "FAILED" and wrong["error"]["code"] == "PERMISSION_DENIED"
             assert ctypes.sizeof(Input) == (40 if sys.maxsize > 2**32 else 28)
         finally:
             child.terminate()

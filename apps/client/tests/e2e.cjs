@@ -16,7 +16,7 @@ async function main() {
             ...process.env,
             RACP_CLIENT_BACKEND: fixture.backend,
             RACP_CLIENT_TEST_STATE: fixture.state,
-            RACP_CLIENT_TEST_HIDDEN: "1",
+            RACP_CLIENT_TEST_HIDDEN: process.env.RACP_CLIENT_TEST_HIDDEN ?? "1",
         },
     };
     if (fixture.executable) options.executablePath = fixture.executable;
@@ -50,6 +50,15 @@ async function main() {
         application = await _electron.launch(options);
         const page = await application.firstWindow();
         await page.getByRole("heading", { name: "새 PC 연결" }).waitFor();
+        const desktopPermission = page.getByRole("checkbox", {
+            name: "이 PC의 Windows 화면 캡처·마우스·키보드 조작 허용",
+        });
+        await expect(desktopPermission).not.toBeChecked();
+        await page.screenshot({
+            path: fixture.screenshot.replace(/\.png$/, "-initial-registration.png"),
+            fullPage: true,
+        });
+        await desktopPermission.check();
         assert.equal(
             await page.evaluate(() => typeof window.require),
             "undefined",
@@ -95,6 +104,7 @@ async function main() {
             .getByRole("button", { name: "직접 입력", exact: true })
             .click();
         await page.getByLabel("Gateway 주소").fill(fixture.gateway);
+        await expect(desktopPermission).toBeChecked();
         await page
             .getByRole("button", { name: "폴더 선택", exact: true })
             .click();
@@ -139,6 +149,7 @@ async function main() {
             false,
         );
         const originalOffer = await fs.readFile(fixture.connection_path);
+        await expect(desktopPermission).toBeChecked();
         await fs.appendFile(fixture.connection_path, "\n");
         await page
             .getByRole("button", { name: "PC 등록", exact: true })
@@ -166,6 +177,27 @@ async function main() {
         fixture.device = (
             await page.evaluate(() => window.racpClient.info())
         ).device_id;
+        const enrolledSettings = await callBackend(
+            fixture.backend,
+            fixture.state,
+            "settings",
+        );
+        assert.equal(enrolledSettings.desktop_enabled, true);
+        await page
+            .getByRole("button", { name: "등록 정보 편집", exact: true })
+            .click();
+        await page.getByRole("checkbox", {
+            name: "이 PC의 Windows 화면 캡처·마우스·키보드 조작 허용",
+        }).waitFor({ timeout: 45000 });
+        await expect(
+            page.getByRole("checkbox", {
+                name: "이 PC의 Windows 화면 캡처·마우스·키보드 조작 허용",
+            }),
+        ).toBeChecked();
+        await page.getByRole("button", { name: "취소", exact: true }).click();
+        console.log(
+            "Client E2E: initial desktop opt-in matches saved settings",
+        );
         const replayState = path.join(fixture.state, "consumed-token-fixture");
         await assert.rejects(
             callBackend(fixture.backend, replayState, "enroll", {
@@ -432,7 +464,10 @@ async function main() {
                 .waitFor();
             assert.equal(
                 await editPage
-                    .getByRole("button", { name: "등록 정보 복구", exact: true })
+                    .getByRole("button", {
+                        name: "등록 정보 복구",
+                        exact: true,
+                    })
                     .count(),
                 0,
             );
@@ -458,7 +493,9 @@ async function main() {
                 .getByLabel("실행 권한", { exact: true })
                 .selectOption("read_only");
             await editPage
-                .getByRole("checkbox", { name: "이 PC의 Windows 화면 캡처·마우스·키보드 조작 허용" })
+                .getByRole("checkbox", {
+                    name: "이 PC의 Windows 화면 캡처·마우스·키보드 조작 허용",
+                })
                 .check();
             await editPage
                 .getByRole("button", { name: "설정 저장", exact: true })
@@ -565,6 +602,20 @@ async function main() {
         console.log(
             "PASS: real HTTPS/WSS connection file, expired/changed-file rejection, safe token retry, saved registration resume, settings repair/live edit rejection, credential protection, dashboard/Tray/full exit/Job cleanup",
         );
+    } catch (error) {
+        if (application) {
+            const failedPage = await application.firstWindow();
+            await failedPage
+                .screenshot({
+                    path: path.join(
+                        path.dirname(fixture.screenshot),
+                        `client-e2e-failure-${Date.now()}.png`,
+                    ),
+                    fullPage: true,
+                })
+                .catch(() => {});
+        }
+        throw error;
     } finally {
         if (application) await application.close();
         await callBackend(fixture.backend, fixture.state, "stop");

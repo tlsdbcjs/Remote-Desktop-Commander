@@ -13,6 +13,7 @@
   "CONFIG_UNREADABLE": "저장된 PC 등록 설정을 읽을 수 없습니다. 기존 Windows 계정과 허용 폴더·CA 파일 위치를 확인해 주세요. 등록 정보는 보존했습니다.",
   "LOCAL_STATE_FAILED": "로컬 설정을 읽거나 저장하지 못했습니다. Windows 계정과 사용자 폴더 권한을 확인해 주세요.",
   "REQUEST_INVALID": "입력값을 확인해 주세요. Gateway 주소·허용 폴더·인증서·등록 토큰이 필요합니다.",
+  "PERMISSIONS_INVALID": "세부 권한과 대상·실행·출력 제약을 확인해 주세요. 현재 지원하는 항목과 허용 범위로 설정해야 합니다.",
   "REQUEST_FAILED": "요청을 완료하지 못했습니다. Agent 상태와 연결 설정을 확인해 주세요.",
   "RUNTIME_UNAVAILABLE": "Agent 런타임을 실행할 수 없습니다. 포터블 ZIP 전체를 새 폴더에 풀었는지 확인해 주세요.",
   "RUNTIME_RESPONSE_INVALID": "Agent 응답을 읽을 수 없습니다. 같은 버전의 앱과 runtime 파일을 함께 사용해 주세요.",

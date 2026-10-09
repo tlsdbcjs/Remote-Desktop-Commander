@@ -15,8 +15,9 @@ from racp_agent.broker.login_registration import LoginEndpoint, LoginGrant, Logi
 from racp_agent.broker.pipe import NativeError
 from racp_agent.broker.supervisor import BrokerSupervisor
 from racp_domain.models import ExecutionContext, RACPError
+from racp_protocol.clipboard import CLIPBOARD_MODELS
 from racp_protocol.desktop import DESKTOP_MODELS
-from racp_protocol.models import Capability
+from racp_protocol.models import Capability, timestamp
 
 
 class DesktopProvider:
@@ -92,6 +93,18 @@ class DesktopProvider:
                 "login_registration_available": self.registrar_task is not None
                 and not self.registrar_task.done(),
             },
+        )
+
+    def clipboard_capability(self) -> Capability:
+        desktop = self.capability()
+        return Capability(
+            name="clipboard", version="1.0.0", operations=list(CLIPBOARD_MODELS),
+            supported=desktop.supported, enabled=desktop.enabled, healthy=desktop.healthy,
+            unavailable_reason=desktop.unavailable_reason,
+            attributes={"backend": "windows-local-session-broker", "format": "CF_UNICODETEXT",
+                        "max_utf8_bytes": 8192, "compare_before_write": True,
+                        "input_lease_required": False, "sessions": desktop.attributes["sessions"],
+                        "rich_formats": False},
         )
 
     async def start(self) -> None:
@@ -278,6 +291,9 @@ class DesktopProvider:
                 "timeout_ms": min(30000, context.timeout_ms),
             }
             result = await broker.rpc(operation, payload, ipc_context, deadline)
+            if operation in CLIPBOARD_MODELS:
+                result.update(device_id=context.device_id, agent_boot_id=context.agent_boot_id,
+                              observed_at=timestamp())
             if operation == "desktop.screenshot":
                 original = self.spool / (context.operation_id + ".png")
                 files.append(original)

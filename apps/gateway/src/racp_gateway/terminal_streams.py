@@ -87,7 +87,10 @@ class StreamBroker:
             max_bytes=input.max_bytes,
             window_bytes=input.window_bytes,
             context=Context(
-                principal_id=owner, execution_profile_id="read_only", policy_revision=1
+                principal_id=owner,
+                execution_profile_id="read_only",
+                policy_revision=1,
+                workspace_id=resource.get("workspace_id") or "default",
             ),
         )
         relay = Relay(

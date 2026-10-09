@@ -13,9 +13,11 @@ from typing import Literal
 import httpx
 from pydantic import Field
 from racp_domain.models import RACPError
+from racp_policy.permissions import LocalPermissions, legacy_permissions
 from racp_protocol.models import Identifier, StrictModel
 from racp_sdk.security import SecretStore, tls_context
 
+from racp_agent.execution_identity import execution_identity
 from racp_agent.settings import AgentSettings, default_state_dir, local_path
 from racp_agent.workspaces import WorkspaceSpec, workspace_argument
 
@@ -45,11 +47,17 @@ def prepare(
     profile: Literal["read_only", "standard", "trusted_personal"] = "read_only",
     ca_file: Path | None = None,
     allowed_workspaces: tuple[WorkspaceSpec, ...] = (),
+    desktop_enabled: bool = False,
+    permissions: LocalPermissions | None = None,
 ) -> tuple[Path, AgentSettings]:
     root = local_path(Path(os.path.abspath(state_dir)))
     credential_store = root / "credential.bin"
     local_path(credential_store)
     settings = AgentSettings(
+        version=2,
+        permissions=permissions
+        if permissions is not None
+        else legacy_permissions(desktop_enabled=desktop_enabled),
         gateway=gateway,
         device_id="dev_pending",
         workspace=Path(os.path.abspath(workspace)),
@@ -57,6 +65,7 @@ def prepare(
         profile=profile,
         ca_file=Path(os.path.abspath(ca_file)) if ca_file else None,
         allowed_workspaces=list(allowed_workspaces),
+        desktop_enabled=desktop_enabled,
     )
     if credential_store.exists():
         raise RACPError("CONFLICT", "Device is already configured; start racp-agent instead")
@@ -82,6 +91,8 @@ def enroll(
     profile: Literal["read_only", "standard", "trusted_personal"] = "read_only",
     ca_file: Path | None = None,
     allowed_workspaces: tuple[WorkspaceSpec, ...] = (),
+    desktop_enabled: bool = False,
+    permissions: LocalPermissions | None = None,
 ) -> tuple[Path, AgentSettings]:
     credential_store, settings = prepare(
         gateway,
@@ -90,6 +101,8 @@ def enroll(
         profile=profile,
         ca_file=ca_file,
         allowed_workspaces=allowed_workspaces,
+        desktop_enabled=desktop_enabled,
+        permissions=permissions,
     )
     root = credential_store.parent
     if not 20 <= len(secret) <= 128 or any(char.isspace() for char in secret):
@@ -201,7 +214,7 @@ def main() -> None:
                         item.model_dump(mode="json") for item in settings.allowed_workspaces
                     ],
                     "profile": settings.profile,
-                    "execution_identity": getpass.getuser(),
+                    "execution_identity": execution_identity(),
                     "credential_store": str(credential_store),
                 },
                 ensure_ascii=False,

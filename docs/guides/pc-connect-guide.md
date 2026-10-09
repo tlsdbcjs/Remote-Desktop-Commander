@@ -1,15 +1,14 @@
 # RACP 기기 온보딩 및 PC 연결 가이드 (Device Enrollment Guide)
 
 > **문서 ID**: `DOC-GDE-ONBOARD`  
-> **상태**: Active · **기준 버전**: v0.1.8  
-> **최종 개정일**: 2026-10-07 · **분류**: User & Operations Guide
+> **상태**: Active · **기준 버전**: v0.1.19\
+> **최종 개정일**: 2026-10-08 · **분류**: User & Operations Guide
 
 ---
 
 ## 개요 (Overview)
 
-본 가이드는 신규 PC를 **RACP 플랫폼**에 안전하게 등록(Enrollment)하고, Gateway와의 암호화된 아웃바운드 WSS 통신 채널을 수립하는 전 과정을 안내합니다.  
-개발자/관리자는 CLI 도구(`racp-connect`, `racp-agent`)를 사용하여 인바운드 방화벽 개방 없이 장비를 원격 관리 체계에 편입시킬 수 있습니다.
+본 가이드는 신규 PC를 **RACP 플랫폼**에 안전하게 등록(Enrollment)하고, Gateway와의 암호화된 아웃바운드 WSS 통신 채널을 수립하는 전 과정을 안내합니다. 패키지 사용자는 RACP Client의 연결 파일 가져오기/권한 선택 UI를 사용하고, source 개발자는 CLI 도구(`racp-connect`, `racp-agent`)를 사용할 수 있습니다. 두 경로 모두 대상 PC의 인바운드 방화벽 개방 없이 Agent가 Gateway로 outbound WSS를 연결합니다.
 
 ---
 
@@ -53,14 +52,27 @@ sequenceDiagram
 ## 2. 사전 준비 사항
 
 - Gateway가 HTTPS/TLS 인증서를 갖추고 구동 중이어야 합니다 (`https://gateway.example:8765`).
-- 원격 PC에 Python 3.12+ 및 `uv` 환경이 준비되어 있어야 합니다.
+- **패키지 운영 경로**: 대상 PC에는 현재 Windows Client/Agent 배포본만 필요하며 저장소 clone, Python, Node, `uv`는 요구하지 않는다.
+- **source 개발 경로**: 아래 CLI 예제를 사용할 때만 Python 3.12+와 `uv` workspace가 필요하다.
 - 사설 CA를 사용하는 Gateway의 경우, 해당 `ca.pem` 인증서 파일을 대상 PC에 준비합니다.
+
+Setup/Portable Gateway 운영자는 먼저 [Windows Gateway 배포 및 운영](gateway-deployment-guide.md)에 따라 서비스/readiness와 Console 로그인을 확인한다. 웹 Console에서 발급한 `.racp` 연결 파일은 1회용·10분 제한이며, 원문 등록 token을 메신저/셸 히스토리/지원 bundle에 복사하지 않는다.
 
 ---
 
 ## 3. 1회용 등록 토큰 발급 및 초기 등록
 
-### 3.1 CLI 대화형 온보딩 명령
+### 3.1 패키지 Client 온보딩
+
+1. Gateway Console에서 대상 PC 이름을 확인하고 `.racp` 연결 파일을 새로 발급한다.
+2. 대상 Windows PC의 RACP Client에서 연결 파일 가져오기를 선택한다. 원문 token을 수동으로 명령행에 복사하지 않는다.
+3. 로컬 workspace와 실행 프로필, 필요한 화면/입력 권한을 **대상 PC 사용자**가 선택한다.
+4. 등록 완료 뒤 Agent를 시작하고 Console에서 새 stable device ID가 ONLINE인지 확인한다.
+5. 같은 `.racp` 파일의 재사용은 거절되어야 한다. 재등록/rotation이 필요하면 새 파일을 발급한다.
+
+패키지 운영자는 이 절만으로 온보딩할 수 있으며 아래 CLI 절은 개발/진단용 대안이다.
+
+### 3.2 CLI 대화형 온보딩 명령
 터미널에서 아래 명령을 실행합니다:
 
 ```powershell
@@ -79,7 +91,7 @@ uv run --package racp-agent racp-connect `
 > - 토큰을 셸 히스토리나 환경 변수, 명령 인자로 직접 전달하는 것은 보안 정책상 금지되어 있습니다.
 > - 사설 CA를 사용하는 경우 `--ca-file E:\RACP\ca.pem` 옵션을 추가합니다.
 
-### 3.2 등록 전용 모드 (`--configure-only`)
+### 3.3 등록 전용 모드 (`--configure-only`)
 등록 후 에이전트를 즉시 포그라운드에서 실행하지 않고 설정만 저장하려면 `--configure-only` 플래그를 사용합니다:
 
 ```powershell
@@ -103,6 +115,8 @@ uv run --package racp-agent racp-connect `
 
 > [!WARNING]
 > Gateway 정책과 Agent 로컬 정책의 **교집합(최소 권한)**이 최종 유효 권한으로 적용됩니다. Gateway가 `read_only`인 경우 Agent가 `trusted_personal`로 등록되어 있어도 변경 작업은 수행할 수 없습니다.
+
+관리 Console의 owner/operator가 추가하는 device/output/operation grant도 Agent 로컬 capability 상한을 확장하지 않는다. 장비가 revoke/rotate된 뒤에는 기존 브라우저 캐시의 ONLINE 표시나 과거 grant를 신뢰하지 말고 현재 Gateway 상태와 새 auth revision을 확인한다.
 
 ---
 
