@@ -51,7 +51,10 @@ TARGET_PYPROJECTS = [
 TARGET_PACKAGE_JSONS = [
     ROOT / "apps/client/package.json",
     ROOT / "apps/console/package.json",
+    ROOT / "apps/client/src-tauri/tauri.conf.json",
 ]
+
+TARGET_CARGO = [ROOT / "Cargo.toml"]
 
 TARGET_CODE_FILES = [
     VERSION_FILE,
@@ -125,14 +128,14 @@ def update_file(path: Path, old_version: str, new_version: str, dry_run: bool) -
     original = path.read_text(encoding="utf-8")
     updated = original
 
-    if path.name == "pyproject.toml":
+    if path.name in {"pyproject.toml", "Cargo.toml"}:
         updated = re.sub(
             r'^(version\s*=\s*["\'])[^"\']+(["\'])',
             rf"\g<1>{new_version}\g<2>",
             original,
             flags=re.MULTILINE,
         )
-    elif path.name == "package.json":
+    elif path.name in {"package.json", "tauri.conf.json"}:
         updated = re.sub(
             r'("version"\s*:\s*")[^"]+(")',
             rf"\g<1>{new_version}\g<2>",
@@ -166,6 +169,7 @@ def apply_version(new_version: str, dry_run: bool = False) -> list[str]:
     targets: list[Path] = []
     targets.extend(TARGET_PYPROJECTS)
     targets.extend(TARGET_PACKAGE_JSONS)
+    targets.extend(TARGET_CARGO)
     targets.extend(TARGET_CODE_FILES)
 
     modified: list[str] = []

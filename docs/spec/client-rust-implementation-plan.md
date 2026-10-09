@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans or superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **Document ID**: `DOC-PLAN-CLIENT-RUST`\
-> **Status**: Draft · **Target Version**: v0.1.11 예정 / 기준선 v0.1.10\
+> **Status**: Active · **Target Version**: v0.1.11 예정 / 기준선 v0.1.10\
 > **Last Updated**: 2026-10-10 · **Classification**: Architecture Implementation Plan
 
 **Goal:** 기존 client와 내장 Agent를 Rust로 전환하고 기능·등록 상태를 보존한 뒤 client 전용 Python 및 Electron 런타임을 제거한다.
@@ -12,7 +12,7 @@
 
 **Tech Stack:** Rust 1.90.0, Cargo workspace, Tauri 2, Tokio 1, Serde 1, reqwest/rustls, tokio-tungstenite, rusqlite, Windows API bindings, React/TypeScript/Vite, NSIS.
 
-**Spec:** [승인된 전환 설계](client-rust-migration.md). 2026-10-10 사용자 “진행해”는 이 설계 승인으로 기록한다. 이 구현 계획과 실행 방식 선택은 별도 검토 단계다.
+**Spec:** [승인된 전환 설계](client-rust-migration.md). 2026-10-10 사용자 “진행해”는 이 설계 승인으로 기록한다. 2026-10-10 사용자 “권장 방향으로 끝까지 구현해”로 계획과 Native 실행을 승인했다.
 
 ## 목차
 
@@ -77,11 +77,11 @@
 
 **Interfaces:** `decode_bridge(raw: &[u8]) -> Result<BridgeRequest, RacpError>`; `decode_message(raw: &[u8]) -> Result<Message, RacpError>`; `validate_operation(name: &str, value: Value) -> Result<Value, RacpError>`. 모델은 기존 protocol JSON schema와 `desktop_control.py`를 기준으로 한다.
 
-- [ ] **RED:** `bridge_bounds_and_unknown_fields`는 16,385-byte 입력·알 수 없는 action/field를 거부한다. `shell_mode_and_bounds`는 argv/shell 혼합, NUL, 257개 argv를 거부한다. `wire_limits`는 1 MiB 초과와 bool을 정수 필드에 넣은 입력을 거부한다. `registry_coverage`는 `registry-v1.json`의 모든 operation을 검증기에 매핑한다.
-- [ ] **Verify RED:** `cargo test -p racp-contract --tests`; 초기에는 crate/함수 부재로 실패해야 한다.
-- [ ] **Implement:** Cargo workspace와 검증 모델을 작성한다. 입력 수용 여부·기본값·정규화에 Python 모델과 동일한 fixture를 사용하며 schema 검증만으로 끝내지 않는다. 버전 도구에 Cargo/Tauri 동기화를 추가하고 PATCH를 0.1.11로 한 번 올린다.
-- [ ] **Verify GREEN:** 위 Rust 검사와 `uv run pytest tests/unit/test_version.py tests/contract/test_schema_drift.py -q`, AGENTS의 Ruff/Mypy 버전 게이트를 실행한다. contract failure가 0이어야 한다.
-- [ ] **Commit:** `feat(rust): establish validated client and agent contracts`.
+- [x] **RED:** `bridge_bounds_and_unknown_fields`는 16,385-byte 입력·알 수 없는 action/field를 거부한다. `shell_mode_and_bounds`는 argv/shell 혼합, NUL, 257개 argv를 거부한다. `wire_limits`는 1 MiB 초과와 bool을 정수 필드에 넣은 입력을 거부한다. `registry_coverage`는 `registry-v1.json`의 모든 operation을 검증기에 매핑한다.
+- [x] **Verify RED:** `cargo test -p racp-contract --tests`; 초기에는 crate/함수 부재로 실패해야 한다.
+- [x] **Implement:** Cargo workspace와 검증 모델을 작성한다. 입력 수용 여부·기본값·정규화에 Python 모델과 동일한 fixture를 사용하며 schema 검증만으로 끝내지 않는다. 버전 도구에 Cargo/Tauri 동기화를 추가하고 PATCH를 0.1.11로 한 번 올린다.
+- [x] **Verify GREEN:** 위 Rust 검사와 `uv run pytest tests/unit/test_version.py tests/contract/test_schema_drift.py -q`, AGENTS의 Ruff/Mypy 버전 게이트를 실행한다. contract failure가 0이어야 한다.
+- [x] **Commit:** `feat(rust): establish validated client and agent contracts`.
 
 ## Task 2: 보호된 등록·설정·로컬 상태
 

@@ -1,0 +1,292 @@
+{
+  "$defs": {
+    "Command": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "info",
+            "start",
+            "status",
+            "stop",
+            "activity",
+            "settings"
+          ],
+          "title": "Action",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "title": "Command",
+      "type": "object"
+    },
+    "Enrollment": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "enroll",
+          "title": "Action",
+          "type": "string"
+        },
+        "gateway": {
+          "maxLength": 2048,
+          "title": "Gateway",
+          "type": "string"
+        },
+        "workspace": {
+          "format": "path",
+          "title": "Workspace",
+          "type": "string"
+        },
+        "ca_file": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ca File"
+        },
+        "profile": {
+          "default": "read_only",
+          "enum": [
+            "read_only",
+            "standard",
+            "trusted_personal"
+          ],
+          "title": "Profile",
+          "type": "string"
+        },
+        "token": {
+          "maxLength": 128,
+          "minLength": 20,
+          "title": "Token",
+          "type": "string"
+        },
+        "allowed_workspaces": {
+          "items": {
+            "$ref": "#/$defs/WorkspaceSpec"
+          },
+          "maxItems": 15,
+          "title": "Allowed Workspaces",
+          "type": "array"
+        }
+      },
+      "required": [
+        "action",
+        "gateway",
+        "workspace",
+        "token"
+      ],
+      "title": "Enrollment",
+      "type": "object"
+    },
+    "ImportConnection": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "enroll_connection",
+          "title": "Action",
+          "type": "string"
+        },
+        "path": {
+          "format": "path",
+          "title": "Path",
+          "type": "string"
+        },
+        "file_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "File Sha256",
+          "type": "string"
+        },
+        "workspace": {
+          "format": "path",
+          "title": "Workspace",
+          "type": "string"
+        },
+        "profile": {
+          "default": "read_only",
+          "enum": [
+            "read_only",
+            "standard",
+            "trusted_personal"
+          ],
+          "title": "Profile",
+          "type": "string"
+        },
+        "allowed_workspaces": {
+          "items": {
+            "$ref": "#/$defs/WorkspaceSpec"
+          },
+          "maxItems": 15,
+          "title": "Allowed Workspaces",
+          "type": "array"
+        }
+      },
+      "required": [
+        "action",
+        "path",
+        "file_sha256",
+        "workspace"
+      ],
+      "title": "ImportConnection",
+      "type": "object"
+    },
+    "InspectConnection": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "inspect_connection",
+          "title": "Action",
+          "type": "string"
+        },
+        "path": {
+          "format": "path",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "path"
+      ],
+      "title": "InspectConnection",
+      "type": "object"
+    },
+    "SettingsUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "update_settings",
+          "title": "Action",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "gateway": {
+          "maxLength": 2048,
+          "title": "Gateway",
+          "type": "string"
+        },
+        "workspace": {
+          "format": "path",
+          "title": "Workspace",
+          "type": "string"
+        },
+        "ca_file": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ca File"
+        },
+        "profile": {
+          "enum": [
+            "read_only",
+            "standard",
+            "trusted_personal"
+          ],
+          "title": "Profile",
+          "type": "string"
+        },
+        "allowed_workspaces": {
+          "items": {
+            "$ref": "#/$defs/WorkspaceSpec"
+          },
+          "maxItems": 15,
+          "title": "Allowed Workspaces",
+          "type": "array"
+        },
+        "desktop_enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Desktop Enabled"
+        }
+      },
+      "required": [
+        "action",
+        "revision",
+        "gateway",
+        "workspace",
+        "profile"
+      ],
+      "title": "SettingsUpdate",
+      "type": "object"
+    },
+    "WorkspaceSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "path": {
+          "format": "path",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "path"
+      ],
+      "title": "WorkspaceSpec",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "activity": "#/$defs/Command",
+      "enroll": "#/$defs/Enrollment",
+      "enroll_connection": "#/$defs/ImportConnection",
+      "info": "#/$defs/Command",
+      "inspect_connection": "#/$defs/InspectConnection",
+      "settings": "#/$defs/Command",
+      "start": "#/$defs/Command",
+      "status": "#/$defs/Command",
+      "stop": "#/$defs/Command",
+      "update_settings": "#/$defs/SettingsUpdate"
+    },
+    "propertyName": "action"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Command"
+    },
+    {
+      "$ref": "#/$defs/Enrollment"
+    },
+    {
+      "$ref": "#/$defs/InspectConnection"
+    },
+    {
+      "$ref": "#/$defs/ImportConnection"
+    },
+    {
+      "$ref": "#/$defs/SettingsUpdate"
+    }
+  ]
+}

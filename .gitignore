@@ -24,3 +24,6 @@ apps/console/test-results/
 apps/console/playwright-report/
 apps/client/renderer-dist/
 apps/client/test-results/
+
+/target/
+/.superpowers/

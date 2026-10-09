@@ -1,0 +1,1048 @@
+[
+  {
+    "operation": "browser.open",
+    "input": {},
+    "expected": {
+      "headless": true,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  {
+    "operation": "browser.attach",
+    "input": {
+      "endpoint_url": "http://127.0.0.1:9222"
+    },
+    "expected": {
+      "endpoint_url": "http://127.0.0.1:9222",
+      "context_mode": "isolated",
+      "page_target_ids": [],
+      "allow_page_termination": false,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  {
+    "operation": "browser.cdp_targets",
+    "input": {
+      "endpoint_url": "http://127.0.0.1:9222"
+    },
+    "expected": {
+      "endpoint_url": "http://127.0.0.1:9222"
+    }
+  },
+  {
+    "operation": "browser.pages",
+    "input": {
+      "browser_id": "x"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null
+    }
+  },
+  {
+    "operation": "browser.new_page",
+    "input": {
+      "browser_id": "x"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null
+    }
+  },
+  {
+    "operation": "browser.close",
+    "input": {
+      "browser_id": "x"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null
+    }
+  },
+  {
+    "operation": "browser.keepalive",
+    "input": {
+      "browser_id": "x"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null
+    }
+  },
+  {
+    "operation": "browser.close_page",
+    "input": {
+      "browser_id": "x",
+      "page_id": "x"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null,
+      "page_id": "x"
+    }
+  },
+  {
+    "operation": "browser.navigate",
+    "input": {
+      "browser_id": "x",
+      "page_id": "x",
+      "url": "https://example.org/"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null,
+      "page_id": "x",
+      "frame_id": null,
+      "url": "https://example.org/"
+    }
+  },
+  {
+    "operation": "browser.snapshot",
+    "input": {
+      "browser_id": "x",
+      "page_id": "x"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null,
+      "page_id": "x",
+      "frame_id": null
+    }
+  },
+  {
+    "operation": "browser.frames",
+    "input": {
+      "browser_id": "x",
+      "page_id": "x"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null,
+      "page_id": "x",
+      "limit": 16,
+      "cursor": null
+    }
+  },
+  {
+    "operation": "browser.screenshot",
+    "input": {
+      "browser_id": "x",
+      "page_id": "x"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null,
+      "page_id": "x"
+    }
+  },
+  {
+    "operation": "browser.click",
+    "input": {
+      "browser_id": "x",
+      "page_id": "x",
+      "observation_id": "x",
+      "navigation_revision": "0",
+      "ref": "ref_1"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null,
+      "page_id": "x",
+      "frame_id": null,
+      "observation_id": "x",
+      "navigation_revision": "0",
+      "ref": "ref_1",
+      "selector": null
+    }
+  },
+  {
+    "operation": "browser.type",
+    "input": {
+      "browser_id": "x",
+      "page_id": "x",
+      "observation_id": "x",
+      "navigation_revision": "0",
+      "text": "x",
+      "ref": "ref_1"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null,
+      "page_id": "x",
+      "frame_id": null,
+      "observation_id": "x",
+      "navigation_revision": "0",
+      "ref": "ref_1",
+      "selector": null,
+      "text": "x"
+    }
+  },
+  {
+    "operation": "browser.key",
+    "input": {
+      "browser_id": "x",
+      "page_id": "x",
+      "observation_id": "x",
+      "navigation_revision": "0",
+      "key": "x"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null,
+      "page_id": "x",
+      "frame_id": null,
+      "observation_id": "x",
+      "navigation_revision": "0",
+      "key": "x"
+    }
+  },
+  {
+    "operation": "browser.evaluate",
+    "input": {
+      "browser_id": "x",
+      "page_id": "x",
+      "observation_id": "x",
+      "navigation_revision": "0",
+      "expression": "x"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null,
+      "page_id": "x",
+      "frame_id": null,
+      "observation_id": "x",
+      "navigation_revision": "0",
+      "expression": "x"
+    }
+  },
+  {
+    "operation": "browser.download",
+    "input": {
+      "browser_id": "x",
+      "page_id": "x",
+      "observation_id": "x",
+      "navigation_revision": "0",
+      "ref": "ref_1"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null,
+      "page_id": "x",
+      "frame_id": null,
+      "observation_id": "x",
+      "navigation_revision": "0",
+      "ref": "ref_1",
+      "selector": null,
+      "max_bytes": 1073741824
+    }
+  },
+  {
+    "operation": "browser.upload",
+    "input": {
+      "browser_id": "x",
+      "page_id": "x",
+      "observation_id": "x",
+      "navigation_revision": "0",
+      "artifact_id": "x",
+      "filename": "x",
+      "ref": "ref_1"
+    },
+    "expected": {
+      "browser_id": "x",
+      "agent_boot_id": null,
+      "page_id": "x",
+      "frame_id": null,
+      "observation_id": "x",
+      "navigation_revision": "0",
+      "ref": "ref_1",
+      "selector": null,
+      "artifact_id": "x",
+      "filename": "x"
+    }
+  },
+  {
+    "operation": "desktop.sessions",
+    "input": {},
+    "expected": {}
+  },
+  {
+    "operation": "desktop.monitors",
+    "input": {
+      "session_id": 1
+    },
+    "expected": {
+      "session_id": 1
+    }
+  },
+  {
+    "operation": "desktop.foreground",
+    "input": {
+      "session_id": 1
+    },
+    "expected": {
+      "session_id": 1
+    }
+  },
+  {
+    "operation": "desktop.windows",
+    "input": {
+      "session_id": 1
+    },
+    "expected": {
+      "session_id": 1,
+      "limit": 64
+    }
+  },
+  {
+    "operation": "desktop.inspect",
+    "input": {
+      "session_id": 1,
+      "window_id": "x"
+    },
+    "expected": {
+      "session_id": 1,
+      "window_id": "x",
+      "limit": 64
+    }
+  },
+  {
+    "operation": "desktop.screenshot",
+    "input": {
+      "session_id": 1
+    },
+    "expected": {
+      "session_id": 1,
+      "window_id": null,
+      "monitor_id": null,
+      "preview": true
+    }
+  },
+  {
+    "operation": "desktop.lease_acquire",
+    "input": {
+      "session_id": 1
+    },
+    "expected": {
+      "session_id": 1,
+      "ttl_ms": 15000
+    }
+  },
+  {
+    "operation": "desktop.lease_renew",
+    "input": {
+      "session_id": 1,
+      "lease_id": "x"
+    },
+    "expected": {
+      "session_id": 1,
+      "lease_id": "x",
+      "ttl_ms": 15000
+    }
+  },
+  {
+    "operation": "desktop.lease_release",
+    "input": {
+      "session_id": 1,
+      "lease_id": "x"
+    },
+    "expected": {
+      "session_id": 1,
+      "lease_id": "x"
+    }
+  },
+  {
+    "operation": "desktop.activate",
+    "input": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x"
+    },
+    "expected": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x"
+    }
+  },
+  {
+    "operation": "desktop.move",
+    "input": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "x": -65536,
+      "y": -65536
+    },
+    "expected": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "x": -65536,
+      "y": -65536
+    }
+  },
+  {
+    "operation": "desktop.click",
+    "input": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "x": -65536,
+      "y": -65536
+    },
+    "expected": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "x": -65536,
+      "y": -65536,
+      "button": "left",
+      "click_count": 1
+    }
+  },
+  {
+    "operation": "desktop.type",
+    "input": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "text": "x"
+    },
+    "expected": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "text": "x"
+    }
+  },
+  {
+    "operation": "desktop.key",
+    "input": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "keys": [
+        "CTRL"
+      ]
+    },
+    "expected": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "keys": [
+        "CTRL"
+      ]
+    }
+  },
+  {
+    "operation": "desktop.scroll",
+    "input": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "x": -65536,
+      "y": -65536,
+      "delta": -1200
+    },
+    "expected": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "x": -65536,
+      "y": -65536,
+      "delta": -1200
+    }
+  },
+  {
+    "operation": "desktop.drag",
+    "input": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "x": -65536,
+      "y": -65536,
+      "end_x": -65536,
+      "end_y": -65536
+    },
+    "expected": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "x": -65536,
+      "y": -65536,
+      "end_x": -65536,
+      "end_y": -65536,
+      "duration_ms": 300
+    }
+  },
+  {
+    "operation": "desktop.invoke",
+    "input": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "element_ref": "x"
+    },
+    "expected": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "element_ref": "x"
+    }
+  },
+  {
+    "operation": "desktop.set_value",
+    "input": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "element_ref": "x",
+      "value": "x"
+    },
+    "expected": {
+      "session_id": 1,
+      "lease_id": "x",
+      "observation_id": "x",
+      "layout_revision": "x",
+      "expected_window_id": "x",
+      "element_ref": "x",
+      "value": "x"
+    }
+  },
+  {
+    "operation": "re.backends",
+    "input": {},
+    "expected": {}
+  },
+  {
+    "operation": "re.open",
+    "input": {
+      "backend": "x",
+      "path": "x"
+    },
+    "expected": {
+      "backend": "x",
+      "path": "x",
+      "expected_sha256": null
+    }
+  },
+  {
+    "operation": "re.query",
+    "input": {
+      "analysis_id": "x",
+      "action": "info"
+    },
+    "expected": {
+      "analysis_id": "x",
+      "action": "info"
+    }
+  },
+  {
+    "operation": "re.command",
+    "input": {
+      "analysis_id": "x",
+      "action": "rename",
+      "address": "0x0",
+      "name": "x"
+    },
+    "expected": {
+      "analysis_id": "x",
+      "action": "rename",
+      "address": "0x0",
+      "name": "x"
+    }
+  },
+  {
+    "operation": "re.close",
+    "input": {
+      "analysis_id": "x"
+    },
+    "expected": {
+      "analysis_id": "x"
+    }
+  },
+  {
+    "operation": "re.keepalive",
+    "input": {
+      "analysis_id": "x"
+    },
+    "expected": {
+      "analysis_id": "x"
+    }
+  },
+  {
+    "operation": "debugger.backends",
+    "input": {},
+    "expected": {}
+  },
+  {
+    "operation": "debugger.launch",
+    "input": {
+      "backend": "x",
+      "executable": "x"
+    },
+    "expected": {
+      "backend": "x",
+      "executable": "x",
+      "args": []
+    }
+  },
+  {
+    "operation": "debugger.attach",
+    "input": {
+      "backend": "x",
+      "pid": 1,
+      "create_time": 1,
+      "agent_boot_id": "x"
+    },
+    "expected": {
+      "backend": "x",
+      "pid": 1,
+      "create_time": 1.0,
+      "agent_boot_id": "x"
+    }
+  },
+  {
+    "operation": "debugger.command",
+    "input": {
+      "debug_id": "x",
+      "action": "continue"
+    },
+    "expected": {
+      "debug_id": "x",
+      "action": "continue"
+    }
+  },
+  {
+    "operation": "debugger.info",
+    "input": {
+      "debug_id": "x"
+    },
+    "expected": {
+      "debug_id": "x"
+    }
+  },
+  {
+    "operation": "debugger.registers",
+    "input": {
+      "debug_id": "x"
+    },
+    "expected": {
+      "debug_id": "x"
+    }
+  },
+  {
+    "operation": "debugger.read_memory",
+    "input": {
+      "debug_id": "x",
+      "address": "0x0"
+    },
+    "expected": {
+      "debug_id": "x",
+      "address": "0x0",
+      "size_bytes": 4096
+    }
+  },
+  {
+    "operation": "debugger.backtrace",
+    "input": {
+      "debug_id": "x"
+    },
+    "expected": {
+      "debug_id": "x"
+    }
+  },
+  {
+    "operation": "debugger.wait",
+    "input": {
+      "debug_id": "x"
+    },
+    "expected": {
+      "debug_id": "x",
+      "after_sequence": "0"
+    }
+  },
+  {
+    "operation": "debugger.close",
+    "input": {
+      "debug_id": "x"
+    },
+    "expected": {
+      "debug_id": "x"
+    }
+  },
+  {
+    "operation": "debugger.keepalive",
+    "input": {
+      "debug_id": "x"
+    },
+    "expected": {
+      "debug_id": "x"
+    }
+  },
+  {
+    "operation": "shell.exec",
+    "input": {
+      "argv": [
+        "echo",
+        "한글"
+      ]
+    },
+    "expected": {
+      "mode": "argv",
+      "argv": [
+        "echo",
+        "한글"
+      ],
+      "command": null,
+      "shell": null,
+      "cwd": null,
+      "env": {},
+      "encoding": "utf-8",
+      "max_output_bytes": 65536
+    }
+  },
+  {
+    "operation": "filesystem.read",
+    "input": {
+      "path": "x"
+    },
+    "expected": {
+      "path": "x",
+      "encoding": "utf-8",
+      "binary": false,
+      "max_bytes": 65536
+    }
+  },
+  {
+    "operation": "filesystem.write",
+    "input": {
+      "path": "file.txt",
+      "content": "한글"
+    },
+    "expected": {
+      "path": "file.txt",
+      "content": "한글",
+      "artifact_id": null,
+      "mode": "create",
+      "overwrite": false,
+      "encoding": "utf-8",
+      "newline": "preserve",
+      "expected_sha256": null,
+      "expected_revision": null,
+      "expected_offset": null
+    }
+  },
+  {
+    "operation": "filesystem.stat",
+    "input": {
+      "path": "x"
+    },
+    "expected": {
+      "path": "x"
+    }
+  },
+  {
+    "operation": "filesystem.list",
+    "input": {
+      "path": "x"
+    },
+    "expected": {
+      "path": "x",
+      "limit": 100,
+      "cursor": null
+    }
+  },
+  {
+    "operation": "filesystem.mkdir",
+    "input": {
+      "path": "x"
+    },
+    "expected": {
+      "path": "x",
+      "parents": false,
+      "exist_ok": false
+    }
+  },
+  {
+    "operation": "filesystem.copy",
+    "input": {
+      "source": "x",
+      "destination": "x"
+    },
+    "expected": {
+      "source": "x",
+      "destination": "x",
+      "overwrite": false,
+      "recursive": false,
+      "expected_sha256": null
+    }
+  },
+  {
+    "operation": "filesystem.move",
+    "input": {
+      "source": "x",
+      "destination": "x"
+    },
+    "expected": {
+      "source": "x",
+      "destination": "x",
+      "overwrite": false,
+      "recursive": false,
+      "expected_sha256": null,
+      "copy_and_delete": false
+    }
+  },
+  {
+    "operation": "filesystem.delete",
+    "input": {
+      "path": "x"
+    },
+    "expected": {
+      "path": "x",
+      "recursive": false,
+      "expected_revision": null
+    }
+  },
+  {
+    "operation": "filesystem.search",
+    "input": {
+      "path": "x",
+      "pattern": "x"
+    },
+    "expected": {
+      "path": "x",
+      "pattern": "x",
+      "case_sensitive": true,
+      "max_depth": 20,
+      "max_results": 1000
+    }
+  },
+  {
+    "operation": "filesystem.hash",
+    "input": {
+      "path": "x"
+    },
+    "expected": {
+      "path": "x"
+    }
+  },
+  {
+    "operation": "process.list",
+    "input": {},
+    "expected": {
+      "limit": 100,
+      "cursor": null
+    }
+  },
+  {
+    "operation": "process.inspect",
+    "input": {
+      "pid": 1
+    },
+    "expected": {
+      "pid": 1
+    }
+  },
+  {
+    "operation": "process.spawn",
+    "input": {
+      "argv": [
+        "echo",
+        "한글"
+      ]
+    },
+    "expected": {
+      "mode": "argv",
+      "argv": [
+        "echo",
+        "한글"
+      ],
+      "command": null,
+      "shell": null,
+      "cwd": null,
+      "env": {},
+      "encoding": "utf-8",
+      "max_output_bytes": 65536,
+      "output": "discard"
+    }
+  },
+  {
+    "operation": "process.terminate",
+    "input": {
+      "pid": 1,
+      "create_time": 1,
+      "agent_boot_id": "x"
+    },
+    "expected": {
+      "pid": 1,
+      "create_time": 1.0,
+      "agent_boot_id": "x",
+      "force": false
+    }
+  },
+  {
+    "operation": "process.wait",
+    "input": {
+      "pid": 1,
+      "create_time": 1,
+      "agent_boot_id": "x"
+    },
+    "expected": {
+      "pid": 1,
+      "create_time": 1.0,
+      "agent_boot_id": "x"
+    }
+  },
+  {
+    "operation": "process.tree",
+    "input": {
+      "pid": 1,
+      "create_time": 1,
+      "agent_boot_id": "x"
+    },
+    "expected": {
+      "pid": 1,
+      "create_time": 1.0,
+      "agent_boot_id": "x"
+    }
+  },
+  {
+    "operation": "process.memory_regions",
+    "input": {
+      "pid": 1,
+      "create_time": 1,
+      "agent_boot_id": "x"
+    },
+    "expected": {
+      "pid": 1,
+      "create_time": 1.0,
+      "agent_boot_id": "x",
+      "start_address": "0x0",
+      "limit": 128
+    }
+  },
+  {
+    "operation": "process.memory_read",
+    "input": {
+      "pid": 1,
+      "create_time": 1,
+      "agent_boot_id": "x",
+      "address": "0x0"
+    },
+    "expected": {
+      "pid": 1,
+      "create_time": 1.0,
+      "agent_boot_id": "x",
+      "address": "0x0",
+      "size_bytes": 4096
+    }
+  },
+  {
+    "operation": "terminal.open",
+    "input": {},
+    "expected": {
+      "argv": null,
+      "shell": null,
+      "cwd": null,
+      "env": {},
+      "cols": 120,
+      "rows": 40
+    }
+  },
+  {
+    "operation": "terminal.read",
+    "input": {
+      "handle_id": "x"
+    },
+    "expected": {
+      "handle_id": "x",
+      "agent_boot_id": null,
+      "cursor": "0",
+      "max_bytes": 65536,
+      "wait_ms": 0
+    }
+  },
+  {
+    "operation": "terminal.write",
+    "input": {
+      "handle_id": "x",
+      "data": "x"
+    },
+    "expected": {
+      "handle_id": "x",
+      "agent_boot_id": null,
+      "data": "x",
+      "encoding": "utf-8"
+    }
+  },
+  {
+    "operation": "terminal.resize",
+    "input": {
+      "handle_id": "x",
+      "cols": 10,
+      "rows": 5
+    },
+    "expected": {
+      "handle_id": "x",
+      "agent_boot_id": null,
+      "cols": 10,
+      "rows": 5
+    }
+  },
+  {
+    "operation": "terminal.close",
+    "input": {
+      "handle_id": "x"
+    },
+    "expected": {
+      "handle_id": "x",
+      "agent_boot_id": null
+    }
+  },
+  {
+    "operation": "terminal.keepalive",
+    "input": {
+      "handle_id": "x"
+    },
+    "expected": {
+      "handle_id": "x",
+      "agent_boot_id": null
+    }
+  }
+]
