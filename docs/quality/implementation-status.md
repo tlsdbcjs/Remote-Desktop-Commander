@@ -2,7 +2,7 @@
 
 > **Document ID**: `DOC-QA-STATUS`\
 > **Status**: Active · **Target Version**: v0.1.10\
-> **Last Updated**: 2026-10-07 · **Classification**: Quality Assurance & Implementation Status (SSOT)
+> **Last Updated**: 2026-10-10 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
 
@@ -245,9 +245,11 @@ Windows x64 실제 산출물은 `dist/client-desktop/0.1.10/win-x64/`에 생성�
 
 ---
 
-## 9. Client·Agent Rust 전환 설계 검토 <a id="client-rust-design"></a>
+## 9. Client·Agent Rust 전환 설계·구현 계획 <a id="client-rust-design"></a>
 
-- **2026-10-10 상태**: [Rust 전환 설계안](../spec/client-rust-migration.md) Draft 작성. 사용자 범위 선택 및 설계 검토 대기이며 제품 코드는 변경하지 않았다.
-- **조사 기준선**: v0.1.10, Electron/React UI와 Python Agent. 추천 범위는 Tauri/Rust 호스트와 Agent 전환 및 기존 React 화면 유지다. Gateway·CLI는 별도 앱으로 유지하는 가정이다.
+- **2026-10-10 상태**: 사용자 “진행해”로 [Rust 전환 설계](../spec/client-rust-migration.md) 승인. [구현 계획](../spec/client-rust-implementation-plan.md) 10개 task·50개 단계 작성 및 자체 검토 완료. 계획 검토와 실행 방식 선택 대기이며 제품 코드는 변경하지 않았다.
+- **조사 기준선**: v0.1.10, Electron/React UI와 Python Agent. 승인 범위는 Tauri/Rust 호스트와 Agent 전환 및 기존 React 화면 유지다. Gateway·CLI는 별도 앱으로 유지한다.
 - **문서 검증**: `git diff --check` 통과. 설계안과 문서 인덱스 2개의 상대 파일 링크 38개, 설계 메타데이터·목차·TODO/TBD 부재 확인 통과.
+- **계획 검증**: 설계·계획·인덱스 4개 문서의 상대 파일 링크 46개, metadata·TODO/TBD 부재, task 10개·checkbox 50개 확인 통과. diff whitespace 검사 통과.
+- **기존 동작 기준선 검사**: `.venv/bin/python -m pytest tests/unit/test_version.py tests/contract/test_schema_drift.py -q` — 7 passed. `node --test apps/client/tests/*.test.cjs` — 11 passed, 실패·skip 0. Rust 이식 결과 검증이 아닌 기존 구현 기준선이다.
 - **실행 검증**: Rust 구현/테스트/빌드 및 Windows native 패키징은 수행하지 않았다. 현재 환경은 Linux이며 PATH에 Cargo/Rust가 없다. macOS/Linux native 빌드는 기존 정책에 따라 미실행이다.

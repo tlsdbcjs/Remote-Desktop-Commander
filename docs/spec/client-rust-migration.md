@@ -1,7 +1,7 @@
 # Client와 Agent Rust 전환 설계안
 
-> **Document ID**: `DOC-SPEC-CLIENT-RUST`  
-> **Status**: Draft · **Target Version**: v0.1.10 기준선 / 구현 배치 v0.1.11 예정  
+> **Document ID**: `DOC-SPEC-CLIENT-RUST`\
+> **Status**: Active · **Target Version**: v0.1.10 기준선 / 구현 배치 v0.1.11 예정\
 > **Last Updated**: 2026-10-10 · **Classification**: Architecture Specification
 
 ## 개요
@@ -12,8 +12,9 @@ Python 제거 요구를 충족하지 못한다. client에 포함되는 Agent, Br
 어댑터와 설치 유지보수 프로그램까지 Rust 구현으로 대체한다.
 
 > [!NOTE]
-> 이 문서는 구현 전 검토용 초안이다. Tauri/Rust 호스트와 기존 React UI를 사용하는 안을
-> 추천하며, 이 선택과 Gateway·CLI를 전환 범위에서 제외하는 해석은 사용자 확인 전 가정이다.
+> 2026-10-10 사용자 “진행해”로 Tauri/Rust 호스트·기존 React UI·내장 Agent Rust 전환
+> 설계를 승인했다. Gateway·CLI는 별도 앱으로 유지한다.
+> [구현 계획](client-rust-implementation-plan.md)의 검토 및 실행 방식 선택 단계이며,
 > 코드 전환, Rust 빌드, 기존 코드 삭제는 아직 수행하지 않았다.
 
 ## 목차
@@ -162,7 +163,7 @@ Gateway·CLI가 사용하는 공통 Python 패키지와 서버 테스트는 보�
 > Windows 설치형·포터블·Win32 기능의 검증 증거로 대신하지 않는다.
 
 진행 상태와 실제 실행 결과는 [구현 현황](../quality/implementation-status.md)에 기록한다.
-이 설계 초안 작성은 Rust 전환 완료를 의미하지 않는다.
+이 설계 승인과 구현 계획 작성은 Rust 전환 완료를 의미하지 않는다.
 
 ## 8. 관련 문서
 

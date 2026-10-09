@@ -18,7 +18,8 @@
 | :--- | :--- | :--- | :--- |
 | [RACP 종합 개발정의서 v1.1](racp-specification-v1.1.md) | `DOC-SPEC-CORE-v1.1` | **Active** | 전체 시스템의 마스터 설계 명세서 (통신 프로토콜, 보안 경계, 실행 엔진, 도메인 모델, 부록 E 상세) |
 | [Windows 작업 및 테스트 계획서](windows-engineering-plan.md) | `DOC-SPEC-WIN-v1.0` | **Active** | 문서 개정 1.1 / 코드 기준 v0.1.9 · 작업 12개, 상세 시험 54개, 화면·세션 조합 8개, 실제 두 PC 인수 3개 |
-| [Client·Agent Rust 전환 설계안](client-rust-migration.md) | `DOC-SPEC-CLIENT-RUST` | **Draft** | Tauri/Rust와 React 재사용 제안, 내장 Python 제거 범위, 데이터 호환성 및 검증·삭제 조건 |
+| [Client·Agent Rust 전환 설계](client-rust-migration.md) | `DOC-SPEC-CLIENT-RUST` | **Active** | 승인된 Tauri/Rust·React 구조, 내장 Python 제거 범위, 데이터 호환성 및 검증·삭제 조건 |
+| [Client·Agent Rust 구현 계획](client-rust-implementation-plan.md) | `DOC-PLAN-CLIENT-RUST` | **Draft** | 10개 구현·검증 task, 공통 인터페이스와 최종 Python 제거 게이트 |
 
 ---
 
