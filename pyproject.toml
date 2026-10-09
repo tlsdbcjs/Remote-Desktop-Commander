@@ -6,7 +6,7 @@ dependencies = ["racp-gateway", "racp-agent", "racp-cli"]
 
 [tool.uv.workspace]
 members = ["apps/*", "packages/*"]
-exclude = ["apps/console", "apps/client"]
+exclude = ["apps/console", "apps/client", "apps/agent-rust"]
 
 [tool.uv.sources]
 racp-gateway = { workspace = true }

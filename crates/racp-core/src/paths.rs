@@ -62,14 +62,14 @@ pub fn private_dir(path: &Path) -> Result<(), RacpError> {
 }
 /// Ancestors are pinned until the operation finishes. Unix accesses use dirfd/openat;
 /// Windows denies deletion/renaming of each open directory and rejects reparse points.
-struct Parent {
+pub(crate) struct Parent {
     _dir: File,
     #[cfg(windows)]
     path: PathBuf,
     _ancestors: Vec<File>,
 }
 impl Parent {
-    fn open(path: &Path) -> Result<Self, RacpError> {
+    pub(crate) fn open(path: &Path) -> Result<Self, RacpError> {
         let path = validate_local_path(path)?;
         let mut handles = vec![];
         let mut current = PathBuf::new();
@@ -127,7 +127,7 @@ impl Parent {
             _ancestors: handles,
         })
     }
-    fn file(&self, name: &std::ffi::OsStr, mode: OpenMode) -> Result<File, RacpError> {
+    pub(crate) fn file(&self, name: &std::ffi::OsStr, mode: OpenMode) -> Result<File, RacpError> {
         #[cfg(unix)]
         {
             use std::os::fd::{AsRawFd, FromRawFd};
@@ -138,6 +138,7 @@ impl Parent {
                 OpenMode::Read => libc::O_RDONLY,
                 OpenMode::Create => libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL,
                 OpenMode::Lock => libc::O_RDWR | libc::O_CREAT,
+                OpenMode::Append => libc::O_WRONLY | libc::O_CREAT | libc::O_APPEND,
             };
             let fd = unsafe {
                 libc::openat(
@@ -170,6 +171,9 @@ impl Parent {
                 }
                 OpenMode::Lock => {
                     options.read(true).write(true).create(true);
+                }
+                OpenMode::Append => {
+                    options.append(true).create(true);
                 }
             }
             let file = options.open(self.path.join(name))?;
@@ -220,7 +224,7 @@ impl Parent {
         }
         Ok(())
     }
-    fn remove(&self, name: &str) -> Result<(), RacpError> {
+    pub(crate) fn remove(&self, name: &str) -> Result<(), RacpError> {
         #[cfg(unix)]
         {
             use std::os::fd::AsRawFd;
@@ -237,10 +241,11 @@ impl Parent {
     }
 }
 #[derive(Clone, Copy)]
-enum OpenMode {
+pub(crate) enum OpenMode {
     Read,
     Create,
     Lock,
+    Append,
 }
 pub fn read_bounded(path: &Path, limit: usize, private: bool) -> Result<Vec<u8>, RacpError> {
     let parent = Parent::open(
@@ -313,4 +318,27 @@ impl InstanceLock {
         }
         Ok(Self { _file: file })
     }
+}
+
+pub fn secure_read_file(path: &Path) -> Result<File, RacpError> {
+    let parent = Parent::open(
+        path.parent()
+            .ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?,
+    )?;
+    parent.file(
+        path.file_name()
+            .ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?,
+        OpenMode::Read,
+    )
+}
+pub fn secure_append_file(path: &Path) -> Result<File, RacpError> {
+    let parent = Parent::open(
+        path.parent()
+            .ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?,
+    )?;
+    parent.file(
+        path.file_name()
+            .ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?,
+        OpenMode::Append,
+    )
 }

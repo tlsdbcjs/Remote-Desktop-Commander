@@ -114,8 +114,10 @@ When `scripts/version.py` runs, it atomically updates all target files:
 - **Python modules**:
   ```python
   from racp_domain.version import VERSION, __version__
+
   # Or via package root:
   import racp_cli
+
   print(racp_cli.__version__)
   ```
 - **CLI Commands**:

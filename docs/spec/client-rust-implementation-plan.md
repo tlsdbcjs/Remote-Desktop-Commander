@@ -89,11 +89,11 @@
 
 **Interfaces:** `SecretStore::new(path: PathBuf) -> Self`; `load(&self) -> Result<BTreeMap<String,String>, RacpError>`; `save(&self, value: &BTreeMap<String,String>, overwrite: bool) -> Result<(), RacpError>`; `validate_local_path(path: &Path) -> Result<PathBuf, RacpError>`; `enroll(request: Enrollment, state: &Path) -> Result<ClientInfo, RacpError>` (async); `update_settings(state: &Path, request: SettingsUpdate) -> Result<ClientInfo, RacpError>`.
 
-- [ ] **RED:** `old_credentials_roundtrip`는 기존 JSON/Windows DPAPI fixture로 device identity가 유지됨을 확인한다. `state_guard`는 symlink/UNC/상대 경로/공개 credential 권한을 거부한다. `enrollment_preflight`는 잘못된 workspace/CA에서 서버 토큰을 소비하지 않는다. `connection_changed_or_expired`와 `settings_revision_conflict`는 원본 파일을 보존하며 거부한다. `enrollment_response_bounds`는 4,097-byte 응답을 거부하고 token을 오류에 포함하지 않는다.
-- [ ] **Verify RED:** `cargo test -p racp-core --test state --test paths`; `cargo test -p racp-runtime --test enrollment`.
-- [ ] **Implement:** DPAPI/0600 저장, atomic write와 overwrite=false, 32 KiB plaintext/64 KiB storage 한도, 16 KiB settings, 등록 reservation을 이식한다. custom CA 검증·TLS 필수·loopback HTTP 예외·redirect 금지를 보존한다.
-- [ ] **Verify GREEN:** 동일 명령 및 Windows DPAPI native 검사를 통과한다. Python fixture가 Rust 결과를 읽고 Rust가 Python fixture를 읽는 양방향 호환성을 확인한다.
-- [ ] **Commit:** `feat(rust): port protected enrollment and local settings`.
+- [x] **RED:** `old_credentials_roundtrip`는 기존 JSON/Windows DPAPI fixture로 device identity가 유지됨을 확인한다. `state_guard`는 symlink/UNC/상대 경로/공개 credential 권한을 거부한다. `enrollment_preflight`는 잘못된 workspace/CA에서 서버 토큰을 소비하지 않는다. `connection_changed_or_expired`와 `settings_revision_conflict`는 원본 파일을 보존하며 거부한다. `enrollment_response_bounds`는 4,097-byte 응답을 거부하고 token을 오류에 포함하지 않는다.
+- [x] **Verify RED:** `cargo test -p racp-core --test state --test paths`; `cargo test -p racp-runtime --test enrollment`.
+- [x] **Implement:** DPAPI/0600 저장, atomic write와 overwrite=false, 32 KiB plaintext/64 KiB storage 한도, 16 KiB settings, 등록 reservation을 이식한다. custom CA 검증·TLS 필수·loopback HTTP 예외·redirect 금지를 보존한다.
+- [x] **Verify GREEN:** 동일 명령 및 Windows DPAPI native 검사를 통과한다. Python fixture가 Rust 결과를 읽고 Rust가 Python fixture를 읽는 양방향 호환성을 확인한다.
+- [x] **Commit:** `feat(rust): port protected enrollment and local settings`.
 
 ## Task 3: 저널과 WSS 실행 수명주기
 
@@ -101,9 +101,9 @@
 
 **Interfaces:** `Journal::open(path: &Path) -> Result<Self, RacpError>`; `accept(&mut self, request: &Request) -> Result<Acceptance, RacpError>`; `recover_agent(&mut self) -> Result<(), RacpError>`. `Acceptance`는 `New`, `Replay(OperationResult)`, `Pending`을 구분한다. `Agent::new(settings: AgentSettings, credential: String) -> Result<Self, RacpError>`; `run(&mut self, shutdown: CancellationToken) -> Result<(), RacpError>` (async). `ControlClient::status/stop(&self) -> Result<AgentStatus, RacpError>` (async).
 
-- [ ] **RED:** `dedup_100`는 동시 100회 동일 key 요청의 실행 횟수=1을 확인한다. `payload_conflict`는 같은 key/다른 payload를 거부한다. `recover_unknown`은 crash 이후 미확정 작업을 UNKNOWN으로 보존한다. `tls_and_lease`는 잘못된 CA/외부 HTTP를 거부하고 lease 만료 뒤 새 실행을 막는다. `stale_instance`는 PID/생성 시각/nonce 불일치 제어 응답을 거부한다.
-- [ ] **Verify RED:** `cargo test -p racp-core --test journal`; `uv run pytest tests/rust_agent/test_lifecycle.py tests/rust_agent/test_tls.py -q`.
-- [ ] **Implement:** 기존 SQLite schema와 retention/tombstone/reconcile 의미, Hello/Welcome/heartbeat/epoch/revoke/reconnect, job·deadline·취소·결과 복구를 이식한다. loopback 제어는 secret/nonce 및 process identity 검증을 사용한다. 기능별 capability는 구현된 provider만 광고한다.
+- [x] **RED:** `dedup_100`는 동시 100회 동일 key 요청의 실행 횟수=1을 확인한다. `payload_conflict`는 같은 key/다른 payload를 거부한다. `recover_unknown`은 crash 이후 미확정 작업을 UNKNOWN으로 보존한다. `tls_and_lease`는 잘못된 CA/외부 HTTP를 거부하고 lease 만료 뒤 새 실행을 막는다. `stale_instance`는 PID/생성 시각/nonce 불일치 제어 응답을 거부한다.
+- [x] **Verify RED:** `cargo test -p racp-core --test journal`; `uv run pytest tests/rust_agent/test_lifecycle.py tests/rust_agent/test_tls.py -q`.
+- [x] **Implement:** 기존 SQLite schema와 retention/tombstone/reconcile 의미, Hello/Welcome/heartbeat/epoch/revoke/reconnect, job·deadline·취소·결과 복구를 이식한다. loopback 제어는 secret/nonce 및 process identity 검증을 사용한다. 기능별 capability는 구현된 provider만 광고한다.
 - [ ] **Verify GREEN:** Python Gateway를 실제 loopback HTTPS/WSS로 실행하고 Rust binary를 별도 프로세스로 연결한다. 빈 journal 대체와 임의 재실행이 발생하지 않아야 한다.
 - [ ] **Commit:** `feat(rust): implement journaled agent transport and lifecycle`.
 

@@ -1,6 +1,7 @@
 use crate::RacpError;
 use serde_json::Value;
-use std::sync::LazyLock;
+use std::collections::HashMap;
+use std::sync::{Arc, LazyLock, Mutex};
 static BRIDGE: LazyLock<Value> = LazyLock::new(|| {
     serde_json::from_str(include_str!("../schemas/bridge.json")).expect("checked bridge schema")
 });
@@ -32,6 +33,66 @@ fn resolve<'a>(schema: &'a Value, root: &'a Value) -> &'a Value {
         .and_then(|r| root.pointer(r.strip_prefix('#')?))
         .unwrap_or(schema)
 }
+// Union schemas share many $defs. Compile each candidate once; stream frames must
+// not rebuild the complete protocol validator on every nested nullable field.
+static CANDIDATES: LazyLock<Mutex<HashMap<String, Arc<jsonschema::Validator>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+fn choice_valid(choice: &Value, root: &Value, value: &Value) -> bool {
+    let resolved = resolve(choice, root);
+    // Most protocol/bridge unions are discriminated by a constant string.
+    if let Some(props) = resolved["properties"].as_object() {
+        for (key, field) in props {
+            if let Some(expected) = field.get("const") {
+                if &value[key] != expected {
+                    return false;
+                }
+            }
+        }
+    }
+    if let Some(kind) = resolved["type"].as_str() {
+        let matches = match kind {
+            "null" => value.is_null(),
+            "object" => value.is_object(),
+            "array" => value.is_array(),
+            "string" => value.is_string(),
+            "boolean" => value.is_boolean(),
+            "integer" | "number" => value.is_number(),
+            _ => true,
+        };
+        if !matches {
+            return false;
+        }
+    }
+    let mut candidate = resolved.clone();
+    let raw = serde_json::to_string(resolved).expect("schema JSON");
+    if raw.contains("\"$ref\"") {
+        if let Some(defs) = root.get("$defs") {
+            candidate["$defs"] = defs.clone();
+        }
+    }
+    let key = crate::canonical_digest(&candidate);
+    let cached = {
+        CANDIDATES
+            .lock()
+            .expect("validator cache lock")
+            .get(&key)
+            .cloned()
+    };
+    let validator = if let Some(v) = cached {
+        v
+    } else {
+        let Ok(v) = jsonschema::validator_for(&candidate) else {
+            return false;
+        };
+        let v = Arc::new(v);
+        let mut cache = CANDIDATES.lock().expect("validator cache lock");
+        if cache.len() < 512 {
+            cache.insert(key, v.clone());
+        }
+        v
+    };
+    validator.is_valid(value)
+}
 /// Apply the same field defaults as the reference models after strict validation.
 pub fn normalize(schema: &Value, value: &mut Value) {
     defaults(schema, schema, value)
@@ -46,11 +107,7 @@ fn defaults(schema: &Value, root: &Value, value: &mut Value) {
     for key in ["oneOf", "anyOf"] {
         if let Some(choices) = schema[key].as_array() {
             for choice in choices {
-                let mut candidate = resolve(choice, root).clone();
-                if let Some(defs) = root.get("$defs") {
-                    candidate["$defs"] = defs.clone();
-                }
-                if validate_schema(&candidate, value).is_ok() {
+                if choice_valid(choice, root, value) {
                     defaults(choice, root, value);
                     return;
                 }
@@ -174,14 +231,9 @@ pub(crate) fn strict_types(schema: &Value, root: &Value, value: &Value) -> bool 
     let schema = resolve(schema, root);
     for k in ["oneOf", "anyOf"] {
         if let Some(choices) = schema[k].as_array() {
-            return choices.iter().any(|c| {
-                let mut candidate = resolve(c, root).clone();
-                if let Some(defs) = root.get("$defs") {
-                    candidate["$defs"] = defs.clone();
-                }
-                jsonschema::validator_for(&candidate).is_ok_and(|v| v.is_valid(value))
-                    && strict_types(c, root, value)
-            });
+            return choices
+                .iter()
+                .any(|c| choice_valid(c, root, value) && strict_types(c, root, value));
         }
     }
     if schema["type"] == "integer" && !value.as_number().is_some_and(|n| n.is_i64() || n.is_u64()) {

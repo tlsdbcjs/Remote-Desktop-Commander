@@ -1,0 +1,13 @@
+[package]
+name = "racp-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+[dependencies]
+racp-contract = { path = "../../crates/racp-contract" }
+racp-core = { path = "../../crates/racp-core" }
+racp-runtime = { path = "../../crates/racp-runtime" }
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true

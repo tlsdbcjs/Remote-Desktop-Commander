@@ -247,12 +247,12 @@ Windows x64 실제 산출물은 `dist/client-desktop/0.1.10/win-x64/`에 생성�
 
 ## 9. Client·Agent Rust 전환 설계·구현 계획 <a id="client-rust-design"></a>
 
-- **2026-10-10 상태**: 사용자 “진행해”로 [Rust 전환 설계](../spec/client-rust-migration.md) 승인. [구현 계획](../spec/client-rust-implementation-plan.md) 10개 task·50개 단계 작성 및 자체 검토 완료. 계획 검토와 실행 방식 선택 대기이며 제품 코드는 변경하지 않았다.
+- **2026-10-10 상태**: 사용자 “진행해”로 [Rust 전환 설계](../spec/client-rust-migration.md) 승인. [구현 계획](../spec/client-rust-implementation-plan.md) 10개 task·50개 단계 작성 및 자체 검토 완료. 초기 설계·계획 단계 기록이며, 이후 사용자 실행 승인과 Rust 구현 결과는 아래에 기록했다.
 - **조사 기준선**: v0.1.10, Electron/React UI와 Python Agent. 승인 범위는 Tauri/Rust 호스트와 Agent 전환 및 기존 React 화면 유지다. Gateway·CLI는 별도 앱으로 유지한다.
 - **문서 검증**: `git diff --check` 통과. 설계안과 문서 인덱스 2개의 상대 파일 링크 38개, 설계 메타데이터·목차·TODO/TBD 부재 확인 통과.
 - **계획 검증**: 설계·계획·인덱스 4개 문서의 상대 파일 링크 46개, metadata·TODO/TBD 부재, task 10개·checkbox 50개 확인 통과. diff whitespace 검사 통과.
 - **기존 동작 기준선 검사**: `.venv/bin/python -m pytest tests/unit/test_version.py tests/contract/test_schema_drift.py -q` — 7 passed. `node --test apps/client/tests/*.test.cjs` — 11 passed, 실패·skip 0. Rust 이식 결과 검증이 아닌 기존 구현 기준선이다.
-- **실행 검증**: Rust 구현/테스트/빌드 및 Windows native 패키징은 수행하지 않았다. 현재 환경은 Linux이며 PATH에 Cargo/Rust가 없다. macOS/Linux native 빌드는 기존 정책에 따라 미실행이다.
+- **실행 검증**: 초기 조사 당시 Rust 구현/테스트/빌드 및 Windows native 패키징은 수행하지 않았다. 실행 단계에서 Linux 환경에 고정 Rust toolchain을 설치했다. macOS/Linux native 빌드는 기존 정책에 따라 미실행이다.
 
 ### Rust 실행 작업 시작 (2026-10-10)
 
@@ -262,4 +262,10 @@ Windows x64 실제 산출물은 `dist/client-desktop/0.1.10/win-x64/`에 생성�
 - Rust 로컬 상태 8개 검사에서 기존 credential JSON, 0600·링크 차단·atomic write, 설정 revision/backup/Agent lock, 연결 파일 digest/만료/주소 한도를 확인했다.
 - Rust 등록 4개 검사에서 실제 loopback HTTP를 사용해 등록 성공·토큰 비노출·로컬 preflight·4 KiB 응답 한도·403 거부를 확인했다.
 - 로컬 `cargo test --workspace`: 18 passed; `cargo clippy --workspace --all-targets -- -D warnings`: PASS. Python 버전/schema 8 passed, Ruff PASS, Mypy 135 sources PASS.
-- Windows 전용 DPAPI·파일 잠금은 새 Windows Rust CI에서 검증 대기다. Tauri UI·provider·패키징 전환 및 기존 Python 삭제는 아직 미완료다.
+- Windows Rust CI [37979015221](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/37979015221)는 fmt/clippy와 16개 native 검사를 통과했다. DPAPI·파일 잠금의 Windows 구현 증거다.
+- 검토 및 Windows CI용 [Draft PR #1](https://github.com/tlsdbcjs/Remote-Desktop-Commander/pull/1)을 생성했다. merge/publish는 수행하지 않았다.
+- Task 3에서는 기존 schema의 저널·UNKNOWN/late result·retention clock·출력 예약과 영속 첨부, HTTPS/WSS handshake/epoch/reconcile/heartbeat/lease, 취소·deadline·job progress, 인증된 loopback background 제어를 구현했다.
+- Rust workspace 28개 검사 PASS: 계약 6, 경로/상태 8, 저널 5, 출력 2, dispatch 3, 등록 4. 동일 key 100회 실행 gate=1과 정책·lease 차단, deadline 정리 검사를 포함한다.
+- 실제 Gateway와 별도 Rust executable의 HTTPS 통합 5개 검사 PASS: 기존 Python credential 읽기·중복 시작/PID 유지·완전 종료, stale instance 거부, 잘못된 CA에서 연결 차단, Python journal 성공 결과 복구, 100 MiB 업로드/다운로드 재개 및 잘못된 SHA-256 거부.
+- protocol union validator를 캐시하여 프레임별 schema 재컴파일을 제거했고 기존 78개 operation 정규화 fixture를 그대로 통과했다.
+- Task 3의 native Windows 확장 검사는 새 CI 실행 대기다. Tauri UI·provider·패키징 전환 및 기존 Python 삭제는 아직 미완료다.

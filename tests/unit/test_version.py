@@ -29,7 +29,6 @@ def test_package_version_constants() -> None:
     assert racp_sdk.__version__ == VERSION
 
 
-
 def test_parse_semver() -> None:
     assert parse_semver("0.1.8") == (0, 1, 8)
     assert parse_semver("1.0.0") == (1, 0, 0)
@@ -67,11 +66,9 @@ def test_calculate_next_version_major() -> None:
 
 
 def test_calculate_next_version_combinations() -> None:
-    assert (
-        calculate_next_version("0.1.8", major_val=2, minor_val=3, patch_val=4)
-        == "2.3.4"
-    )
+    assert calculate_next_version("0.1.8", major_val=2, minor_val=3, patch_val=4) == "2.3.4"
     assert calculate_next_version("0.1.8", patch_val=12) == "0.1.12"
+
 
 def test_version_updates_rust_and_tauri(tmp_path: Path) -> None:
     from scripts.version import update_file

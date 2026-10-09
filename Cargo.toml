@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/racp-contract", "crates/racp-core", "crates/racp-runtime"]
+members = ["crates/racp-contract", "crates/racp-core", "crates/racp-runtime", "apps/agent-rust"]
 resolver = "2"
 
 [workspace.package]
@@ -25,3 +25,8 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-pemfile = "2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 futures-util = "0.3"
+rusqlite = { version = "0.37", features = ["bundled"] }
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
+webpki-roots = "1"
+sysinfo = "0.37"
+rand = "0.9"
