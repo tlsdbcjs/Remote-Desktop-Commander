@@ -43,6 +43,7 @@ pub use shell::Shell;
 mod containment;
 mod processes;
 pub use processes::Processes;
+pub mod browser;
 mod terminal;
 use std::sync::Arc;
 pub use terminal::{Terminal, TerminalBuffer};
