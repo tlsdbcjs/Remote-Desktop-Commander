@@ -37,6 +37,42 @@ pub(super) struct Page {
     pub loading: bool,
     pub blocked: bool,
 }
+fn detach(page: &mut Page, session: &str, native: &str, swapping: bool) -> bool {
+    let mut detached = vec![native.to_owned()];
+    for _ in 0..128 {
+        let children = page
+            .frames
+            .values()
+            .filter(|f| {
+                f.active
+                    && f.parent.as_ref().is_some_and(|p| detached.contains(p))
+                    && !detached.contains(&f.native)
+            })
+            .map(|f| f.native.clone())
+            .collect::<Vec<_>>();
+        if children.is_empty() {
+            break;
+        }
+        detached.extend(children);
+    }
+    let mut changed = false;
+    for frame in page.frames.values_mut().filter(|f| {
+        (page.session == session || f.session == session) && detached.contains(&f.native)
+    }) {
+        if swapping && frame.session != session {
+            // The replacement OOPIF can be ready before the old parent reports its
+            // swap. That notification must not erase the replacement's context.
+            continue;
+        }
+        if !swapping {
+            frame.active = false;
+        }
+        frame.context = None;
+        changed = true;
+    }
+    changed
+}
+
 pub(super) struct State {
     pub handle: Value,
     pub pages: BTreeMap<String, Page>,
@@ -778,34 +814,12 @@ impl Session {
                 .lock()
                 .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
             for page in state.pages.values_mut() {
-                let mut detached = vec![params["frameId"].as_str().unwrap_or("").to_owned()];
-                for _ in 0..128 {
-                    let child = page
-                        .frames
-                        .values()
-                        .filter(|f| {
-                            f.active
-                                && f.parent.as_ref().is_some_and(|p| detached.contains(p))
-                                && !detached.contains(&f.native)
-                        })
-                        .map(|f| f.native.clone())
-                        .collect::<Vec<_>>();
-                    if child.is_empty() {
-                        break;
-                    }
-                    detached.extend(child);
-                }
-                let mut changed = false;
-                for frame in page.frames.values_mut().filter(|f| {
-                    (page.session == session || f.session == session)
-                        && detached.contains(&f.native)
-                }) {
-                    if params["reason"] != "swap" {
-                        frame.active = false;
-                    }
-                    frame.context = None;
-                    changed = true;
-                }
+                let changed = detach(
+                    page,
+                    session,
+                    params["frameId"].as_str().unwrap_or(""),
+                    params["reason"] == "swap",
+                );
                 if changed {
                     page.revision += 1;
                     page.observation = None;
@@ -1053,5 +1067,43 @@ impl Provider for Browser {
             }
             Ok(())
         })
+    }
+}
+
+#[cfg(test)]
+mod frame_race_tests {
+    use super::*;
+    #[test]
+    fn late_parent_swap_preserves_new_child_context_but_remove_invalidates_it() {
+        let child = Frame {
+            id: "frame_child".into(),
+            native: "native_child".into(),
+            parent: Some("native_main".into()),
+            session: "replacement_session".into(),
+            context: Some("new_context".into()),
+            url: String::new(),
+            name: String::new(),
+            active: true,
+        };
+        let mut page = Page {
+            target: "target_main".into(),
+            session: "parent_session".into(),
+            handle: json!({}),
+            revision: 1,
+            main: "frame_main".into(),
+            frames: BTreeMap::from([("frame_child".into(), child)]),
+            observation: None,
+            refs: BTreeMap::new(),
+            loading: false,
+            blocked: false,
+        };
+        detach(&mut page, "parent_session", "native_child", true);
+        assert_eq!(
+            page.frames["frame_child"].context.as_deref(),
+            Some("new_context")
+        );
+        detach(&mut page, "parent_session", "native_child", false);
+        assert!(!page.frames["frame_child"].active);
+        assert!(page.frames["frame_child"].context.is_none());
     }
 }
