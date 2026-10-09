@@ -7,46 +7,11 @@ import os
 import subprocess
 
 import pytest
-from conftest import ROOT
-from racp_sdk.security import SecretStore, canonical_digest, digest
+from racp_sdk.security import SecretStore
+
+from .support import ROOT, operation
 
 pytestmark = pytest.mark.asyncio
-
-
-def operation(live, name, payload, suffix):
-    request = {
-        "protocol": 1,
-        "type": "request",
-        "device_id": live["device_id"],
-        "agent_boot_id": "boot_fixture",
-        "connection_epoch": 1,
-        "request_id": "req_" + suffix,
-        "operation_id": "op_" + suffix,
-        "trace_id": "0" * 32,
-        "timestamp": "2026-10-10T00:00:00Z",
-        "operation": name,
-        "timeout_ms": 120000,
-        "remaining_timeout_ms": 120000,
-        "execution_mode": "sync",
-        "idempotency_key": suffix,
-        "context": {
-            "principal_id": "owner_local",
-            "workspace_id": "default",
-            "execution_profile_id": "trusted_personal",
-            "policy_revision": 1,
-        },
-        "payload": payload,
-        "retain_key": True,
-    }
-    store = live["app"].state.control.store
-    store.accept(
-        digest("owner_local:" + live["device_id"]),
-        digest(suffix),
-        canonical_digest(request),
-        request,
-    )
-    store.transition(request["operation_id"], "RUNNING")
-    return request["operation_id"]
 
 
 async def fixture(live, **arguments):

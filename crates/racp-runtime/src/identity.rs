@@ -91,3 +91,15 @@ pub fn process_created(pid: u32) -> Result<f64, RacpError> {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn own_birth_identity_is_stable_and_dead_pid_is_rejected() {
+        let own = std::process::id();
+        let first = super::process_created(own).unwrap();
+        assert!(first > 0.0);
+        assert_eq!(super::process_created(own).unwrap(), first);
+        assert!(super::process_created(u32::MAX).is_err());
+    }
+}

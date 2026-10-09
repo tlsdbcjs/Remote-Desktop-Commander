@@ -5,7 +5,6 @@ import json
 import os
 import socket
 import ssl
-import subprocess
 from pathlib import Path
 
 import httpx
@@ -17,7 +16,7 @@ from racp_gateway.store import GatewayStore
 from racp_sdk.security import SecretStore, digest, token
 from tls_fixture import certificates
 
-ROOT = Path(__file__).resolve().parents[2]
+from .support import ROOT, bridge
 
 
 @pytest.fixture(scope="session")
@@ -25,28 +24,6 @@ def rust_agent() -> Path:
     executable = ROOT / "target" / "debug" / ("racp-agent.exe" if os.name == "nt" else "racp-agent")
     assert executable.exists(), "Build racp-agent before running integration tests"
     return executable
-
-
-async def bridge(executable: Path, state: Path, action: str, **data):
-    process = await asyncio.create_subprocess_exec(
-        str(executable),
-        "bridge",
-        "--state-dir",
-        str(state),
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
-    output, error = await asyncio.wait_for(
-        process.communicate(json.dumps({"action": action, **data}).encode() + b"\n"), 50
-    )
-    assert not error, "Rust bridge must not emit potentially sensitive diagnostics"
-    reply = json.loads(output)
-    if not reply.get("ok"):
-        raise RuntimeError(reply.get("code", "REQUEST_FAILED"))
-    assert process.returncode == 0
-    return reply["result"]
 
 
 @pytest_asyncio.fixture

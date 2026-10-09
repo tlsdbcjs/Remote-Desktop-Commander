@@ -81,6 +81,8 @@ async fn main() {
         Err(error) => {
             if action == "bridge" {
                 println!("{}", json!({"ok":false,"code":error.code}));
+            } else {
+                eprintln!("{}", error.code.0);
             }
             std::process::exit(4);
         }

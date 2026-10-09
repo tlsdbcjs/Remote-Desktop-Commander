@@ -2,8 +2,9 @@ import asyncio
 import json
 
 import pytest
-from conftest import bridge
 from racp_sdk.security import SecretStore
+
+from .support import bridge
 
 pytestmark = pytest.mark.asyncio
 
@@ -52,7 +53,8 @@ async def test_stale_control_instance_rejected(rust_live):
 async def test_existing_python_journal_result_reconciles_without_execution(rust_live):
     from racp_sdk.journal import Journal
     from racp_sdk.security import canonical_digest, digest
-    from test_artifacts import operation
+
+    from .support import operation
 
     live = rust_live
     op = operation(live, "shell.exec", {"argv": ["must-not-run"]}, "golden")

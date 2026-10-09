@@ -2,9 +2,10 @@ import asyncio
 import json
 
 import pytest
-from conftest import bridge
 from racp_sdk.security import SecretStore
 from tls_fixture import certificates
+
+from .support import bridge
 
 pytestmark = pytest.mark.asyncio
 

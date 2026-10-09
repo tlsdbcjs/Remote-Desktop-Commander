@@ -1,5 +1,7 @@
 name: quality
 on: [push, pull_request]
+env:
+  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.tools/playwright
 jobs:
   python:
     strategy:
