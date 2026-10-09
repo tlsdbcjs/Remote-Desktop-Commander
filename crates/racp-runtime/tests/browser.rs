@@ -82,7 +82,7 @@ async fn execute(
     owner: &str,
 ) -> serde_json::Value {
     let operation = format!("browser.{action}");
-    let result=browser.execute(json!({"operation":operation,"payload":racp_contract::validate_operation(&operation,payload).unwrap(),"operation_id":racp_contract::new_id("op"),"remaining_timeout_ms":15000,"context":{"workspace_id":"default","principal_id":owner}}),CancellationToken::new()).await.unwrap();
+    let result=browser.execute(json!({"operation":operation,"payload":racp_contract::validate_operation(&operation,payload.clone()).unwrap_or_else(|e|panic!("{operation} payload={payload}: {e}")),"operation_id":racp_contract::new_id("op"),"remaining_timeout_ms":15000,"context":{"workspace_id":"default","principal_id":owner}}),CancellationToken::new()).await.unwrap();
     if result["state"] != "SUCCEEDED" {
         eprintln!(
             "browser acceptance operation={action} code={}",
@@ -339,6 +339,29 @@ async fn browser_cancel_cleanup_includes_startup_before_cdp_is_ready() {
     browser.cleanup().await.unwrap();
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn concurrent_close_and_agent_cleanup_finish_owned_profile_once() {
+    let (root, browser) = setup();
+    let opened = succeeded(execute(&browser, "open", json!({}), "owner_one").await);
+    let (closed, cleanup) = tokio::join!(
+        execute(
+            &browser,
+            "close",
+            json!({"browser_id":opened["browser_id"]}),
+            "owner_one"
+        ),
+        browser.cleanup()
+    );
+    assert_eq!(closed["state"], "SUCCEEDED", "{closed}");
+    cleanup.unwrap();
+    assert_eq!(
+        std::fs::read_dir(root.path().join("data/browser"))
+            .unwrap()
+            .count(),
+        0
+    );
+}
+
 #[tokio::test]
 async fn cdp_discovery_rejects_redirects_remote_targets_and_oversized_metadata() {
     for (status, body) in [
@@ -500,4 +523,180 @@ async fn cdp_cancellation_and_disconnect_release_pending_commands() {
     assert_eq!(error.code.0, "BROWSER_CLOSED");
     cdp.close().await;
     server.await.unwrap();
+}
+
+#[tokio::test]
+async fn external_cdp_opt_in_context_and_target_ownership() {
+    let (root, external) = setup();
+    let original = succeeded(execute(&external, "open", json!({}), "external_owner").await);
+    let profile = root
+        .path()
+        .join("data/browser")
+        .join(original["browser_id"].as_str().unwrap());
+    let port = std::fs::read_to_string(profile.join("DevToolsActivePort")).unwrap();
+    let endpoint = format!("http://127.0.0.1:{}", port.lines().next().unwrap());
+    let denied = execute(
+        &external,
+        "cdp_targets",
+        json!({"endpoint_url":endpoint}),
+        "owner_one",
+    )
+    .await;
+    assert_eq!(denied["error"]["code"], "PERMISSION_DENIED");
+    let settings: racp_core::AgentSettings = serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("attached"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+    let attached = Browser::new(
+        &settings,
+        "boot_attached",
+        BrowserConfig {
+            cdp_enabled: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let targets = succeeded(
+        execute(
+            &attached,
+            "cdp_targets",
+            json!({"endpoint_url":endpoint}),
+            "owner_one",
+        )
+        .await,
+    );
+    let target = targets["targets"][0]["target_id"].clone();
+    let isolated = succeeded(
+        execute(
+            &attached,
+            "attach",
+            json!({"endpoint_url":endpoint}),
+            "owner_one",
+        )
+        .await,
+    );
+    assert_ne!(isolated["pages"][0]["cdp_target_id"], target);
+    let borrowed = succeeded(
+        execute(
+            &attached,
+            "attach",
+            json!({"endpoint_url":endpoint,"context_mode":"existing","page_target_ids":[target]}),
+            "owner_one",
+        )
+        .await,
+    );
+    let snapshot = succeeded(
+        execute(
+            &attached,
+            "snapshot",
+            json!({"browser_id":borrowed["browser_id"],"page_id":borrowed["pages"][0]["page_id"]}),
+            "owner_one",
+        )
+        .await,
+    );
+    let mut page = observed(&borrowed, &snapshot);
+    page["expression"] = json!("1+1");
+    assert_eq!(
+        execute(&attached, "evaluate", page, "owner_one").await["error"]["code"],
+        "OPERATION_NOT_SUPPORTED"
+    );
+    succeeded(
+        execute(
+            &attached,
+            "close",
+            json!({"browser_id":borrowed["browser_id"]}),
+            "owner_one",
+        )
+        .await,
+    );
+    succeeded(
+        execute(
+            &attached,
+            "close",
+            json!({"browser_id":isolated["browser_id"]}),
+            "owner_one",
+        )
+        .await,
+    );
+    let targets = succeeded(
+        execute(
+            &attached,
+            "cdp_targets",
+            json!({"endpoint_url":endpoint}),
+            "owner_one",
+        )
+        .await,
+    );
+    assert!(
+        targets["targets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["target_id"] == target),
+        "borrowed page and external process must survive cleanup"
+    );
+    assert_eq!(
+        targets["targets"].as_array().unwrap().len(),
+        1,
+        "isolated context must be disposed"
+    );
+    attached.cleanup().await.unwrap();
+    external.cleanup().await.unwrap();
+}
+
+#[tokio::test]
+async fn failed_evaluation_records_started_effect_and_retains_no_child_after_timeout() {
+    let (_root, browser) = setup();
+    let opened = succeeded(execute(&browser, "open", json!({}), "owner_one").await);
+    let snap = succeeded(
+        execute(
+            &browser,
+            "snapshot",
+            json!({"browser_id":opened["browser_id"],"page_id":opened["pages"][0]["page_id"]}),
+            "owner_one",
+        )
+        .await,
+    );
+    let mut p = observed(&opened, &snap);
+    p["expression"] = json!("()=>{globalThis.changed=true;throw new Error('secret');}");
+    let result = execute(&browser, "evaluate", p.clone(), "owner_one").await;
+    assert_eq!(result["error"]["execution_state"], "unknown");
+    p["expression"] = json!("()=>new Promise(()=>{})");
+    let operation = "browser.evaluate";
+    let result=browser.execute(json!({"operation":operation,"payload":racp_contract::validate_operation(operation,p).unwrap(),"operation_id":racp_contract::new_id("op"),"remaining_timeout_ms":100,"context":{"workspace_id":"default","principal_id":"owner_one"}}),CancellationToken::new()).await.unwrap();
+    assert_eq!(result["state"], "TIMED_OUT");
+    assert_eq!(result["error"]["execution_state"], "unknown");
+    assert!(browser.inventory().iter().all(|h| h["state"] == "CLOSED"));
+    browser.cleanup().await.unwrap();
+}
+
+#[tokio::test]
+async fn browser_process_is_protected_from_generic_termination() {
+    let (root, browser) = setup();
+    let opened = succeeded(execute(&browser, "open", json!({}), "owner_one").await);
+    let settings: racp_core::AgentSettings=serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("data"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+    let processes = racp_runtime::providers::Processes::new(&settings, "boot_browser").unwrap();
+    let id = opened["browser_id"].as_str().unwrap();
+    let mut cursor = serde_json::Value::Null;
+    let owned = loop {
+        let list=processes.execute(json!({"operation":"process.list","payload":{"limit":100,"cursor":cursor},"remaining_timeout_ms":30000,"context":{"workspace_id":"default","principal_id":"owner_one"}}),CancellationToken::new()).await.unwrap();
+        if let Some(p) = list["result"]["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| {
+                p["cmdline"].as_array().is_some_and(|args| {
+                    args.iter()
+                        .any(|a| a.as_str().is_some_and(|s| s.contains(id)))
+                })
+            })
+        {
+            break p.clone();
+        }
+        cursor = list["result"]["next_cursor"].clone();
+        assert!(
+            !cursor.is_null(),
+            "owned browser missing from process snapshot"
+        );
+    };
+    let result=processes.execute(json!({"operation":"process.terminate","payload":{"pid":owned["pid"],"create_time":owned["create_time"],"agent_boot_id":"boot_browser","force":true},"remaining_timeout_ms":1000,"context":{"workspace_id":"default","principal_id":"owner_one"}}),CancellationToken::new()).await.unwrap();
+    assert_eq!(result["error"]["code"], "PERMISSION_DENIED");
+    browser.cleanup().await.unwrap();
 }

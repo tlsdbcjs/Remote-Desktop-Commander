@@ -74,39 +74,47 @@ fn detach(page: &mut Page, session: &str, native: &str, swapping: bool) -> bool 
 }
 
 pub(super) struct State {
+    pub uploads: usize,
+    pub download: Option<super::files::Download>,
     pub handle: Value,
     pub pages: BTreeMap<String, Page>,
     pub expires: Instant,
 }
 pub(super) struct Session {
-    events: Arc<Mutex<super::BrowserOutbox>>,
-    siblings: std::sync::Weak<Mutex<BTreeMap<String, Arc<Session>>>>,
+    pub(super) events: Arc<Mutex<super::BrowserOutbox>>,
+    pub(super) siblings: std::sync::Weak<Mutex<BTreeMap<String, Arc<Session>>>>,
     pub opening_operation: String,
+    pub remote: Option<String>,
+    pub borrowed: bool,
+    pub allow_termination: bool,
+    pub selected: Vec<String>,
     pub cdp: Cdp,
     pub context: String,
     pub state: Mutex<State>,
     pub process: Mutex<Option<OwnedProcess>>,
+    pub protected: Mutex<Option<crate::identity::ProtectedProcess>>,
     pub profile: PathBuf,
     pub width: u64,
     pub height: u64,
     pub serial: tokio::sync::Mutex<()>,
+    pub(super) closing: tokio::sync::Mutex<()>,
     pub notify: tokio::sync::Notify,
     pub stop: CancellationToken,
     pub worker: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 #[derive(Clone)]
 pub struct Browser {
-    outbox: Arc<Mutex<super::BrowserOutbox>>,
+    pub(super) outbox: Arc<Mutex<super::BrowserOutbox>>,
     pub(super) cursor: crate::providers::cursor::Cursor,
-    opening: Arc<tokio::sync::Mutex<()>>,
+    pub(super) opening: Arc<tokio::sync::Mutex<()>>,
     pub(super) config: BrowserConfig,
     pub(super) sessions: Arc<Mutex<BTreeMap<String, Arc<Session>>>>,
-    root: PathBuf,
+    pub(super) root: PathBuf,
     pub(super) spool: PathBuf,
-    boot: String,
-    device: String,
-    instance: String,
-    guards: Workspaces,
+    pub(super) boot: String,
+    pub(super) device: String,
+    pub(super) instance: String,
+    pub(super) guards: Workspaces,
 }
 impl Browser {
     pub fn new(
@@ -143,6 +151,7 @@ impl Browser {
             guards: Workspaces::new(&settings.workspace, &settings.allowed_workspaces)?,
         };
         let weak = Arc::downgrade(&this.sessions);
+        let quota_root = this.root.clone();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_millis(100)).await;
@@ -153,6 +162,11 @@ impl Browser {
                     .lock()
                     .map(|s| s.values().cloned().collect::<Vec<_>>())
                     .unwrap_or_default();
+                let quota = racp_core::browser_temporary_usage(&quota_root);
+                if let Err(ref error) = quota {
+                    eprintln!("browser quota observation failed code={}", error.code.0);
+                }
+                let quota_exhausted = quota.map_or(true, |used| used > 10 * 1024 * 1024 * 1024);
                 for session in snapshot {
                     let expired = session
                         .state
@@ -175,7 +189,7 @@ impl Browser {
                         .state
                         .lock()
                         .is_ok_and(|s| s.handle["state"] == "ACTIVE");
-                    if active && (expired || session.cdp.is_closed()) {
+                    if active && (expired || quota_exhausted || session.cdp.is_closed()) {
                         let _ = session.close().await;
                     }
                 }
@@ -215,6 +229,7 @@ impl Browser {
         &self,
         request: &Value,
         cancel: &CancellationToken,
+        effect: &std::sync::atomic::AtomicBool,
     ) -> Result<Value, RacpError> {
         let _opening = tokio::select! { _=cancel.cancelled()=>return Err(RacpError::new("CANCELLED")), opening=self.opening.lock()=>opening };
         let workspace = request["context"]["workspace_id"]
@@ -277,11 +292,13 @@ impl Browser {
         if request["payload"]["headless"] != false {
             argv.push("--headless=new".into());
         }
+        effect.store(true, std::sync::atomic::Ordering::SeqCst);
         let mut process = OwnedProcess::spawn(CommandSpec {
             argv,
             environment: containment::environment(&json!({}))?,
             cwd,
         })?;
+        let protected = crate::identity::ProtectedProcess::register(process.pid())?;
         let connection = async {
             let deadline = Instant::now() + Duration::from_secs(10);
             loop {
@@ -345,18 +362,26 @@ impl Browser {
             events: self.outbox.clone(),
             siblings: Arc::downgrade(&self.sessions),
             opening_operation: request["operation_id"].as_str().unwrap_or("").into(),
+            remote: None,
+            borrowed: false,
+            allow_termination: true,
+            selected: vec![],
             cdp,
             context,
             state: Mutex::new(State {
+                uploads: 0,
+                download: None,
                 handle,
                 pages: BTreeMap::new(),
                 expires: Instant::now() + Duration::from_secs(3600),
             }),
             process: Mutex::new(Some(process)),
+            protected: Mutex::new(Some(protected)),
             profile,
             width: request["payload"]["width"].as_u64().unwrap_or(1280),
             height: request["payload"]["height"].as_u64().unwrap_or(720),
             serial: tokio::sync::Mutex::new(()),
+            closing: tokio::sync::Mutex::new(()),
             notify: tokio::sync::Notify::new(),
             stop: CancellationToken::new(),
             worker: tokio::sync::Mutex::new(None),
@@ -396,6 +421,22 @@ impl Session {
                 &self.stop,
             )
             .await?;
+        self.network_policy(session, config).await?;
+        self.cdp
+            .call(
+                "Fetch.enable",
+                json!({"patterns":[{"urlPattern":"*"}]}),
+                Some(session),
+                &self.stop,
+            )
+            .await?;
+        Ok(())
+    }
+    pub(super) async fn network_policy(
+        &self,
+        session: &str,
+        config: &BrowserConfig,
+    ) -> Result<(), RacpError> {
         // Pinned Chromium 153 exposes ordered native URLPattern rules, including
         // allow rules. WebSockets additionally require the protected constructor guard
         // installed before page/worker scripts; CDP URL blocking does not fence them.
@@ -427,17 +468,10 @@ impl Session {
                 &self.stop,
             )
             .await?;
-        self.cdp
-            .call(
-                "Fetch.enable",
-                json!({"patterns":[{"urlPattern":"*"}]}),
-                Some(session),
-                &self.stop,
-            )
-            .await?;
+
         Ok(())
     }
-    fn emit(&self, kind: &str, status: &str) {
+    pub(super) fn emit(&self, kind: &str, status: &str) {
         let Some(siblings) = self.siblings.upgrade() else {
             return;
         };
@@ -471,7 +505,7 @@ impl Session {
             .unwrap_or(Value::Null)
     }
     pub fn pages(&self) -> Vec<Value> {
-        self.state.lock().map(|s|s.pages.iter().map(|(id,p)|json!({"page_id":id,"navigation_revision":p.revision.to_string(),"closed":p.handle["state"]=="CLOSED","ownership":"racp_owned","cdp_target_id":p.target})).collect()).unwrap_or_default()
+        self.state.lock().map(|s|s.pages.iter().map(|(id,p)|json!({"page_id":id,"navigation_revision":p.revision.to_string(),"closed":p.handle["state"]=="CLOSED","ownership":p.handle["ownership"],"cdp_target_id":p.target})).collect()).unwrap_or_default()
     }
     pub async fn new_page(&self, cancel: &CancellationToken) -> Result<Value, RacpError> {
         if self
@@ -494,6 +528,16 @@ impl Session {
             )
             .await?;
         let target = target["targetId"].as_str().unwrap_or("");
+        if self.remote.is_some() {
+            self.cdp
+                .call(
+                    "Target.attachToTarget",
+                    json!({"targetId":target,"flatten":true}),
+                    None,
+                    cancel,
+                )
+                .await?;
+        }
         loop {
             let notified = self.notify.notified();
             if let Some(id) = self
@@ -513,6 +557,23 @@ impl Session {
         }
     }
     pub async fn close(&self) -> Result<Value, RacpError> {
+        let _closing = self.closing.lock().await;
+        {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| RacpError::new("CLEANUP_FAILED"))?;
+            if state.handle["state"] == "CLOSED" {
+                return Ok(
+                    json!({"browser_id":state.handle["id"],"cleanup_status":"complete","handle":state.handle}),
+                );
+            }
+            state.handle["state"] = json!("CLOSING");
+            state.handle["availability"] = json!("unavailable");
+        }
+        if self.remote.is_some() {
+            self.cleanup_remote().await?;
+        }
         self.stop.cancel();
         self.cdp.close().await;
         if let Some(worker) = self.worker.lock().await.take() {
@@ -536,11 +597,25 @@ impl Session {
                     std::thread::sleep(Duration::from_millis(10));
                 }
                 owned.take();
+                self.protected
+                    .lock()
+                    .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
+                    .take();
             }
         }
         // Only our uniquely created profile is removed, after the owned process tree exits.
-        if self.profile.exists() {
-            std::fs::remove_dir_all(&self.profile).map_err(|_| RacpError::new("CLEANUP_FAILED"))?;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if !self.profile.exists() {
+                break;
+            }
+            match std::fs::remove_dir_all(&self.profile) {
+                Ok(()) => break,
+                Err(_) if Instant::now() >= deadline => {
+                    return Err(RacpError::new("CLEANUP_FAILED"))
+                }
+                Err(_) => tokio::time::sleep(Duration::from_millis(20)).await,
+            }
         }
         let mut state = self
             .state
@@ -557,7 +632,7 @@ impl Session {
         self.emit("inventory", "closed");
         Ok(result)
     }
-    async fn start(self: &Arc<Self>, config: BrowserConfig) {
+    pub(super) async fn start(self: &Arc<Self>, config: BrowserConfig) {
         let mut events = self.cdp.subscribe();
         let weak = Arc::downgrade(self);
         let stop = self.stop.clone();
@@ -571,8 +646,10 @@ impl Session {
                     session.cdp.close().await;
                     break;
                 };
+                let method = event["method"].as_str().unwrap_or("").to_owned();
                 let result = session.event(event, &config).await;
-                if result.is_err() {
+                if let Err(error) = result {
+                    eprintln!("browser event failed method={method} code={}", error.code.0);
                     session.stop.cancel();
                     session.cdp.close().await;
                     break;
@@ -585,19 +662,45 @@ impl Session {
         let method = event["method"].as_str().unwrap_or("");
         let params = &event["params"];
         let session = event["sessionId"].as_str().unwrap_or("");
+        if matches!(
+            method,
+            "Browser.downloadWillBegin" | "Browser.downloadProgress"
+        ) {
+            return self.download_event(method, params, config).await;
+        }
         if method == "Target.attachedToTarget" {
             let target = &params["targetInfo"];
             let child = params["sessionId"].as_str().unwrap_or("");
             if target["type"] == "page" {
-                if target["browserContextId"] != self.context {
-                    self.cdp
+                let accepted = if self.borrowed {
+                    self.selected.iter().any(|t| target["targetId"] == *t)
+                        || target["browserContextId"] == self.context && !self.context.is_empty()
+                } else {
+                    target["browserContextId"] == self.context
+                };
+                if !accepted {
+                    // Another CDP client may create its own isolated context in our browser.
+                    // Its targets do not belong to this provider session.
+                    if params["waitingForDebugger"] == true {
+                        let _ = self
+                            .cdp
+                            .call(
+                                "Runtime.runIfWaitingForDebugger",
+                                json!({}),
+                                Some(child),
+                                &self.stop,
+                            )
+                            .await;
+                    }
+                    let _ = self
+                        .cdp
                         .call(
-                            "Target.closeTarget",
-                            json!({"targetId":target["targetId"]}),
+                            "Target.detachFromTarget",
+                            json!({"sessionId":child}),
                             None,
                             &self.stop,
                         )
-                        .await?;
+                        .await;
                     return Ok(());
                 }
                 let id = new_id("page");
@@ -770,7 +873,24 @@ impl Session {
                     .await?;
             }
         } else if method == "Fetch.requestPaused" {
-            let allowed = config.allowed(params["request"]["url"].as_str().unwrap_or(""));
+            let url = params["request"]["url"].as_str().unwrap_or("");
+            let armed_blob = url
+                .strip_prefix("blob:")
+                .is_some_and(|inner| config.allowed(inner))
+                && {
+                    let state = self
+                        .state
+                        .lock()
+                        .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+                    state.download.as_ref().is_some_and(|download| {
+                        state.pages.get(download.page()).is_some_and(|page| {
+                            page.frames
+                                .values()
+                                .any(|frame| frame.active && frame.native == params["frameId"])
+                        })
+                    })
+                };
+            let allowed = config.allowed(url) || armed_blob;
             if !allowed && params["resourceType"] == "Document" {
                 let mut state = self
                     .state
@@ -975,8 +1095,52 @@ impl Provider for Browser {
     }
     fn capabilities(&self) -> Vec<Value> {
         let installed = self.config.executable.as_ref().is_some_and(|p| p.is_file());
+        let mut operations = if installed {
+            vec![
+                "browser.open",
+                "browser.pages",
+                "browser.new_page",
+                "browser.close",
+                "browser.keepalive",
+                "browser.close_page",
+                "browser.navigate",
+                "browser.snapshot",
+                "browser.frames",
+                "browser.screenshot",
+                "browser.download",
+                "browser.upload",
+                "browser.click",
+                "browser.type",
+                "browser.key",
+                "browser.evaluate",
+            ]
+        } else {
+            vec![]
+        };
+        if installed || self.config.cdp_enabled {
+            operations.extend(["browser.attach", "browser.cdp_targets"]);
+            if !installed {
+                operations.extend([
+                    "browser.pages",
+                    "browser.new_page",
+                    "browser.close",
+                    "browser.keepalive",
+                    "browser.close_page",
+                    "browser.navigate",
+                    "browser.snapshot",
+                    "browser.frames",
+                    "browser.screenshot",
+                    "browser.upload",
+                    "browser.click",
+                    "browser.type",
+                    "browser.key",
+                    "browser.evaluate",
+                ]);
+            }
+        }
+        let available = installed || self.config.cdp_enabled;
         vec![
-            json!({"name":"browser","version":"1.0.0","operations":if installed {vec!["browser.open","browser.pages","browser.new_page","browser.close","browser.keepalive","browser.close_page","browser.navigate","browser.snapshot","browser.frames","browser.screenshot","browser.click","browser.type","browser.key","browser.evaluate"]}else{vec![]},"installed":installed,"supported":true,"enabled":true,"healthy":installed,"unavailable_reason":if installed {Value::Null}else{json!("BROWSER_RUNTIME_UNAVAILABLE")},"attributes":{"engine":"chromium","automation":"native_cdp","cdp_enabled":self.config.cdp_enabled}}),
+            json!({"name":"browser","version":"1.0.0","operations":operations,"installed":available,"supported":true,"enabled":true,"healthy":available,"unavailable_reason":if available {Value::Null}else{json!("BROWSER_RUNTIME_UNAVAILABLE")},"attributes":{"engine":"chromium","automation":"native_cdp","cdp_enabled":self.config.cdp_enabled}}),
         ]
     }
     fn inventory(&self) -> Vec<Value> {
@@ -1009,7 +1173,8 @@ impl Provider for Browser {
             let timeout =
                 Duration::from_millis(request["remaining_timeout_ms"].as_u64().unwrap_or(30000));
             let scope = cancel.child_token();
-            let run = self.run(&request, &scope);
+            let effect = std::sync::atomic::AtomicBool::new(false);
+            let run = self.run(&request, &scope, &effect);
             tokio::pin!(run);
             // Keep the execution future alive after cancellation so startup can reap its
             // child and remove its profile before the terminal outcome is recorded.
@@ -1027,8 +1192,13 @@ impl Provider for Browser {
             {
                 let session = self.get(&request).ok();
                 if let Some(session) = session {
-                    session.close().await?;
-                } else if request["operation"] == "browser.open" {
+                    if session.close().await.is_err() {
+                        result = Err(RacpError::new("EXECUTION_UNKNOWN"));
+                    }
+                } else if matches!(
+                    request["operation"].as_str(),
+                    Some("browser.open" | "browser.attach")
+                ) {
                     let sessions = self
                         .sessions
                         .lock()
@@ -1041,14 +1211,16 @@ impl Provider for Browser {
                         .cloned()
                         .collect::<Vec<_>>();
                     for session in sessions {
-                        session.close().await?;
+                        if session.close().await.is_err() {
+                            result = Err(RacpError::new("EXECUTION_UNKNOWN"));
+                        }
                     }
                 }
             }
             Ok(match result {
                 Ok(result) => json!({"state":"SUCCEEDED","result":result,"error":null}),
                 Err(error) => {
-                    json!({"state":match error.code.0 {"CANCELLED"=>"CANCELLED","TIMEOUT"=>"TIMED_OUT",_=>"FAILED"},"result":null,"error":error_value(error.code.0,"browser operation failed","not_started")})
+                    json!({"state":match error.code.0 {"CANCELLED"=>"CANCELLED","TIMEOUT"=>"TIMED_OUT","CLEANUP_FAILED"|"EXECUTION_UNKNOWN"=>"UNKNOWN",_=>"FAILED"},"result":null,"error":error_value(error.code.0,"browser operation failed",if effect.load(std::sync::atomic::Ordering::SeqCst) {"unknown"} else {"not_started"})})
                 }
             })
         })

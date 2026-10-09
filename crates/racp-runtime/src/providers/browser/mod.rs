@@ -1,6 +1,9 @@
 //! Chromium is controlled directly over CDP; no language runtime is launched.
+mod attach;
 pub mod cdp;
 mod events;
+mod files;
+mod keys;
 mod operations;
 pub use events::BrowserOutbox;
 mod session;

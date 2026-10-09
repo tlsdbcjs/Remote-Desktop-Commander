@@ -16,9 +16,16 @@ async fn main() {
     let result = async {
         let state = state.ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
         racp_core::validate_local_path(&state)?;
+        let mut browser = racp_runtime::providers::browser::BrowserConfig::bundled();
+        browser.cdp_enabled = args.iter().any(|a| a == "--enable-cdp");
+        browser.allow_origins = args
+            .windows(2)
+            .filter(|a| a[0] == "--browser-allow-origin")
+            .map(|a| a[1].clone())
+            .collect();
         match action {
             "serve" => {
-                racp_runtime::serve(&state).await?;
+                racp_runtime::serve_with_browser(&state, browser).await?;
                 Ok(Value::Null)
             }
             "run" => {
@@ -27,7 +34,11 @@ async fn main() {
                     "agent-{}.lock",
                     racp_contract::digest(&settings.device_id)
                 )))?;
-                let agent = racp_runtime::Agent::new(settings, values["credential"].clone())?;
+                let agent = racp_runtime::Agent::with_browser(
+                    settings,
+                    values["credential"].clone(),
+                    browser,
+                )?;
                 let shutdown = tokio_util::sync::CancellationToken::new();
                 let token = shutdown.clone();
                 tokio::spawn(async move {

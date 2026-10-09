@@ -243,6 +243,52 @@ fn token_sid(process: windows_sys::Win32::Foundation::HANDLE) -> Result<Vec<u8>,
     Ok(unsafe { std::slice::from_raw_parts(sid.cast::<u8>(), length) }.to_vec())
 }
 
+/// Native provider processes and their descendants cannot be controlled as user targets.
+static PROTECTED: std::sync::LazyLock<std::sync::Mutex<std::collections::BTreeMap<u32, f64>>> =
+    std::sync::LazyLock::new(Default::default);
+pub struct ProtectedProcess(u32);
+impl ProtectedProcess {
+    pub fn register(pid: u32) -> Result<Self, RacpError> {
+        let birth = process_created(pid)?;
+        PROTECTED
+            .lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+            .insert(pid, birth);
+        Ok(Self(pid))
+    }
+}
+impl Drop for ProtectedProcess {
+    fn drop(&mut self) {
+        if let Ok(mut protected) = PROTECTED.lock() {
+            protected.remove(&self.0);
+        }
+    }
+}
+pub fn provider_protected(system: &sysinfo::System, pid: u32) -> bool {
+    let Ok(roots) = PROTECTED.lock() else {
+        return true;
+    };
+    let mut target = Some(sysinfo::Pid::from_u32(pid));
+    let mut seen = std::collections::BTreeSet::new();
+    for _ in 0..128 {
+        let Some(current) = target else {
+            break;
+        };
+        if !seen.insert(current) {
+            return true;
+        }
+        if let Some(expected) = roots.get(&current.as_u32()) {
+            if process_created(current.as_u32())
+                .is_ok_and(|observed| (observed - expected).abs() <= 0.000001)
+            {
+                return true;
+            }
+        }
+        target = system.process(current).and_then(|p| p.parent());
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

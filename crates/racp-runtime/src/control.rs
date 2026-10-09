@@ -170,11 +170,17 @@ impl ControlClient {
     }
 }
 pub async fn serve(state: &Path) -> Result<(), RacpError> {
+    serve_with_browser(state, crate::providers::browser::BrowserConfig::bundled()).await
+}
+pub async fn serve_with_browser(
+    state: &Path,
+    config: crate::providers::browser::BrowserConfig,
+) -> Result<(), RacpError> {
     let (settings, credentials) = load_settings(state, true)?;
     let _agent_lock =
         InstanceLock::acquire(&state.join(format!("agent-{}.lock", digest(&settings.device_id))))?;
     let launch_digest = canonical_digest(&serde_json::to_value(&settings)?);
-    let agent = Agent::new(settings, credentials["credential"].clone())?;
+    let agent = Agent::with_browser(settings, credentials["credential"].clone(), config)?;
     let background = state.join("background");
     private_dir(&background)?;
     let listener = TcpListener::bind("127.0.0.1:0").await?;

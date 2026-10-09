@@ -64,3 +64,36 @@ fn spool_bounds_before_side_effect_and_cleanup_remains_possible() {
         .register(&root.path().join("outside"), "op_1", "text/plain")
         .is_err());
 }
+
+#[test]
+fn retained_browser_files_share_the_spool_admission_budget() {
+    let root = tempfile::tempdir().unwrap();
+    let outputs = OutputSpool::new(
+        root.path().join("spool"),
+        Journal::open(&root.path().join("execution.db")).unwrap(),
+    )
+    .unwrap();
+    let uploads = root.path().join("browser/browser_one/uploads/upload_one");
+    std::fs::create_dir_all(&uploads).unwrap();
+    std::fs::write(
+        uploads.join("retained.bin"),
+        b"one byte crosses the shared limit",
+    )
+    .unwrap();
+    for n in 0..9 {
+        outputs
+            .reserve(&format!("op_reserved_{n}"), "filesystem.read", &json!({}))
+            .unwrap();
+    }
+    assert_eq!(
+        outputs
+            .reserve("op_new", "filesystem.read", &json!({}))
+            .unwrap_err()
+            .code
+            .0,
+        "RESOURCE_EXHAUSTED"
+    );
+    outputs
+        .reserve("op_close", "browser.close", &json!({}))
+        .unwrap();
+}

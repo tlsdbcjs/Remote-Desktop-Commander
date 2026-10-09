@@ -94,6 +94,9 @@ impl OutputSpool {
                 used = used.saturating_add(info.len());
             }
         }
+        if let Some(parent) = self.root.parent() {
+            used = used.saturating_add(browser_temporary_usage(&parent.join("browser"))?);
+        }
         if used
             .saturating_add(reservations.values().sum::<u64>())
             .saturating_add(amount)
@@ -275,4 +278,60 @@ impl OutputSpool {
         }
         Ok(())
     }
+}
+
+/// Account retained uploads, active downloads and Chromium profiles without following links.
+pub fn browser_temporary_usage(root: &Path) -> Result<u64, RacpError> {
+    if !root.exists() {
+        return Ok(0);
+    }
+    validate_local_path(root)?;
+    let mut queue = vec![(root.to_path_buf(), 0usize)];
+    let mut entries = 0usize;
+    let mut used = 0u64;
+    while let Some((directory, depth)) = queue.pop() {
+        let entries_in_dir = match std::fs::read_dir(directory) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e.into()),
+        };
+        for entry in entries_in_dir {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(e.into()),
+            };
+            entries += 1;
+            if entries > 100000 {
+                return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+            }
+            let info = match std::fs::symlink_metadata(entry.path()) {
+                Ok(info) => info,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(e.into()),
+            };
+            if info.file_type().is_symlink() {
+                continue;
+            }
+            #[cfg(windows)]
+            {
+                use std::os::windows::fs::MetadataExt;
+                if info.file_attributes() & 0x400 != 0 {
+                    continue;
+                }
+            }
+            if info.is_file() {
+                used = used.saturating_add(info.len());
+            } else if info.is_dir() {
+                if depth >= 16 {
+                    return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+                }
+                queue.push((entry.path(), depth + 1));
+            }
+            if used > 10 * 1024 * 1024 * 1024 {
+                return Ok(used);
+            }
+        }
+    }
+    Ok(used)
 }

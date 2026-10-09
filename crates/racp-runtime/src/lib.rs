@@ -5,7 +5,7 @@ mod control;
 mod identity;
 mod peer;
 mod transport;
-pub use control::{activity, serve, ControlClient};
+pub use control::{activity, serve, serve_with_browser, ControlClient};
 pub use transport::Agent;
 
 mod dispatch;

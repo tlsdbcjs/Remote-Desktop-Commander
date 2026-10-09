@@ -248,7 +248,8 @@ impl Processes {
             }
             parent = system.process(p).and_then(|p| p.parent());
         }
-        if pid <= 1 || ancestors.contains(&pid) {
+        if pid <= 1 || ancestors.contains(&pid) || crate::identity::provider_protected(system, pid)
+        {
             return true;
         }
         let Some(p) = system.process(sysinfo::Pid::from_u32(pid)) else {

@@ -14,15 +14,32 @@ impl Browser {
         &self,
         request: &Value,
         cancel: &CancellationToken,
+        effect: &std::sync::atomic::AtomicBool,
     ) -> Result<Value, RacpError> {
         let action = request["operation"].as_str().unwrap_or("");
         let p = &request["payload"];
+        if action == "browser.cdp_targets" {
+            return self.targets(request, cancel).await;
+        }
+        if action == "browser.attach" {
+            return self.attach(request, cancel, effect).await;
+        }
         if action == "browser.open" {
-            return self.open(request, cancel).await;
+            return self.open(request, cancel, effect).await;
         }
         let session = self.get(request)?;
         let _serial = session.serial.lock().await;
+        if session.borrowed
+            && (action == "browser.download"
+                || matches!(
+                    action,
+                    "browser.evaluate" | "browser.upload" | "browser.close_page"
+                ) && !session.allow_termination)
+        {
+            return Err(RacpError::new("OPERATION_NOT_SUPPORTED"));
+        }
         if action == "browser.close" {
+            effect.store(true, std::sync::atomic::Ordering::SeqCst);
             return session.close().await;
         }
         if session.handle()["state"] != "ACTIVE" {
@@ -32,6 +49,7 @@ impl Browser {
             return Ok(json!({"pages":session.pages()}));
         }
         if action == "browser.new_page" {
+            effect.store(true, std::sync::atomic::Ordering::SeqCst);
             return session.new_page(cancel).await;
         }
         if action == "browser.keepalive" {
@@ -150,6 +168,7 @@ impl Browser {
                 .pages[page_id]
                 .target
                 .clone();
+            effect.store(true, std::sync::atomic::Ordering::SeqCst);
             session
                 .cdp
                 .call(
@@ -179,6 +198,7 @@ impl Browser {
                 page.blocked = false;
                 page.observation = None;
             }
+            effect.store(true, std::sync::atomic::Ordering::SeqCst);
             let response = session
                 .cdp
                 .call(
@@ -234,7 +254,7 @@ impl Browser {
                 .decode(image["data"].as_str().unwrap_or(""))
                 .map_err(|_| RacpError::new("BROWSER_ERROR"))?;
             if raw.len() > 32 * 1024 * 1024 {
-                return Err(RacpError::new("OUTPUT_LIMIT_EXCEEDED"));
+                return Err(RacpError::new("RESOURCE_EXHAUSTED"));
             }
             let path = self.spool.join(format!("{}.png", new_id("browser")));
             let mut file = racp_core::secure_create_file(&path)?;
@@ -244,92 +264,53 @@ impl Browser {
                 json!({"browser_id":p["browser_id"],"page_id":page_id,"spool_path":path,"size_bytes":raw.len(),"sha256":racp_contract::digest(&raw),"artifact_id":null,"artifact_media_type":"image/png"}),
             );
         }
+        if action == "browser.download" {
+            let object = element(
+                &session,
+                p,
+                page_id,
+                &context,
+                &frame_native,
+                &page_session,
+                cancel,
+            )
+            .await?;
+            return session
+                .download(request, &object, &page_session, &self.spool, cancel, effect)
+                .await;
+        }
+        if action == "browser.upload" {
+            let object = element(
+                &session,
+                p,
+                page_id,
+                &context,
+                &frame_native,
+                &page_session,
+                cancel,
+            )
+            .await?;
+            return session
+                .upload(request, &object, &page_session, &self.spool, cancel, effect)
+                .await;
+        }
         if matches!(action, "browser.click" | "browser.type") {
-            let object = if let Some(id) = p["ref"].as_str() {
-                session
-                    .state
-                    .lock()
-                    .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
-                    .pages[page_id]
-                    .refs
-                    .get(id)
-                    .cloned()
-                    .ok_or_else(|| RacpError::new("STALE_OBSERVATION"))?
-            } else if p["selector"]["by"] == "test_id" {
-                let value = serde_json::to_string(&p["selector"]["value"])?;
-                let result=session.cdp.call("Runtime.evaluate",json!({"expression":format!("Array.from(document.querySelectorAll('[data-testid]')).filter(e=>e.getAttribute('data-testid')==={value})"),"uniqueContextId":context}),Some(&page_session),cancel).await?;
-                let props = session
-                    .cdp
-                    .call(
-                        "Runtime.getProperties",
-                        json!({"objectId":result["result"]["objectId"],"ownProperties":true}),
-                        Some(&page_session),
-                        cancel,
-                    )
-                    .await?;
-                let matches = props["result"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter(|p| p["name"].as_str().is_some_and(|v| v.parse::<u32>().is_ok()))
-                    .filter_map(|p| p["value"]["objectId"].as_str())
-                    .collect::<Vec<_>>();
-                if matches.len() != 1 {
-                    return Err(RacpError::new(if matches.is_empty() {
-                        "ELEMENT_NOT_FOUND"
-                    } else {
-                        "AMBIGUOUS_TARGET"
-                    }));
-                }
-                matches[0].to_owned()
-            } else {
-                let tree = session
-                    .cdp
-                    .call(
-                        "Accessibility.getFullAXTree",
-                        json!({"frameId":frame_native}),
-                        Some(&page_session),
-                        cancel,
-                    )
-                    .await?;
-                let matches = tree["nodes"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter(|n| {
-                        n["ignored"] != true
-                            && n["role"]["value"] == p["selector"]["value"]
-                            && (p["selector"]["name"].is_null()
-                                || n["name"]["value"] == p["selector"]["name"])
-                    })
-                    .filter_map(|n| n["backendDOMNodeId"].as_u64())
-                    .collect::<Vec<_>>();
-                if matches.len() != 1 {
-                    return Err(RacpError::new(if matches.is_empty() {
-                        "ELEMENT_NOT_FOUND"
-                    } else {
-                        "AMBIGUOUS_TARGET"
-                    }));
-                }
-                let resolved = session
-                    .cdp
-                    .call(
-                        "DOM.resolveNode",
-                        json!({"backendNodeId":matches[0]}),
-                        Some(&page_session),
-                        cancel,
-                    )
-                    .await?;
-                resolved["object"]["objectId"]
-                    .as_str()
-                    .ok_or_else(|| RacpError::new("ELEMENT_NOT_FOUND"))?
-                    .into()
-            };
+            let object = element(
+                &session,
+                p,
+                page_id,
+                &context,
+                &frame_native,
+                &page_session,
+                cancel,
+            )
+            .await?;
             let connected=session.cdp.call("Runtime.callFunctionOn",json!({"objectId":object,"functionDeclaration":"function(){return this.isConnected && !this.disabled && this.getClientRects().length>0;}","returnByValue":true}),Some(&page_session),cancel).await?;
             if connected["result"]["value"] != true {
                 return Err(RacpError::new("STALE_OBSERVATION"));
             }
             if action == "browser.type" {
+                effect.store(true, std::sync::atomic::Ordering::SeqCst);
                 let prepared=session.cdp.call("Runtime.callFunctionOn",json!({"objectId":object,"functionDeclaration":"function(){this.focus();if(this.isContentEditable){this.textContent='';return true;}const proto=this.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;const setter=Object.getOwnPropertyDescriptor(proto,'value')?.set;if(!setter)return false;setter.call(this,'');this.dispatchEvent(new Event('input',{bubbles:true}));return true;}","returnByValue":true}),Some(&page_session),cancel).await?;
                 if prepared["result"]["value"] != true {
                     return Err(RacpError::new("ELEMENT_NOT_EDITABLE"));
@@ -344,68 +325,26 @@ impl Browser {
                     )
                     .await?;
             } else {
-                let described = session
-                    .cdp
-                    .call(
-                        "DOM.requestNode",
-                        json!({"objectId":object}),
-                        Some(&page_session),
-                        cancel,
-                    )
-                    .await?;
-                session
-                    .cdp
-                    .call(
-                        "DOM.scrollIntoViewIfNeeded",
-                        json!({"objectId":object}),
-                        Some(&page_session),
-                        cancel,
-                    )
-                    .await?;
-                let _ = described;
-                let box_model = session
-                    .cdp
-                    .call(
-                        "DOM.getBoxModel",
-                        json!({"objectId":object}),
-                        Some(&page_session),
-                        cancel,
-                    )
-                    .await?;
-                let quad = box_model["model"]["content"]
-                    .as_array()
-                    .ok_or_else(|| RacpError::new("ELEMENT_NOT_FOUND"))?;
-                if quad.len() != 8 {
-                    return Err(RacpError::new("ELEMENT_NOT_FOUND"));
-                }
-                let x = (quad[0].as_f64().unwrap_or(0.0) + quad[4].as_f64().unwrap_or(0.0)) / 2.0;
-                let y = (quad[1].as_f64().unwrap_or(0.0) + quad[5].as_f64().unwrap_or(0.0)) / 2.0;
-                for kind in ["mouseMoved", "mousePressed", "mouseReleased"] {
-                    session
-                        .cdp
-                        .call(
-                            "Input.dispatchMouseEvent",
-                            json!({"type":kind,"x":x,"y":y,"button":"left","clickCount":1}),
-                            Some(&page_session),
-                            cancel,
-                        )
-                        .await?;
-                }
+                click(&session, &object, &page_session, cancel, effect).await?;
             }
             return Ok(json!({"browser_id":p["browser_id"],"page_id":page_id}));
         }
         if action == "browser.evaluate" {
+            effect.store(true, std::sync::atomic::Ordering::SeqCst);
             let expression = p["expression"].as_str().unwrap_or("");
-            let expression=format!("(async()=>{{const fn=({expression});const value=await(typeof fn==='function'?fn():fn);const raw=JSON.stringify(value===undefined?null:value);if(new TextEncoder().encode(raw).length>65536)throw new Error('RACP_LIMIT');return raw;}})()");
+            let expression=format!("(async()=>{{const fn=({expression});const value=await(typeof fn==='function'?fn():fn);const raw=JSON.stringify(value===undefined?null:value);if(new TextEncoder().encode(raw).length>65536)return {{limit:true}};return {{raw}};}})()");
             let result=session.cdp.call("Runtime.evaluate",json!({"expression":expression,"uniqueContextId":context,"returnByValue":true,"awaitPromise":true}),Some(&page_session),cancel).await?;
             if result.get("exceptionDetails").is_some() {
                 return Err(RacpError::new("BROWSER_ERROR"));
             }
-            let raw = result["result"]["value"]
+            if result["result"]["value"]["limit"] == true {
+                return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+            }
+            let raw = result["result"]["value"]["raw"]
                 .as_str()
                 .ok_or_else(|| RacpError::new("BROWSER_ERROR"))?;
             if raw.len() > 65536 {
-                return Err(RacpError::new("OUTPUT_LIMIT_EXCEEDED"));
+                return Err(RacpError::new("RESOURCE_EXHAUSTED"));
             }
             return Ok(
                 json!({"browser_id":p["browser_id"],"page_id":page_id,"value":serde_json::from_str::<Value>(raw)?}),
@@ -416,24 +355,63 @@ impl Browser {
             if matches!(focus["result"]["value"].as_str(), Some("IFRAME" | "FRAME")) {
                 return Err(RacpError::new("FOCUS_MISMATCH"));
             }
-            let key = p["key"].as_str().unwrap_or("");
-            let (code, virtual_key) = match key {
-                "Tab" => ("Tab", 9),
-                "Enter" => ("Enter", 13),
-                "Escape" => ("Escape", 27),
-                "Backspace" => ("Backspace", 8),
-                "Delete" => ("Delete", 46),
-                "End" => ("End", 35),
-                "Home" => ("Home", 36),
-                "ArrowLeft" => ("ArrowLeft", 37),
-                "ArrowUp" => ("ArrowUp", 38),
-                "ArrowRight" => ("ArrowRight", 39),
-                "ArrowDown" => ("ArrowDown", 40),
-                _ => return Err(RacpError::new("INVALID_ARGUMENT")),
-            };
-            for kind in ["keyDown", "keyUp"] {
-                session.cdp.call("Input.dispatchKeyEvent",json!({"type":kind,"key":key,"code":code,"windowsVirtualKeyCode":virtual_key,"nativeVirtualKeyCode":virtual_key}),Some(&page_session),cancel).await?;
+            let (modifiers, key, mask) = super::keys::parse(p["key"].as_str().unwrap_or(""))?;
+            effect.store(true, std::sync::atomic::Ordering::SeqCst);
+            let pressed = async {
+                for modifier in &modifiers {
+                    session
+                        .cdp
+                        .call(
+                            "Input.dispatchKeyEvent",
+                            super::keys::event(modifier, "keyDown", mask),
+                            Some(&page_session),
+                            cancel,
+                        )
+                        .await?;
+                }
+                session
+                    .cdp
+                    .call(
+                        "Input.dispatchKeyEvent",
+                        super::keys::event(&key, "keyDown", mask),
+                        Some(&page_session),
+                        cancel,
+                    )
+                    .await?;
+                Ok::<_, RacpError>(())
             }
+            .await;
+            // Release with an independent budget even when the operation was cancelled.
+            let release = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+                let cleanup = CancellationToken::new();
+                session
+                    .cdp
+                    .call(
+                        "Input.dispatchKeyEvent",
+                        super::keys::event(&key, "keyUp", mask),
+                        Some(&page_session),
+                        &cleanup,
+                    )
+                    .await?;
+                for modifier in modifiers.iter().rev() {
+                    session
+                        .cdp
+                        .call(
+                            "Input.dispatchKeyEvent",
+                            super::keys::event(modifier, "keyUp", 0),
+                            Some(&page_session),
+                            &cleanup,
+                        )
+                        .await?;
+                }
+                Ok::<_, RacpError>(())
+            })
+            .await;
+            if !matches!(release, Ok(Ok(()))) {
+                session.close().await?;
+                return Err(RacpError::new("EXECUTION_UNKNOWN"));
+            }
+            pressed?;
             return Ok(json!({"browser_id":p["browser_id"],"page_id":page_id}));
         }
         if action == "browser.snapshot" {
@@ -543,7 +521,7 @@ impl Browser {
                 .map(|e| e["ref"].clone());
             let result = json!({"browser_id":p["browser_id"],"page_id":page_id,"observation_id":observation,"navigation_revision":revision.to_string(),"frame_id":frame_id,"url":metadata["result"]["value"]["url"],"page_url":page_url,"title":metadata["result"]["value"]["title"],"frames":frames.into_iter().take(16).collect::<Vec<_>>(),"semantic_tree":semantic,"elements":elements,"focused_ref":focused,"viewport":{"width":session.width,"height":session.height},"truncated":false,"trust":"untrusted_page_data"});
             if result.to_string().len() > 48 * 1024 {
-                return Err(RacpError::new("OUTPUT_LIMIT_EXCEEDED"));
+                return Err(RacpError::new("RESOURCE_EXHAUSTED"));
             }
             return Ok(result);
         }
@@ -552,4 +530,156 @@ impl Browser {
 }
 pub(super) fn frame_inventory(page: &Page) -> Vec<Value> {
     page.frames.values().filter(|f|f.active).map(|f|json!({"frame_id":f.id,"parent_frame_id":f.parent.as_ref().and_then(|parent|page.frames.values().find(|f|&f.native==parent)).map(|f|&f.id),"main":f.id==page.main,"url":bounded(&f.url,256),"name":bounded(&f.name,64)})).collect()
+}
+
+pub(super) async fn element(
+    session: &super::session::Session,
+    p: &Value,
+    page_id: &str,
+    context: &str,
+    frame_native: &str,
+    page_session: &str,
+    cancel: &CancellationToken,
+) -> Result<String, RacpError> {
+    let object = if let Some(id) = p["ref"].as_str() {
+        session
+            .state
+            .lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+            .pages[page_id]
+            .refs
+            .get(id)
+            .cloned()
+            .ok_or_else(|| RacpError::new("STALE_OBSERVATION"))?
+    } else if p["selector"]["by"] == "test_id" {
+        let value = serde_json::to_string(&p["selector"]["value"])?;
+        let result=session.cdp.call("Runtime.evaluate",json!({"expression":format!("Array.from(document.querySelectorAll('[data-testid]')).filter(e=>e.getAttribute('data-testid')==={value})"),"uniqueContextId":context}),Some(page_session),cancel).await?;
+        let props = session
+            .cdp
+            .call(
+                "Runtime.getProperties",
+                json!({"objectId":result["result"]["objectId"],"ownProperties":true}),
+                Some(page_session),
+                cancel,
+            )
+            .await?;
+        let matches = props["result"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|p| p["name"].as_str().is_some_and(|v| v.parse::<u32>().is_ok()))
+            .filter_map(|p| p["value"]["objectId"].as_str())
+            .collect::<Vec<_>>();
+        if matches.len() != 1 {
+            return Err(RacpError::new(if matches.is_empty() {
+                "ELEMENT_NOT_FOUND"
+            } else {
+                "AMBIGUOUS_TARGET"
+            }));
+        }
+        matches[0].to_owned()
+    } else {
+        let tree = session
+            .cdp
+            .call(
+                "Accessibility.getFullAXTree",
+                json!({"frameId":frame_native}),
+                Some(page_session),
+                cancel,
+            )
+            .await?;
+        let matches = tree["nodes"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|n| {
+                n["ignored"] != true
+                    && n["role"]["value"] == p["selector"]["value"]
+                    && (p["selector"]["name"].is_null()
+                        || n["name"]["value"] == p["selector"]["name"])
+            })
+            .filter_map(|n| n["backendDOMNodeId"].as_u64())
+            .collect::<Vec<_>>();
+        if matches.len() != 1 {
+            return Err(RacpError::new(if matches.is_empty() {
+                "ELEMENT_NOT_FOUND"
+            } else {
+                "AMBIGUOUS_TARGET"
+            }));
+        }
+        let resolved = session
+            .cdp
+            .call(
+                "DOM.resolveNode",
+                json!({"backendNodeId":matches[0]}),
+                Some(page_session),
+                cancel,
+            )
+            .await?;
+        resolved["object"]["objectId"]
+            .as_str()
+            .ok_or_else(|| RacpError::new("ELEMENT_NOT_FOUND"))?
+            .into()
+    };
+
+    Ok(object)
+}
+
+pub(super) async fn click(
+    session: &super::session::Session,
+    object: &str,
+    page_session: &str,
+    cancel: &CancellationToken,
+    effect: &std::sync::atomic::AtomicBool,
+) -> Result<(), RacpError> {
+    let described = session
+        .cdp
+        .call(
+            "DOM.requestNode",
+            json!({"objectId":object}),
+            Some(page_session),
+            cancel,
+        )
+        .await?;
+    session
+        .cdp
+        .call(
+            "DOM.scrollIntoViewIfNeeded",
+            json!({"objectId":object}),
+            Some(page_session),
+            cancel,
+        )
+        .await?;
+    let _ = described;
+    let box_model = session
+        .cdp
+        .call(
+            "DOM.getBoxModel",
+            json!({"objectId":object}),
+            Some(page_session),
+            cancel,
+        )
+        .await?;
+    let quad = box_model["model"]["content"]
+        .as_array()
+        .ok_or_else(|| RacpError::new("ELEMENT_NOT_FOUND"))?;
+    if quad.len() != 8 {
+        return Err(RacpError::new("ELEMENT_NOT_FOUND"));
+    }
+    let x = (quad[0].as_f64().unwrap_or(0.0) + quad[4].as_f64().unwrap_or(0.0)) / 2.0;
+    let y = (quad[1].as_f64().unwrap_or(0.0) + quad[5].as_f64().unwrap_or(0.0)) / 2.0;
+    effect.store(true, std::sync::atomic::Ordering::SeqCst);
+    for kind in ["mouseMoved", "mousePressed", "mouseReleased"] {
+        session
+            .cdp
+            .call(
+                "Input.dispatchMouseEvent",
+                json!({"type":kind,"x":x,"y":y,"button":"left","clickCount":1}),
+                Some(page_session),
+                cancel,
+            )
+            .await?;
+    }
+
+    Ok(())
 }
