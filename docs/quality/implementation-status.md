@@ -1,7 +1,7 @@
 # RACP 구현 작업 및 검증 현황 (Implementation Status)
 
 > **Document ID**: `DOC-QA-STATUS`\
-> **Status**: Active · **Target Version**: v0.1.10\
+> **Status**: Active · **Target Version**: v0.1.11\
 > **Last Updated**: 2026-10-10 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
@@ -281,3 +281,5 @@ Windows x64 실제 산출물은 `dist/client-desktop/0.1.10/win-x64/`에 생성�
 - Task 4 터미널·stream checkpoint: POSIX PTY 및 Windows ConPTY, 4 MiB raw history·UTF-8 바이트 cursor/eviction, owner·workspace·boot 경계, 입력/resize/keepalive/close, 8개 활성/64개 history, 8시간 TTL을 이식했다. 연결 epoch별 stream은 기존 4개 미확인 프레임 및 256 KiB byte window를 보존하고 ACK chunk boundary·gap·구독 정리·lease를 검사한다.
 - 이번 로컬 Rust workspace 45 passed (소유 자식용 fixture entry 3개 ignored), clippy PASS. 실제 HTTPS/WSS Gateway/Rust executable 통합 11 passed (65.65초). 스트림 RED는 기존 미구현 메시지에서 `stream_end`로 재현했고 GREEN에서는 credit 대기·재개, 한글 입력과 idempotent replay·종료를 확인했다.
 - Windows [37986271170](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/37986271170)의 native compile/clippy/unit 단계는 PASS이나 background 시작 통합 9개는 pipe EOF 대기 timeout, 독립 Artifact 1개는 PASS다. Rust 1.90 Windows `Command::spawn`의 기본 CreateProcess가 전체 inheritable handle을 넘기는 것을 확인했고, detached Agent를 NUL handle 하나의 명시적 HANDLE_LIST로 실행하도록 수정했다. Native launcher·ConPTY와 통합 결과는 새 CI 대기다. Task 3·4 native GREEN 및 전환 전체 완료는 아직 아니다.
+
+- Windows [37988463095](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/37988463095) 최종 PASS: fmt·clippy·native workspace, Rust Agent/example build 및 실제 HTTPS/WSS Gateway 통합 11개 모두 통과했다. background NUL-only handle 상속, 기존 Python DPAPI 등록·journal 읽기, start/status/동일 PID 재시작/완전 종료, Windows 파일·프로세스 tree·ConPTY·credit 및 100 MiB 입출력을 포함한다. Task 3·4는 이 native 증거로 GREEN 판정했다. 브라우저·Windows desktop·plugin·Tauri·패키징·Python 삭제는 후속 task다.

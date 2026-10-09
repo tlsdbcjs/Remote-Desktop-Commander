@@ -104,20 +104,20 @@
 - [x] **RED:** `dedup_100`는 동시 100회 동일 key 요청의 실행 횟수=1을 확인한다. `payload_conflict`는 같은 key/다른 payload를 거부한다. `recover_unknown`은 crash 이후 미확정 작업을 UNKNOWN으로 보존한다. `tls_and_lease`는 잘못된 CA/외부 HTTP를 거부하고 lease 만료 뒤 새 실행을 막는다. `stale_instance`는 PID/생성 시각/nonce 불일치 제어 응답을 거부한다.
 - [x] **Verify RED:** `cargo test -p racp-core --test journal`; `uv run pytest tests/rust_agent/test_lifecycle.py tests/rust_agent/test_tls.py -q`.
 - [x] **Implement:** 기존 SQLite schema와 retention/tombstone/reconcile 의미, Hello/Welcome/heartbeat/epoch/revoke/reconnect, job·deadline·취소·결과 복구를 이식한다. loopback 제어는 secret/nonce 및 process identity 검증을 사용한다. 기능별 capability는 구현된 provider만 광고한다.
-- [ ] **Verify GREEN:** Python Gateway를 실제 loopback HTTPS/WSS로 실행하고 Rust binary를 별도 프로세스로 연결한다. 빈 journal 대체와 임의 재실행이 발생하지 않아야 한다.
-- [ ] **Commit:** `feat(rust): implement journaled agent transport and lifecycle`.
+- [x] **Verify GREEN:** Python Gateway를 실제 loopback HTTPS/WSS로 실행하고 Rust binary를 별도 프로세스로 연결한다. 빈 journal 대체와 임의 재실행이 발생하지 않아야 한다.
+- [x] **Commit:** `feat(rust): implement journaled agent transport and lifecycle`.
 
 ## Task 4: 파일·프로세스·셸·터미널
 
-**Files:** runtime providers filesystem/process/shell/terminal, streams/outputs, `crates/racp-runtime/tests/providers.rs`, `tests/rust_agent/test_execution.py`.
+**Files:** runtime providers filesystem/process/shell/terminal, streams/outputs, `crates/racp-runtime/tests/{filesystem,processes,shell,terminal}.rs`, `tests/rust_agent/test_execution.py`.
 
 **Interfaces:** `Providers::execute(&self, request: &Request, cancel: CancellationToken) -> Result<OperationResult, RacpError>` (async). 동일 인터페이스를 Tasks 5~7의 provider에도 사용한다. `Providers::capabilities(&self) -> Vec<Capability>`는 정확한 supported/enabled/healthy를 반환한다.
 
-- [ ] **RED:** `workspace_escape`는 `..`, link, 다른 named workspace 탈출을 거부한다. `transfer_resume_100mib`는 재개 뒤 SHA-256 일치를 확인한다. `shell_cancel_tree`는 자식·손자 프로세스가 남지 않음을 확인한다. `process_identity_fence`는 재사용 PID를 거부한다. `terminal_credit_replay`는 credit 초과 전송을 막고 재접속 버퍼를 복구한다.
-- [ ] **Verify RED:** `cargo test -p racp-runtime --test providers`; `uv run pytest tests/rust_agent/test_execution.py -q`.
-- [ ] **Implement:** registry의 해당 operation 전체를 이식한다. explicit argv/shell, encoding/env/cwd, Windows Job Object/POSIX process group, ConPTY/PTY, 출력 한도·artifact 승격과 resource ownership을 보존한다.
-- [ ] **Verify GREEN:** 동일 명령과 Windows ConPTY/process tree native 검사를 통과한다. 읽기 전용 profile에서 mutation이 실행되지 않아야 한다.
-- [ ] **Commit:** `feat(rust): port file process shell and terminal providers`.
+- [x] **RED:** `workspace_escape`는 `..`, link, 다른 named workspace 탈출을 거부한다. `transfer_resume_100mib`는 재개 뒤 SHA-256 일치를 확인한다. `shell_cancel_tree`는 자식·손자 프로세스가 남지 않음을 확인한다. `process_identity_fence`는 재사용 PID를 거부한다. `terminal_credit_replay`는 credit 초과 전송을 막고 재접속 버퍼를 복구한다.
+- [x] **Verify RED:** `cargo test -p racp-runtime --test filesystem --test processes --test shell --test terminal`; `uv run pytest tests/rust_agent/test_execution.py -q`.
+- [x] **Implement:** registry의 해당 operation 전체를 이식한다. explicit argv/shell, encoding/env/cwd, Windows Job Object/POSIX process group, ConPTY/PTY, 출력 한도·artifact 승격과 resource ownership을 보존한다.
+- [x] **Verify GREEN:** 동일 명령과 Windows ConPTY/process tree native 검사를 통과한다. 읽기 전용 profile에서 mutation이 실행되지 않아야 한다.
+- [x] **Commit:** `feat(rust): port file process shell and terminal providers`.
 
 ## Task 5: Python 없는 브라우저
 
