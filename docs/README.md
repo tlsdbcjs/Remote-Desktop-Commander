@@ -57,6 +57,7 @@ graph TD
 RACP 플랫폼의 핵심 설계 원칙, 프로토콜 계약, 상태 머신, 권한 모델 및 엔지니어링 계획을 수록합니다.
 - [RACP 종합 개발정의서 v1.1](spec/racp-specification-v1.1.md) (`DOC-SPEC-CORE-v1.1`): 시스템 마스터 설계서
 - [Windows 작업 및 테스트 계획서](spec/windows-engineering-plan.md) (`DOC-SPEC-WIN-v1.0`): 문서 개정 1.1 / 코드 기준 v0.1.9 · 작업·시험·실제 두 PC 인수·배포 완료 기준
+- [Client·Agent Rust 전환 설계안](spec/client-rust-migration.md) (`DOC-SPEC-CLIENT-RUST`, Draft): 전환 범위, 기존 기능·데이터 호환성, Python 제거 및 완료 조건
 
 ### 2.2 [운영 및 사용자 가이드 (docs/guides/)](guides/README.md)
 실제 사용자 및 운영자를 위한 실전 가이드라인입니다.

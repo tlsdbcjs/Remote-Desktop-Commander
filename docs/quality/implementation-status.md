@@ -32,6 +32,7 @@
 - [6. 관련 문서](#6-관련-문서)
 - [7. Windows 작업 계획서 기준선 증거](#windows-plan-baseline)
 - [8. v0.1.10 설치형·포터블 빌드 정의 및 검증](#desktop-build-0110)
+- [9. Client·Agent Rust 전환 설계 검토](#client-rust-design)
 
 ---
 
@@ -241,3 +242,12 @@ Windows x64 실제 산출물은 `dist/client-desktop/0.1.10/win-x64/`에 생성�
 
 > [!IMPORTANT]
 > 이번 증거는 unsigned 개발 빌드 및 해당 시험 범위다. clean PC 설치/업그레이드/제거, 실제 두 PC 전체 인수, 서명/notarization 또는 macOS/Linux 실행 통과를 의미하지 않는다.
+
+---
+
+## 9. Client·Agent Rust 전환 설계 검토 <a id="client-rust-design"></a>
+
+- **2026-10-10 상태**: [Rust 전환 설계안](../spec/client-rust-migration.md) Draft 작성. 사용자 범위 선택 및 설계 검토 대기이며 제품 코드는 변경하지 않았다.
+- **조사 기준선**: v0.1.10, Electron/React UI와 Python Agent. 추천 범위는 Tauri/Rust 호스트와 Agent 전환 및 기존 React 화면 유지다. Gateway·CLI는 별도 앱으로 유지하는 가정이다.
+- **문서 검증**: `git diff --check` 통과. 설계안과 문서 인덱스 2개의 상대 파일 링크 38개, 설계 메타데이터·목차·TODO/TBD 부재 확인 통과.
+- **실행 검증**: Rust 구현/테스트/빌드 및 Windows native 패키징은 수행하지 않았다. 현재 환경은 Linux이며 PATH에 Cargo/Rust가 없다. macOS/Linux native 빌드는 기존 정책에 따라 미실행이다.
