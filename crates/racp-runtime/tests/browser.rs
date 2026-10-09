@@ -5,6 +5,9 @@ use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
 fn setup() -> (tempfile::TempDir, Browser) {
+    setup_origins(vec![])
+}
+fn setup_origins(allow_origins: Vec<String>) -> (tempfile::TempDir, Browser) {
     let root = tempfile::tempdir().unwrap();
     let settings: racp_core::AgentSettings = serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("data"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
     let executable = std::env::var_os("RACP_TEST_CHROMIUM_PATH")
@@ -19,12 +22,58 @@ fn setup() -> (tempfile::TempDir, Browser) {
     );
     let config = BrowserConfig {
         executable: Some(executable),
+        allow_origins,
         ..Default::default()
     };
     (
         root,
         Browser::new(&settings, "boot_browser", config).unwrap(),
     )
+}
+
+#[tokio::test]
+async fn origin_fence_prevents_subresource_and_websocket_network_effects() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let forbidden = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = forbidden.local_addr().unwrap();
+    let hits = Arc::new(AtomicUsize::new(0));
+    let observed = hits.clone();
+    let denied_server = tokio::spawn(async move {
+        loop {
+            let (_socket, _) = forbidden.accept().await.unwrap();
+            observed.fetch_add(1, Ordering::SeqCst);
+        }
+    });
+    let site = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}", site.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        loop {
+            let (mut socket, _) = site.accept().await.unwrap();
+            tokio::spawn(async move {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut request = [0; 8192];
+                let _ = socket.read(&mut request).await.unwrap();
+                let body=format!("<!doctype html><title>Origin fence</title><img src='http://{address}/denied'><script>try{{new WebSocket('ws://{address}/denied')}}catch(e){{}}</script>");
+                socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
+            });
+        }
+    });
+    let (_root, browser) = setup_origins(vec![origin.clone()]);
+    let opened = succeeded(execute(&browser, "open", json!({}), "owner_one").await);
+    let page = json!({"browser_id":opened["browser_id"],"page_id":opened["pages"][0]["page_id"],"url":format!("{origin}/")});
+    succeeded(execute(&browser, "navigate", page, "owner_one").await);
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    assert_eq!(
+        hits.load(Ordering::SeqCst),
+        0,
+        "forbidden origin must not receive even a WebSocket handshake"
+    );
+    browser.cleanup().await.unwrap();
+    server.abort();
+    denied_server.abort();
 }
 async fn execute(
     browser: &Browser,
@@ -33,7 +82,14 @@ async fn execute(
     owner: &str,
 ) -> serde_json::Value {
     let operation = format!("browser.{action}");
-    browser.execute(json!({"operation":operation,"payload":racp_contract::validate_operation(&operation,payload).unwrap(),"operation_id":racp_contract::new_id("op"),"remaining_timeout_ms":15000,"context":{"workspace_id":"default","principal_id":owner}}),CancellationToken::new()).await.unwrap()
+    let result=browser.execute(json!({"operation":operation,"payload":racp_contract::validate_operation(&operation,payload).unwrap(),"operation_id":racp_contract::new_id("op"),"remaining_timeout_ms":15000,"context":{"workspace_id":"default","principal_id":owner}}),CancellationToken::new()).await.unwrap();
+    if result["state"] != "SUCCEEDED" {
+        eprintln!(
+            "browser acceptance operation={action} code={}",
+            result["error"]["code"]
+        );
+    }
+    result
 }
 fn succeeded(result: serde_json::Value) -> serde_json::Value {
     assert_eq!(result["state"], "SUCCEEDED", "{result}");
@@ -90,6 +146,24 @@ async fn isolated_contexts_owner_boot_snapshot_and_complete_cleanup() {
     }
     assert!(browser.inventory().iter().all(|h| h["state"] == "CLOSED"));
     browser.cleanup().await.unwrap();
+    let events = browser.events_after(0);
+    assert!(events.iter().any(|event| event["kind"] == "page_created"));
+    for event in &events {
+        let mut message = event.clone();
+        message["protocol"] = json!(1);
+        message["type"] = json!("browser_state");
+        message["connection_epoch"] = json!(1);
+        message["device_id"] = json!("dev_browser");
+        message["agent_boot_id"] = json!("boot_browser");
+        racp_contract::decode_message(message.to_string().as_bytes()).unwrap();
+    }
+    let last = events.last().unwrap();
+    let instance = last["provider_instance_id"].as_str().unwrap();
+    let sequence = last["event_sequence"].as_str().unwrap();
+    assert!(browser.event_ack(instance, sequence).is_err());
+    browser.event_sent(instance, sequence).unwrap();
+    browser.event_ack(instance, sequence).unwrap();
+    assert!(browser.events_after(0).is_empty());
 }
 
 #[tokio::test]
@@ -191,7 +265,7 @@ async fn frame_scope_cross_site_input_key_focus_and_detachment() {
                 let n = socket.read(&mut request).await.unwrap();
                 let root = String::from_utf8_lossy(&request[..n]).starts_with("GET /root ");
                 let body = if root {
-                    format!("<!doctype html><title>Main</title><button>Main</button><iframe name='cross' src='http://127.0.0.2:{port}/child'></iframe>")
+                    format!("<!doctype html><title>Main</title><button>Main</button><iframe name='cross' src='http://localhost:{port}/child'></iframe>")
                 } else {
                     "<!doctype html><title>Child</title><label>Field<input data-testid='field'></label><button onclick=\"document.querySelector('p').textContent='child:'+document.querySelector('input').value\">Submit</button><p></p>".into()
                 };

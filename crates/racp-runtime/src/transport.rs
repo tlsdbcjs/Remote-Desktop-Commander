@@ -28,6 +28,17 @@ pub struct Agent {
 }
 impl Agent {
     pub fn new(settings: AgentSettings, credential: String) -> Result<Self, RacpError> {
+        Self::with_browser(
+            settings,
+            credential,
+            crate::providers::browser::BrowserConfig::bundled(),
+        )
+    }
+    pub fn with_browser(
+        settings: AgentSettings,
+        credential: String,
+        browser: crate::providers::browser::BrowserConfig,
+    ) -> Result<Self, RacpError> {
         settings.validate(true)?;
         let artifacts = crate::artifacts::ArtifactClient::new(
             &settings.gateway,
@@ -38,8 +49,9 @@ impl Agent {
         let journal = Journal::open(&settings.data_dir.join("execution.db"))?;
         journal.recover_agent()?;
         let boot_id = new_id("boot");
-        let providers: Arc<dyn crate::providers::Provider> =
-            Arc::new(crate::providers::NativeProviders::new(&settings, &boot_id)?);
+        let providers: Arc<dyn crate::providers::Provider> = Arc::new(
+            crate::providers::NativeProviders::with_browser(&settings, &boot_id, browser)?,
+        );
         let outputs = OutputSpool::new(settings.data_dir.join("spool"), journal.clone())?;
         let status = json!({"state":"RUNNING","connected":false,"execution_identity":whoami::username(),"connection_epoch":0,"connection_phase":"starting","active_operations":0,"desktop":{"enabled":settings.desktop_enabled,"healthy":false,"unavailable_reason":"DESKTOP_RUNTIME_UNAVAILABLE","sessions":[]},"operations":[]});
         Ok(Self {
@@ -87,6 +99,33 @@ impl Agent {
         value["handles"] = json!(self.providers.inventory());
         value["capabilities"] = json!(self.providers.capabilities());
         self.send(value).await
+    }
+    async fn browser_event(&self, after: &mut u64) -> Result<(), RacpError> {
+        if tokio::time::Instant::now() >= *self.lease.lock().await {
+            return Ok(());
+        }
+        let Some(event) = self.providers.events_after(*after).into_iter().next() else {
+            return Ok(());
+        };
+        let mut value = self.base("browser_state").await;
+        for (key, field) in event
+            .as_object()
+            .ok_or_else(|| RacpError::new("RUNTIME_RESPONSE_INVALID"))?
+        {
+            value[key] = field.clone();
+        }
+        self.send(value).await?;
+        let instance = event["provider_instance_id"]
+            .as_str()
+            .ok_or_else(|| RacpError::new("RUNTIME_RESPONSE_INVALID"))?;
+        let sequence = event["event_sequence"]
+            .as_str()
+            .ok_or_else(|| RacpError::new("RUNTIME_RESPONSE_INVALID"))?;
+        self.providers.event_sent(instance, sequence)?;
+        *after = sequence
+            .parse()
+            .map_err(|_| RacpError::new("RUNTIME_RESPONSE_INVALID"))?;
+        Ok(())
     }
     async fn session(&self, shutdown: &CancellationToken) -> Result<(), RacpError> {
         self.phase("connecting").await;
@@ -145,7 +184,7 @@ impl Agent {
         let result=async{
    self.phase("hello").await;
    let platform=if cfg!(windows){"Windows"}else if cfg!(target_os="macos"){"Darwin"}else{"Linux"};
-   self.send(json!({"protocol":1,"type":"hello","device_id":self.settings.device_id,"agent_boot_id":self.boot_id,"agent_version":VERSION,"supported_protocols":[1],"platform":platform,"architecture":std::env::consts::ARCH,"execution_identity":whoami::username(),"capabilities":self.providers.capabilities(),"last_event_cursor":"0"})).await?;
+   self.send(json!({"protocol":1,"type":"hello","device_id":self.settings.device_id,"agent_boot_id":self.boot_id,"agent_version":VERSION,"supported_protocols":[1],"platform":platform,"architecture":std::env::consts::ARCH,"execution_identity":whoami::username(),"capabilities":self.providers.capabilities(),"last_event_cursor":self.providers.event_cursor()})).await?;
    self.phase("welcome").await;
    let welcome=tokio::select!{_=shutdown.cancelled()=>return Ok(()),v=receive(&mut stream)=>v?};
    if welcome["type"]!="welcome"||welcome["device_id"]!=self.settings.device_id||welcome["agent_boot_id"]!=self.boot_id{return Err(RacpError::new("REQUEST_INVALID"));}
@@ -166,10 +205,12 @@ impl Agent {
    *self.lease.lock().await=tokio::time::Instant::now()+Duration::from_millis(lease_ms);self.phase("ready").await;self.status.write().await["connected"]=json!(true);
    self.log("agent_connected",json!({"connection_epoch":epoch}));
    let mut timer=tokio::time::interval(Duration::from_millis(interval_ms));timer.tick().await;
+   let mut browser_timer=tokio::time::interval(Duration::from_millis(50));let mut browser_sequence=0;
    loop{
     tokio::select!{
      _=shutdown.cancelled()=>break,
      _=timer.tick()=>self.heartbeat().await?,
+     _=browser_timer.tick()=>self.browser_event(&mut browser_sequence).await?,
      incoming=stream.next()=>{
       let Some(Ok(frame))=incoming else{break};
       let raw=match frame{Frame::Text(s)=>s.as_bytes().to_vec(),Frame::Close(_)=>break,Frame::Ping(_)|Frame::Pong(_)=>continue,_=>return Err(RacpError::new("REQUEST_INVALID"))};
@@ -181,6 +222,7 @@ impl Agent {
       else if message["type"]=="stream_open"{streams.subscribe(message).await?;}
       else if message["type"]=="stream_ack"{streams.ack(&message).await?;}
       else if message["type"]=="stream_unsubscribe"{streams.unsubscribe(&message).await?;}
+      else if message["type"]=="browser_state_ack"{self.providers.event_ack(message["provider_instance_id"].as_str().ok_or_else(||RacpError::new("REQUEST_INVALID"))?,message["event_sequence"].as_str().ok_or_else(||RacpError::new("REQUEST_INVALID"))?)?;}
       else{return Err(RacpError::new("REQUEST_INVALID"));}
      }
     }

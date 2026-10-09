@@ -114,7 +114,12 @@ impl Cdp {
                         let _ = reply.send(result);
                     }
                 } else if value["method"].is_string() {
-                    let _ = reader_events.send(value);
+                    if let Some(value) = metadata_event(value) {
+                        if value.to_string().len() > 64 * 1024 {
+                            break;
+                        }
+                        let _ = reader_events.send(value);
+                    }
                 } else {
                     break;
                 }
@@ -194,6 +199,37 @@ impl Cdp {
             let _ = task.await;
         }
     }
+}
+
+fn metadata_event(value: Value) -> Option<Value> {
+    let method = value["method"].as_str()?;
+    let p = &value["params"];
+    let params = match method {
+        "Fetch.requestPaused" => {
+            json!({"requestId":p["requestId"],"resourceType":p["resourceType"],"frameId":p["frameId"],"request":{"url":p["request"]["url"]}})
+        }
+        "Page.javascriptDialogOpening" => json!({}),
+        "Target.attachedToTarget" => {
+            json!({"sessionId":p["sessionId"],"waitingForDebugger":p["waitingForDebugger"],"targetInfo":{"targetId":p["targetInfo"]["targetId"],"type":p["targetInfo"]["type"],"browserContextId":p["targetInfo"]["browserContextId"]}})
+        }
+        "Runtime.executionContextCreated" => {
+            json!({"context":{"id":p["context"]["id"],"uniqueId":p["context"]["uniqueId"],"auxData":p["context"]["auxData"]}})
+        }
+        "Page.frameNavigated" => {
+            json!({"frame":{"id":p["frame"]["id"],"parentId":p["frame"]["parentId"],"url":p["frame"]["url"],"name":p["frame"]["name"]}})
+        }
+        "Target.detachedFromTarget"
+        | "Target.targetDestroyed"
+        | "Runtime.executionContextsCleared"
+        | "Runtime.executionContextDestroyed"
+        | "Page.frameAttached"
+        | "Page.frameDetached"
+        | "Page.loadEventFired"
+        | "Browser.downloadWillBegin"
+        | "Browser.downloadProgress" => p.clone(),
+        _ => return None,
+    };
+    Some(json!({"method":method,"sessionId":value["sessionId"],"params":params}))
 }
 
 pub fn local_endpoint(value: &str) -> Result<url::Url, RacpError> {

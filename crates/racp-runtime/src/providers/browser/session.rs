@@ -43,6 +43,8 @@ pub(super) struct State {
     pub expires: Instant,
 }
 pub(super) struct Session {
+    events: Arc<Mutex<super::BrowserOutbox>>,
+    siblings: std::sync::Weak<Mutex<BTreeMap<String, Arc<Session>>>>,
     pub opening_operation: String,
     pub cdp: Cdp,
     pub context: String,
@@ -58,6 +60,7 @@ pub(super) struct Session {
 }
 #[derive(Clone)]
 pub struct Browser {
+    outbox: Arc<Mutex<super::BrowserOutbox>>,
     pub(super) cursor: crate::providers::cursor::Cursor,
     opening: Arc<tokio::sync::Mutex<()>>,
     pub(super) config: BrowserConfig,
@@ -89,7 +92,9 @@ impl Browser {
         private_dir(&root)?;
         let spool = settings.data_dir.join("spool");
         private_dir(&spool)?;
+        let instance = new_id("provider");
         let this = Self {
+            outbox: Arc::new(Mutex::new(super::BrowserOutbox::new(&instance, 128))),
             cursor: Default::default(),
             opening: Arc::default(),
             config,
@@ -98,7 +103,7 @@ impl Browser {
             spool,
             boot: boot.into(),
             device: settings.device_id.clone(),
-            instance: new_id("provider"),
+            instance,
             guards: Workspaces::new(&settings.workspace, &settings.allowed_workspaces)?,
         };
         let weak = Arc::downgrade(&this.sessions);
@@ -231,6 +236,7 @@ impl Browser {
             "--disable-sync".into(),
             "--disable-default-apps".into(),
             "--disable-extensions".into(),
+            "--disable-popup-blocking".into(),
         ];
         if request["payload"]["headless"] != false {
             argv.push("--headless=new".into());
@@ -300,6 +306,8 @@ impl Browser {
         let now = timestamp();
         let handle = json!({"id":id,"type":"browser","device_id":self.device,"owner":request["context"]["principal_id"],"agent_boot_id":self.boot,"workspace_id":workspace,"provider_instance_id":self.instance,"resource_revision":"1","created_at":now,"last_access_at":now,"expires_at":(chrono::Utc::now()+chrono::Duration::hours(1)).to_rfc3339_opts(chrono::SecondsFormat::Micros,true),"state":"CREATING","availability":"unavailable","ownership":"racp_owned"});
         let session = Arc::new(Session {
+            events: self.outbox.clone(),
+            siblings: Arc::downgrade(&self.sessions),
             opening_operation: request["operation_id"].as_str().unwrap_or("").into(),
             cdp,
             context,
@@ -321,6 +329,7 @@ impl Browser {
             .lock()
             .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
             .insert(id.clone(), session.clone());
+        session.emit("inventory", "pending");
         session.start(self.config.clone()).await;
         let result = async {
             session.cdp.call("Target.setDiscoverTargets",json!({"discover":true}),None,cancel).await?;
@@ -328,6 +337,7 @@ impl Browser {
             session.new_page(cancel).await?;
             session.state.lock().map_err(|_|RacpError::new("LOCAL_STATE_FAILED"))?.handle["state"]=json!("ACTIVE");
             session.state.lock().map_err(|_|RacpError::new("LOCAL_STATE_FAILED"))?.handle["availability"]=json!("available");
+            session.emit("inventory","active");
             Ok(json!({"browser_id":id,"agent_boot_id":self.boot,"handle":session.handle(),"pages":session.pages()}))
         }.await;
         if result.is_err() {
@@ -337,6 +347,87 @@ impl Browser {
     }
 }
 impl Session {
+    async fn configure_network(
+        &self,
+        session: &str,
+        config: &BrowserConfig,
+    ) -> Result<(), RacpError> {
+        self.cdp
+            .call(
+                "Network.enable",
+                json!({"maxPostDataSize":0}),
+                Some(session),
+                &self.stop,
+            )
+            .await?;
+        // Pinned Chromium 153 exposes ordered native URLPattern rules, including
+        // allow rules. WebSockets additionally require the protected constructor guard
+        // installed before page/worker scripts; CDP URL blocking does not fence them.
+        let mut patterns = vec![];
+        if config.allow_origins.is_empty() {
+            for scheme in ["http", "https", "ws", "wss"] {
+                patterns.push(json!({"urlPattern":format!("{scheme}://*:*/*"),"block":false}));
+            }
+        } else {
+            for origin in &config.allow_origins {
+                let url =
+                    url::Url::parse(origin).map_err(|_| RacpError::new("INVALID_ARGUMENT"))?;
+                patterns.push(json!({"urlPattern":format!("{}/*",url.origin().ascii_serialization()),"block":false}));
+                let mut socket = url.clone();
+                let scheme = if url.scheme() == "https" { "wss" } else { "ws" };
+                socket
+                    .set_scheme(scheme)
+                    .map_err(|_| RacpError::new("INVALID_ARGUMENT"))?;
+                patterns.push(json!({"urlPattern":format!("{}/*",socket.origin().ascii_serialization()),"block":false}));
+            }
+        }
+        patterns.push(json!({"urlPattern":"*://*:*/*","block":true}));
+        patterns.push(json!({"urlPattern":"file:///*","block":true}));
+        self.cdp
+            .call(
+                "Network.setBlockedURLs",
+                json!({"urlPatterns":patterns}),
+                Some(session),
+                &self.stop,
+            )
+            .await?;
+        self.cdp
+            .call(
+                "Fetch.enable",
+                json!({"patterns":[{"urlPattern":"*"}]}),
+                Some(session),
+                &self.stop,
+            )
+            .await?;
+        Ok(())
+    }
+    fn emit(&self, kind: &str, status: &str) {
+        let Some(siblings) = self.siblings.upgrade() else {
+            return;
+        };
+        let inventory = siblings
+            .lock()
+            .map(|sessions| {
+                sessions
+                    .values()
+                    .flat_map(|session| {
+                        session
+                            .state
+                            .lock()
+                            .map(|s| {
+                                std::iter::once(s.handle.clone())
+                                    .chain(s.pages.values().map(|p| p.handle.clone()))
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if let Ok(mut events) = self.events.lock() {
+            events.push(json!({"browser_id":self.handle()["id"],"kind":kind,"state":status,"handles":inventory}),inventory.clone());
+        }
+    }
     pub fn handle(&self) -> Value {
         self.state
             .lock()
@@ -425,9 +516,10 @@ impl Session {
             p.handle["state"] = json!("CLOSED");
             p.handle["availability"] = json!("unavailable");
         }
-        Ok(
-            json!({"browser_id":state.handle["id"],"cleanup_status":"complete","handle":state.handle}),
-        )
+        let result = json!({"browser_id":state.handle["id"],"cleanup_status":"complete","handle":state.handle});
+        drop(state);
+        self.emit("inventory", "closed");
+        Ok(result)
     }
     async fn start(self: &Arc<Self>, config: BrowserConfig) {
         let mut events = self.cdp.subscribe();
@@ -520,6 +612,14 @@ impl Session {
                 self.cdp
                     .call("Page.enable", json!({}), Some(child), &self.stop)
                     .await?;
+                self.cdp
+                    .call(
+                        "Page.addScriptToEvaluateOnNewDocument",
+                        json!({"source":config.script(),"runImmediately":true}),
+                        Some(child),
+                        &self.stop,
+                    )
+                    .await?;
                 let tree = self
                     .cdp
                     .call("Page.getFrameTree", json!({}), Some(child), &self.stop)
@@ -528,14 +628,7 @@ impl Session {
                 self.cdp
                     .call("Runtime.enable", json!({}), Some(child), &self.stop)
                     .await?;
-                self.cdp
-                    .call(
-                        "Fetch.enable",
-                        json!({"patterns":[{"urlPattern":"*"}]}),
-                        Some(child),
-                        &self.stop,
-                    )
-                    .await?;
+                self.configure_network(child, config).await?;
                 self.cdp.call("Emulation.setDeviceMetricsOverride",json!({"width":self.width,"height":self.height,"deviceScaleFactor":1,"mobile":false}),Some(child),&self.stop).await?;
                 self.cdp
                     .call(
@@ -579,6 +672,14 @@ impl Session {
                 self.cdp
                     .call("Page.enable", json!({}), Some(child), &self.stop)
                     .await?;
+                self.cdp
+                    .call(
+                        "Page.addScriptToEvaluateOnNewDocument",
+                        json!({"source":config.script(),"runImmediately":true}),
+                        Some(child),
+                        &self.stop,
+                    )
+                    .await?;
                 let tree = self
                     .cdp
                     .call("Page.getFrameTree", json!({}), Some(child), &self.stop)
@@ -587,14 +688,7 @@ impl Session {
                 self.cdp
                     .call("Runtime.enable", json!({}), Some(child), &self.stop)
                     .await?;
-                self.cdp
-                    .call(
-                        "Fetch.enable",
-                        json!({"patterns":[{"urlPattern":"*"}]}),
-                        Some(child),
-                        &self.stop,
-                    )
-                    .await?;
+                self.configure_network(child, config).await?;
                 self.cdp
                     .call(
                         "Target.setAutoAttach",
@@ -611,7 +705,25 @@ impl Session {
                         &self.stop,
                     )
                     .await?;
+            } else if target["type"] == "service_worker" {
+                self.cdp
+                    .call(
+                        "Target.closeTarget",
+                        json!({"targetId":target["targetId"]}),
+                        None,
+                        &self.stop,
+                    )
+                    .await?;
             } else {
+                self.configure_network(child, config).await?;
+                self.cdp
+                    .call(
+                        "Runtime.evaluate",
+                        json!({"expression":config.script()}),
+                        Some(child),
+                        &self.stop,
+                    )
+                    .await?;
                 self.cdp
                     .call(
                         "Runtime.runIfWaitingForDebugger",
@@ -755,6 +867,16 @@ impl Session {
                 page.handle["availability"] = json!("unavailable");
             }
         }
+        match method {
+            "Target.attachedToTarget" if params["targetInfo"]["type"] == "page" => {
+                self.emit("page_created", "active")
+            }
+            "Target.targetDestroyed" => self.emit("page_closed", "closed"),
+            "Page.frameNavigated" => self.emit("navigation", "changed"),
+            "Page.frameAttached" | "Page.frameDetached" => self.emit("frame", "changed"),
+            "Page.javascriptDialogOpening" => self.emit("dialog", "dismissed"),
+            _ => {}
+        }
         Ok(())
     }
     fn frame(&self, session: &str, native: &Value) -> Result<(), RacpError> {
@@ -807,10 +929,40 @@ impl Session {
     }
 }
 impl Provider for Browser {
+    fn events_after(&self, after: u64) -> Vec<Value> {
+        self.outbox
+            .lock()
+            .map(|events| events.pending(after))
+            .unwrap_or_default()
+    }
+    fn event_cursor(&self) -> String {
+        self.outbox
+            .lock()
+            .map(|events| events.cursor())
+            .unwrap_or_else(|_| "0".into())
+    }
+    fn event_sent(&self, instance: &str, sequence: &str) -> Result<(), RacpError> {
+        if instance != self.instance {
+            return Err(RacpError::new("INVALID_ARGUMENT"));
+        }
+        self.outbox
+            .lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+            .sent(sequence)
+    }
+    fn event_ack(&self, instance: &str, sequence: &str) -> Result<(), RacpError> {
+        if instance != self.instance {
+            return Err(RacpError::new("INVALID_ARGUMENT"));
+        }
+        self.outbox
+            .lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+            .ack(sequence)
+    }
     fn capabilities(&self) -> Vec<Value> {
         let installed = self.config.executable.as_ref().is_some_and(|p| p.is_file());
         vec![
-            json!({"name":"browser","version":"1.0.0","operations":["browser.open","browser.pages","browser.new_page","browser.close","browser.keepalive","browser.close_page","browser.navigate","browser.snapshot","browser.evaluate"],"installed":installed,"supported":true,"enabled":true,"healthy":installed,"unavailable_reason":if installed {Value::Null}else{json!("BROWSER_RUNTIME_UNAVAILABLE")},"attributes":{"engine":"chromium","automation":"native_cdp","cdp_enabled":self.config.cdp_enabled}}),
+            json!({"name":"browser","version":"1.0.0","operations":if installed {vec!["browser.open","browser.pages","browser.new_page","browser.close","browser.keepalive","browser.close_page","browser.navigate","browser.snapshot","browser.frames","browser.screenshot","browser.click","browser.type","browser.key","browser.evaluate"]}else{vec![]},"installed":installed,"supported":true,"enabled":true,"healthy":installed,"unavailable_reason":if installed {Value::Null}else{json!("BROWSER_RUNTIME_UNAVAILABLE")},"attributes":{"engine":"chromium","automation":"native_cdp","cdp_enabled":self.config.cdp_enabled}}),
         ]
     }
     fn inventory(&self) -> Vec<Value> {

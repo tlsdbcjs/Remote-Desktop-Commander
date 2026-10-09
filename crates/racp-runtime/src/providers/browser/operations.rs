@@ -241,7 +241,7 @@ impl Browser {
             file.write_all(&raw)?;
             file.sync_all()?;
             return Ok(
-                json!({"browser_id":p["browser_id"],"page_id":page_id,"spool_path":path,"size":raw.len(),"sha256":racp_contract::digest(&raw),"mime_type":"image/png"}),
+                json!({"browser_id":p["browser_id"],"page_id":page_id,"spool_path":path,"size_bytes":raw.len(),"sha256":racp_contract::digest(&raw),"artifact_id":null,"artifact_media_type":"image/png"}),
             );
         }
         if matches!(action, "browser.click" | "browser.type") {

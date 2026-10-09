@@ -14,6 +14,18 @@ pub trait Provider: Send + Sync {
     fn inventory(&self) -> Vec<Value> {
         vec![]
     }
+    fn events_after(&self, _: u64) -> Vec<Value> {
+        vec![]
+    }
+    fn event_cursor(&self) -> String {
+        "0".into()
+    }
+    fn event_sent(&self, _instance: &str, _sequence: &str) -> Result<(), RacpError> {
+        Err(RacpError::new("INVALID_ARGUMENT"))
+    }
+    fn event_ack(&self, _instance: &str, _sequence: &str) -> Result<(), RacpError> {
+        Err(RacpError::new("INVALID_ARGUMENT"))
+    }
     fn stream_read(&self, _: &Value) -> Result<Value, Value> {
         Err(racp_core::error_value(
             "CAPABILITY_UNAVAILABLE",
@@ -52,17 +64,52 @@ pub struct NativeProviders {
 }
 impl NativeProviders {
     pub fn new(settings: &racp_core::AgentSettings, boot: &str) -> Result<Self, RacpError> {
+        Self::with_browser(settings, boot, browser::BrowserConfig::bundled())
+    }
+    pub fn with_browser(
+        settings: &racp_core::AgentSettings,
+        boot: &str,
+        config: browser::BrowserConfig,
+    ) -> Result<Self, RacpError> {
         Ok(Self {
             providers: vec![
                 Arc::new(Filesystem::new(settings)?),
                 Arc::new(Shell::new(settings)?),
                 Arc::new(Processes::new(settings, boot)?),
                 Arc::new(Terminal::new(settings, boot)?),
+                Arc::new(browser::Browser::new(settings, boot, config)?),
             ],
         })
     }
 }
 impl Provider for NativeProviders {
+    fn events_after(&self, after: u64) -> Vec<Value> {
+        self.providers
+            .iter()
+            .flat_map(|p| p.events_after(after))
+            .collect()
+    }
+    fn event_cursor(&self) -> String {
+        self.providers
+            .iter()
+            .map(|p| p.event_cursor())
+            .find(|s| s != "0")
+            .unwrap_or_else(|| "0".into())
+    }
+    fn event_sent(&self, instance: &str, sequence: &str) -> Result<(), RacpError> {
+        self.providers
+            .iter()
+            .find(|p| p.capabilities().iter().any(|c| c["name"] == "browser"))
+            .ok_or_else(|| RacpError::new("INVALID_ARGUMENT"))?
+            .event_sent(instance, sequence)
+    }
+    fn event_ack(&self, instance: &str, sequence: &str) -> Result<(), RacpError> {
+        self.providers
+            .iter()
+            .find(|p| p.capabilities().iter().any(|c| c["name"] == "browser"))
+            .ok_or_else(|| RacpError::new("INVALID_ARGUMENT"))?
+            .event_ack(instance, sequence)
+    }
     fn stream_read(&self, request: &Value) -> Result<Value, Value> {
         match self
             .providers
