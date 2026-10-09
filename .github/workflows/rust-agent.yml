@@ -1,0 +1,19 @@
+name: rust-agent
+on:
+  workflow_dispatch:
+  push:
+    paths: ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "apps/agent-rust/**", ".github/workflows/rust-agent.yml"]
+  pull_request:
+    paths: ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "apps/agent-rust/**", ".github/workflows/rust-agent.yml"]
+permissions:
+  contents: read
+jobs:
+  windows-rust:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt,clippy
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked

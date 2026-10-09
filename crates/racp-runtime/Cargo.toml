@@ -1,0 +1,21 @@
+[package]
+name = "racp-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+[dependencies]
+racp-contract = { path = "../racp-contract" }
+racp-core = { path = "../racp-core" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
+futures-util.workspace = true
+url.workspace = true
+chrono.workspace = true
+base64.workspace = true
+[dev-dependencies]
+tempfile.workspace = true

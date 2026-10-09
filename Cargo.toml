@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/racp-contract"]
+members = ["crates/racp-contract", "crates/racp-core", "crates/racp-runtime"]
 resolver = "2"
 
 [workspace.package]
@@ -19,3 +19,9 @@ url = "2"
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
 base64 = "0.22"
+fs2 = "0.4"
+tempfile = "3"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+futures-util = "0.3"

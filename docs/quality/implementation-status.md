@@ -253,3 +253,13 @@ Windows x64 실제 산출물은 `dist/client-desktop/0.1.10/win-x64/`에 생성�
 - **계획 검증**: 설계·계획·인덱스 4개 문서의 상대 파일 링크 46개, metadata·TODO/TBD 부재, task 10개·checkbox 50개 확인 통과. diff whitespace 검사 통과.
 - **기존 동작 기준선 검사**: `.venv/bin/python -m pytest tests/unit/test_version.py tests/contract/test_schema_drift.py -q` — 7 passed. `node --test apps/client/tests/*.test.cjs` — 11 passed, 실패·skip 0. Rust 이식 결과 검증이 아닌 기존 구현 기준선이다.
 - **실행 검증**: Rust 구현/테스트/빌드 및 Windows native 패키징은 수행하지 않았다. 현재 환경은 Linux이며 PATH에 Cargo/Rust가 없다. macOS/Linux native 빌드는 기존 정책에 따라 미실행이다.
+
+### Rust 실행 작업 시작 (2026-10-10)
+
+- 사용자 “권장 방향으로 끝까지 구현해”로 구현 계획과 Native 실행 승인. 추가 설계/계획 승인 대기는 해제했다.
+- 배치 버전 0.1.11로 동기화하고 uv.lock을 갱신했다. Cargo workspace/toolchain/lock과 기존 계약 검증기를 구현했다.
+- Rust 계약 6개 검사에서 78개 operation의 Python `validate_payload` 기준 fixture 정규화가 일치했다. 엄격한 숫자 타입·bridge 한도·관계 검증·터미널 바이트 한도를 포함한다.
+- Rust 로컬 상태 8개 검사에서 기존 credential JSON, 0600·링크 차단·atomic write, 설정 revision/backup/Agent lock, 연결 파일 digest/만료/주소 한도를 확인했다.
+- Rust 등록 4개 검사에서 실제 loopback HTTP를 사용해 등록 성공·토큰 비노출·로컬 preflight·4 KiB 응답 한도·403 거부를 확인했다.
+- 로컬 `cargo test --workspace`: 18 passed; `cargo clippy --workspace --all-targets -- -D warnings`: PASS. Python 버전/schema 8 passed, Ruff PASS, Mypy 135 sources PASS.
+- Windows 전용 DPAPI·파일 잠금은 새 Windows Rust CI에서 검증 대기다. Tauri UI·provider·패키징 전환 및 기존 Python 삭제는 아직 미완료다.
