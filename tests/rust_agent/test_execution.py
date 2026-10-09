@@ -2,11 +2,12 @@
 
 import asyncio
 import hashlib
+import os
 
 import pytest
 from racp_sdk.security import SecretStore
 
-from .support import bridge
+from .support import ROOT, bridge
 
 pytestmark = pytest.mark.asyncio
 
@@ -35,6 +36,34 @@ async def execute(live, operation, payload, **extra):
     )
     assert response.status_code == 200, response.text
     return response.json()
+
+
+async def test_native_shell_and_managed_process_control(rust_live):
+    live = rust_live
+    fixture = (
+        ROOT
+        / "target/debug/examples"
+        / ("process_fixture.exe" if os.name == "nt" else "process_fixture")
+    )
+    assert fixture.exists(), "Build Rust runtime examples before integration tests"
+    await online(live)
+    result = await execute(live, "shell.exec", {"argv": [str(fixture), "echo"]})
+    assert result["state"] == "SUCCEEDED", result
+    assert result["result"]["exit_code"] == 7
+    assert "native 한글" in result["result"]["stdout"]
+    assert str(live["workspace"]) in result["result"]["stdout"]
+    assert "native stderr" in result["result"]["stderr"]
+    assert result["result"]["cleanup_status"] == "complete"
+    started = await execute(live, "process.spawn", {"argv": [str(fixture), "sleep"]})
+    assert started["state"] == "SUCCEEDED", started
+    target = {key: started["result"][key] for key in ["pid", "create_time", "agent_boot_id"]}
+    wrong = {**target, "create_time": target["create_time"] + 1, "force": True}
+    rejected = await execute(live, "process.terminate", wrong, key="wrong-birth")
+    assert rejected["error"]["code"] == "PRECONDITION_FAILED"
+    killed = await execute(live, "process.terminate", {**target, "force": True}, key="kill-owned")
+    assert killed["state"] == "SUCCEEDED", killed
+    assert killed["result"]["cleanup_status"] == "complete"
+    assert killed["result"]["method"] == "owned_tree_kill"
 
 
 async def test_file_execution_replay_cas_and_no_escape(rust_live):

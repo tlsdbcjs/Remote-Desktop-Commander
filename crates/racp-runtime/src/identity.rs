@@ -1,4 +1,108 @@
 use racp_contract::RacpError;
+/// Signal only the process whose native birth identity was authorized.
+pub fn signal_process(pid: u32, expected: f64, force: bool) -> Result<(), RacpError> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+        let raw = unsafe { libc::syscall(libc::SYS_pidfd_open, pid, 0) };
+        if raw < 0 {
+            return Err(RacpError::new("PROCESS_NOT_FOUND"));
+        }
+        let fd = unsafe { OwnedFd::from_raw_fd(raw as i32) };
+        if (process_created(pid)? - expected).abs() > 0.000001 {
+            return Err(RacpError::new("PRECONDITION_FAILED"));
+        }
+        let mut poll = libc::pollfd {
+            fd: fd.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        if unsafe { libc::poll(&mut poll, 1, 0) } != 0 {
+            return Err(RacpError::new("PROCESS_NOT_FOUND"));
+        }
+        let signal = if force { libc::SIGKILL } else { libc::SIGTERM };
+        if unsafe {
+            libc::syscall(
+                libc::SYS_pidfd_send_signal,
+                fd.as_raw_fd(),
+                signal,
+                std::ptr::null::<libc::siginfo_t>(),
+                0,
+            )
+        } < 0
+        {
+            return Err(RacpError::new("PERMISSION_DENIED"));
+        }
+        Ok(())
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+        use windows_sys::Win32::{Foundation::*, System::Threading::*, UI::WindowsAndMessaging::*};
+        let handle = unsafe {
+            OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION
+                    | PROCESS_SYNCHRONIZE
+                    | if force { PROCESS_TERMINATE } else { 0 },
+                0,
+                pid,
+            )
+        };
+        if handle.is_null() {
+            return Err(RacpError::new("PERMISSION_DENIED"));
+        }
+        let handle = unsafe { OwnedHandle::from_raw_handle(handle) };
+        let raw = handle.as_raw_handle();
+        if token_sid(raw)? != token_sid(unsafe { GetCurrentProcess() })? {
+            return Err(RacpError::new("PERMISSION_DENIED"));
+        }
+        let mut creation = FILETIME::default();
+        let mut exit = creation;
+        let mut kernel = creation;
+        let mut user = creation;
+        if unsafe { GetProcessTimes(raw, &mut creation, &mut exit, &mut kernel, &mut user) } == 0
+            || unsafe { WaitForSingleObject(raw, 0) } != WAIT_TIMEOUT
+        {
+            return Err(RacpError::new("PROCESS_NOT_FOUND"));
+        }
+        let ticks = ((creation.dwHighDateTime as u64) << 32) | creation.dwLowDateTime as u64;
+        let birth = (ticks / 10_000_000) as f64 + (ticks % 10_000_000) as f64 / 10_000_000.0
+            - 11_644_473_600.0;
+        if (birth - expected).abs() > 0.000001 {
+            return Err(RacpError::new("PRECONDITION_FAILED"));
+        }
+        if force {
+            if unsafe { TerminateProcess(raw, 1) } == 0 {
+                return Err(RacpError::new("PERMISSION_DENIED"));
+            }
+            return Ok(());
+        }
+        struct Close {
+            pid: u32,
+            sent: bool,
+        }
+        unsafe extern "system" fn close(window: HWND, context: LPARAM) -> i32 {
+            let state = &mut *(context as *mut Close);
+            let mut pid = 0;
+            GetWindowThreadProcessId(window, &mut pid);
+            if pid == state.pid && PostMessageW(window, WM_CLOSE, 0, 0) != 0 {
+                state.sent = true;
+            }
+            1
+        }
+        let mut state = Close { pid, sent: false };
+        unsafe { EnumWindows(Some(close), (&mut state as *mut Close) as isize) };
+        if !state.sent {
+            return Err(RacpError::new("OPERATION_NOT_SUPPORTED"));
+        }
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "linux", windows)))]
+    {
+        let _ = (pid, expected, force);
+        Err(RacpError::new("OPERATION_NOT_SUPPORTED"))
+    }
+}
 pub fn process_created(pid: u32) -> Result<f64, RacpError> {
     #[cfg(unix)]
     {

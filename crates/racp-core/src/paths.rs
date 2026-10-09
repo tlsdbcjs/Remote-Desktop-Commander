@@ -352,3 +352,14 @@ pub fn secure_append_file(path: &Path) -> Result<File, RacpError> {
         OpenMode::Append,
     )
 }
+pub fn secure_create_file(path: &Path) -> Result<File, RacpError> {
+    let parent = Parent::open(
+        path.parent()
+            .ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?,
+    )?;
+    parent.file(
+        path.file_name()
+            .ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?,
+        OpenMode::Create,
+    )
+}

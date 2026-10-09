@@ -2,6 +2,57 @@ use racp_contract::RacpError;
 fn label(name: &str) -> String {
     name.to_ascii_lowercase().replace('_', "-")
 }
+pub fn decode_lossy(raw: &[u8], name: &str) -> Result<String, RacpError> {
+    match label(name).as_str() {
+        "utf-8" | "utf8" => Ok(String::from_utf8_lossy(raw).into_owned()),
+        "utf-8-sig" => Ok(String::from_utf8_lossy(
+            raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(raw),
+        )
+        .into_owned()),
+        "ascii" | "us-ascii" => Ok(raw
+            .iter()
+            .map(|b| {
+                if b.is_ascii() {
+                    char::from(*b)
+                } else {
+                    '\u{fffd}'
+                }
+            })
+            .collect()),
+        "latin1" | "latin-1" | "iso-8859-1" => Ok(raw.iter().map(|b| char::from(*b)).collect()),
+        "utf-16" | "utf-16-le" | "utf-16-be" => {
+            let big = label(name) == "utf-16-be" || raw.starts_with(b"\xfe\xff");
+            let raw = if label(name) == "utf-16" {
+                raw.strip_prefix(b"\xff\xfe")
+                    .or_else(|| raw.strip_prefix(b"\xfe\xff"))
+                    .unwrap_or(raw)
+            } else {
+                raw
+            };
+            let words: Vec<u16> = raw
+                .chunks_exact(2)
+                .map(|b| {
+                    if big {
+                        u16::from_be_bytes([b[0], b[1]])
+                    } else {
+                        u16::from_le_bytes([b[0], b[1]])
+                    }
+                })
+                .collect();
+            let mut text = String::from_utf16_lossy(&words);
+            if raw.len() % 2 != 0 {
+                text.push('\u{fffd}');
+            }
+            Ok(text)
+        }
+        _ => {
+            let normalized = label(name);
+            let encoding = encoding_rs::Encoding::for_label(normalized.as_bytes())
+                .ok_or_else(|| RacpError::new("INVALID_ARGUMENT"))?;
+            Ok(encoding.decode_without_bom_handling(raw).0.into_owned())
+        }
+    }
+}
 pub fn decode(raw: &[u8], name: &str) -> Result<String, RacpError> {
     let label = label(name);
     match label.as_str() {

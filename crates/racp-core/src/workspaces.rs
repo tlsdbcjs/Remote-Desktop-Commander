@@ -46,6 +46,12 @@ pub struct Directory {
     inner: Parent,
     pub path: PathBuf,
 }
+impl Directory {
+    /// Borrow the pinned directory handle for a contained child's working directory.
+    pub fn handle(&self) -> &File {
+        &self.inner._dir
+    }
+}
 fn denied(_: RacpError) -> RacpError {
     RacpError::new("PATH_ACCESS_DENIED")
 }
@@ -205,7 +211,7 @@ impl Workspaces {
                 .components()
                 .skip(root.components().count())
                 .collect();
-            return Ok(root.join(relative));
+            Ok(root.join(relative))
         }
         #[cfg(not(windows))]
         Ok(normalized)

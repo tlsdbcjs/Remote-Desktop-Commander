@@ -290,6 +290,9 @@ impl Agent {
             result["output_id"] = output["id"].clone();
             result["artifact_upload_status"] = json!("pending");
         }
+        if outcome["error"]["details"]["partial_result"].is_object() {
+            outcome["error"]["details"]["partial_result"] = outcome["result"].clone();
+        }
         Ok(())
     }
     pub(crate) async fn cancel_execution(&self, id: &str, reason: &str) -> Result<(), RacpError> {

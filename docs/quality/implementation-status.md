@@ -274,3 +274,6 @@ Windows x64 실제 산출물은 `dist/client-desktop/0.1.10/win-x64/`에 생성�
 - 이번 로컬 검사: Rust workspace 35 passed, clippy all-targets 경고 0, 실제 HTTPS Gateway/Rust Agent 통합 9 passed (54.92초). 새 검사에는 read-only 정책과 100 MiB 파일의 입출력 SHA-256 일치가 포함된다. Ruff 및 305개 파일 format 검사 PASS.
 - Windows [37983540140](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/37983540140)에서 시작 실패를 현재 process의 `sysinfo` user ID 부재로 재현했다. 동일 Windows process handle에서 토큰 SID·생성 시각을 검사하도록 수정했으며 새 native 검증은 대기 중이다. 실제 Windows compile·실행 전 통과 처리하지 않는다.
 - 기존 quality [37983540124](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/37983540124)의 Console E2E는 PASS. 전체 Python 회귀는 FAIL이며 기존 browser/plugin/terminal 시험과 링크 검사 실패가 남아 있다. 전체 회귀 완료로 판정하지 않는다.
+
+- Task 4 셸·프로세스 checkpoint: Rust 셸의 안전한 환경/CWD, 64 MiB 출력 제한과 채널별 raw spool, deadline/cancel 후 소유 tree 정리, 프로세스 snapshot cursor·생성 시각/SID·소유자 경계·32개 실행/64개 history·종료/대기를 구현했다. Windows 실행은 native suspended process + restricted handle inheritance + Job Object를 사용한다. 터미널/stream은 아직 구현 중이다.
+- 로컬 Rust workspace 42 passed (테스트용 자식 fixture entry 2개 ignored), clippy PASS. 실제 HTTPS Gateway 파일·셸·프로세스 통합 5 passed (32.41초), 한글 CWD/출력과 stale PID 거부·owned tree 종료를 확인했다. Windows native shell/process/파일 확장 검사는 새 CI 대기다.
