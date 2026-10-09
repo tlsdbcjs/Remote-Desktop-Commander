@@ -37,6 +37,8 @@ impl Agent {
         )?;
         let journal = Journal::open(&settings.data_dir.join("execution.db"))?;
         journal.recover_agent()?;
+        let providers: Arc<dyn crate::providers::Provider> =
+            Arc::new(crate::providers::Filesystem::new(&settings)?);
         let outputs = OutputSpool::new(settings.data_dir.join("spool"), journal.clone())?;
         let status = json!({"state":"RUNNING","connected":false,"execution_identity":whoami::username(),"connection_epoch":0,"connection_phase":"starting","active_operations":0,"desktop":{"enabled":settings.desktop_enabled,"healthy":false,"unavailable_reason":"DESKTOP_RUNTIME_UNAVAILABLE","sessions":[]},"operations":[]});
         Ok(Self {
@@ -48,7 +50,7 @@ impl Agent {
             boot_id: new_id("boot"),
             credential: Arc::new(credential),
             artifacts,
-            providers: Arc::new(crate::providers::EmptyProvider),
+            providers,
             status: Arc::new(RwLock::new(status)),
             peer: Arc::new(RwLock::new(None)),
             lease: Arc::new(Mutex::new(tokio::time::Instant::now())),

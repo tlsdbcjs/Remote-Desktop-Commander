@@ -36,37 +36,29 @@ pub fn process_created(pid: u32) -> Result<f64, RacpError> {
     }
     #[cfg(windows)]
     {
+        use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+        use windows_sys::Win32::System::Threading::GetCurrentProcess;
         use windows_sys::Win32::{
-            Foundation::{CloseHandle, FILETIME, WAIT_TIMEOUT},
+            Foundation::{FILETIME, WAIT_TIMEOUT},
             System::Threading::{
                 GetProcessTimes, OpenProcess, WaitForSingleObject,
                 PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
             },
         };
-        let mut system = sysinfo::System::new();
-        let ids = [
-            sysinfo::Pid::from_u32(pid),
-            sysinfo::Pid::from_u32(std::process::id()),
-        ];
-        system.refresh_processes_specifics(
-            sysinfo::ProcessesToUpdate::Some(&ids),
-            true,
-            sysinfo::ProcessRefreshKind::everything(),
-        );
-        let a = system.process(ids[0]).and_then(|p| p.user_id());
-        let b = system.process(ids[1]).and_then(|p| p.user_id());
-        if a.is_none() || a != b {
-            return Err(RacpError::new("PERMISSION_DENIED"));
-        }
-        let handle = unsafe {
+        let raw = unsafe {
             OpenProcess(
                 PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
                 0,
                 pid,
             )
         };
-        if handle.is_null() {
+        if raw.is_null() {
             return Err(RacpError::new("LOCAL_STATE_FAILED"));
+        }
+        let owned = unsafe { OwnedHandle::from_raw_handle(raw) };
+        let handle = owned.as_raw_handle();
+        if token_sid(handle)? != token_sid(unsafe { GetCurrentProcess() })? {
+            return Err(RacpError::new("PERMISSION_DENIED"));
         }
         let mut creation = FILETIME {
             dwLowDateTime: 0,
@@ -78,9 +70,7 @@ pub fn process_created(pid: u32) -> Result<f64, RacpError> {
         let ok =
             unsafe { GetProcessTimes(handle, &mut creation, &mut exit, &mut kernel, &mut user) };
         let running = unsafe { WaitForSingleObject(handle, 0) } == WAIT_TIMEOUT;
-        unsafe {
-            CloseHandle(handle);
-        }
+
         if ok == 0 || !running {
             return Err(RacpError::new("LOCAL_STATE_FAILED"));
         }
@@ -102,4 +92,61 @@ mod tests {
         assert_eq!(super::process_created(own).unwrap(), first);
         assert!(super::process_created(u32::MAX).is_err());
     }
+}
+
+#[cfg(windows)]
+fn token_sid(process: windows_sys::Win32::Foundation::HANDLE) -> Result<Vec<u8>, RacpError> {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use windows_sys::Win32::{
+        Security::{
+            GetLengthSid, GetTokenInformation, IsValidSid, TokenUser, TOKEN_QUERY, TOKEN_USER,
+        },
+        System::Threading::OpenProcessToken,
+    };
+    let denied = || RacpError::new("PERMISSION_DENIED");
+    let mut raw = std::ptr::null_mut();
+    if unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut raw) } == 0 {
+        return Err(denied());
+    }
+    let token = unsafe { OwnedHandle::from_raw_handle(raw) };
+    let mut size = 0u32;
+    unsafe {
+        GetTokenInformation(
+            token.as_raw_handle(),
+            TokenUser,
+            std::ptr::null_mut(),
+            0,
+            &mut size,
+        );
+    }
+    if size < (std::mem::size_of::<TOKEN_USER>() as u32) || size > 65536 {
+        return Err(denied());
+    }
+    // Explicit word alignment is required before reading TOKEN_USER from the buffer.
+    let mut buffer = vec![0usize; (size as usize).div_ceil(std::mem::size_of::<usize>())];
+    if unsafe {
+        GetTokenInformation(
+            token.as_raw_handle(),
+            TokenUser,
+            buffer.as_mut_ptr().cast(),
+            size,
+            &mut size,
+        )
+    } == 0
+    {
+        return Err(denied());
+    }
+    let user = unsafe { &*buffer.as_ptr().cast::<TOKEN_USER>() };
+    let sid = user.User.Sid;
+    let start = buffer.as_ptr() as usize;
+    let end = start + size as usize;
+    let address = sid as usize;
+    if address < start || address + 8 > end || unsafe { IsValidSid(sid) } == 0 {
+        return Err(denied());
+    }
+    let length = unsafe { GetLengthSid(sid) } as usize;
+    if length > 128 || address + length > end {
+        return Err(denied());
+    }
+    Ok(unsafe { std::slice::from_raw_parts(sid.cast::<u8>(), length) }.to_vec())
 }

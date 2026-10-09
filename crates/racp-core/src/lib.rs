@@ -15,3 +15,5 @@ mod outputs;
 pub use outputs::OutputSpool;
 
 pub use paths::{secure_append_file, secure_read_file};
+mod workspaces;
+pub use workspaces::{path_within, Directory, FileInfo, Workspaces};

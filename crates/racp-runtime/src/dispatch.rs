@@ -249,6 +249,24 @@ impl Agent {
         Ok(())
     }
     async fn promote_output(&self, id: &str, outcome: &mut Value) -> Result<(), RacpError> {
+        if let Some(report) = outcome["error"]["details"]["report_spool_path"]
+            .as_str()
+            .map(std::path::PathBuf::from)
+        {
+            let outputs = self.outputs.clone();
+            let id = id.to_string();
+            let output = tokio::task::spawn_blocking(move || {
+                outputs.register(&report, &id, "application/json")
+            })
+            .await
+            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))??;
+            outcome["error"]["details"]
+                .as_object_mut()
+                .unwrap()
+                .remove("report_spool_path");
+            outcome["error"]["details"]["report_output_id"] = output["id"].clone();
+            outcome["error"]["details"]["report_upload_status"] = json!("pending");
+        }
         let result = &mut outcome["result"];
         if result.is_null() {
             return Ok(());

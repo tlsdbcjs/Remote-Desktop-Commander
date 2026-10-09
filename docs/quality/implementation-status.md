@@ -269,3 +269,8 @@ Windows x64 실제 산출물은 `dist/client-desktop/0.1.10/win-x64/`에 생성�
 - 실제 Gateway와 별도 Rust executable의 HTTPS 통합 5개 검사 PASS: 기존 Python credential 읽기·중복 시작/PID 유지·완전 종료, stale instance 거부, 잘못된 CA에서 연결 차단, Python journal 성공 결과 복구, 100 MiB 업로드/다운로드 재개 및 잘못된 SHA-256 거부.
 - protocol union validator를 캐시하여 프레임별 schema 재컴파일을 제거했고 기존 78개 operation 정규화 fixture를 그대로 통과했다.
 - Task 3의 native Windows 확장 검사는 새 CI 실행 대기다. Tauri UI·provider·패키징 전환 및 기존 Python 삭제는 아직 미완료다.
+
+- Task 4의 파일 provider 10개 operation을 Rust로 이식했다. 이름별 workspace·링크/경로 탈출·root identity 경계, 원자적 쓰기/CAS/append offset, 인코딩·BOM·개행 보존, revision에 연결된 cursor, copy/move/delete·부분 보고서 및 Artifact 입출력을 포함한다. 셸·프로세스·터미널 provider는 진행 중이며 Task 4 전체 완료는 아니다.
+- 이번 로컬 검사: Rust workspace 35 passed, clippy all-targets 경고 0, 실제 HTTPS Gateway/Rust Agent 통합 9 passed (54.92초). 새 검사에는 read-only 정책과 100 MiB 파일의 입출력 SHA-256 일치가 포함된다. Ruff 및 305개 파일 format 검사 PASS.
+- Windows [37983540140](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/37983540140)에서 시작 실패를 현재 process의 `sysinfo` user ID 부재로 재현했다. 동일 Windows process handle에서 토큰 SID·생성 시각을 검사하도록 수정했으며 새 native 검증은 대기 중이다. 실제 Windows compile·실행 전 통과 처리하지 않는다.
+- 기존 quality [37983540124](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/37983540124)의 Console E2E는 PASS. 전체 Python 회귀는 FAIL이며 기존 browser/plugin/terminal 시험과 링크 검사 실패가 남아 있다. 전체 회귀 완료로 판정하지 않는다.
