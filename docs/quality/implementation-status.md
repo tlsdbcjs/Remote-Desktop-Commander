@@ -277,3 +277,7 @@ Windows x64 실제 산출물은 `dist/client-desktop/0.1.10/win-x64/`에 생성�
 
 - Task 4 셸·프로세스 checkpoint: Rust 셸의 안전한 환경/CWD, 64 MiB 출력 제한과 채널별 raw spool, deadline/cancel 후 소유 tree 정리, 프로세스 snapshot cursor·생성 시각/SID·소유자 경계·32개 실행/64개 history·종료/대기를 구현했다. Windows 실행은 native suspended process + restricted handle inheritance + Job Object를 사용한다. 터미널/stream은 아직 구현 중이다.
 - 로컬 Rust workspace 42 passed (테스트용 자식 fixture entry 2개 ignored), clippy PASS. 실제 HTTPS Gateway 파일·셸·프로세스 통합 5 passed (32.41초), 한글 CWD/출력과 stale PID 거부·owned tree 종료를 확인했다. Windows native shell/process/파일 확장 검사는 새 CI 대기다.
+
+- Task 4 터미널·stream checkpoint: POSIX PTY 및 Windows ConPTY, 4 MiB raw history·UTF-8 바이트 cursor/eviction, owner·workspace·boot 경계, 입력/resize/keepalive/close, 8개 활성/64개 history, 8시간 TTL을 이식했다. 연결 epoch별 stream은 기존 4개 미확인 프레임 및 256 KiB byte window를 보존하고 ACK chunk boundary·gap·구독 정리·lease를 검사한다.
+- 이번 로컬 Rust workspace 45 passed (소유 자식용 fixture entry 3개 ignored), clippy PASS. 실제 HTTPS/WSS Gateway/Rust executable 통합 11 passed (65.65초). 스트림 RED는 기존 미구현 메시지에서 `stream_end`로 재현했고 GREEN에서는 credit 대기·재개, 한글 입력과 idempotent replay·종료를 확인했다.
+- Windows [37986271170](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/37986271170)의 native compile/clippy/unit 단계는 PASS이나 background 시작 통합 9개는 pipe EOF 대기 timeout, 독립 Artifact 1개는 PASS다. Rust 1.90 Windows `Command::spawn`의 기본 CreateProcess가 전체 inheritable handle을 넘기는 것을 확인했고, detached Agent를 NUL handle 하나의 명시적 HANDLE_LIST로 실행하도록 수정했다. Native launcher·ConPTY와 통합 결과는 새 CI 대기다. Task 3·4 native GREEN 및 전환 전체 완료는 아직 아니다.

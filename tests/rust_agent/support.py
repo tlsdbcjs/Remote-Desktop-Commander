@@ -21,9 +21,23 @@ async def bridge(executable: Path, state: Path, action: str, **data):
         stderr=subprocess.PIPE,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
-    output, error = await asyncio.wait_for(
-        process.communicate(json.dumps({"action": action, **data}).encode() + b"\n"), 50
-    )
+    try:
+        output, error = await asyncio.wait_for(
+            process.communicate(json.dumps({"action": action, **data}).encode() + b"\n"), 50
+        )
+    except TimeoutError as exc:
+        code = (
+            "BRIDGE_PIPE_EOF_TIMEOUT"
+            if process.returncode is not None
+            else "BRIDGE_PROCESS_TIMEOUT"
+        )
+        if process.returncode is None:
+            process.kill()
+            try:
+                await asyncio.wait_for(process.wait(), 5)
+            except TimeoutError:
+                pass
+        raise RuntimeError(code) from exc
     assert not error, "Rust bridge must not emit potentially sensitive diagnostics"
     reply = json.loads(output)
     if not reply.get("ok"):

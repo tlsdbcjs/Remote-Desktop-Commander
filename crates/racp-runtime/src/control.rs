@@ -6,7 +6,6 @@ use serde_json::{json, Value};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
-    process::Stdio,
     time::Duration,
 };
 use tokio::{
@@ -131,34 +130,8 @@ impl ControlClient {
                 return request(&record, "status").await;
             }
         }
-        let mut command = std::process::Command::new(&self.executable);
-        command
-            .args(["serve", "--state-dir"])
-            .arg(&self.state)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x08000000 | 0x00000008);
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            unsafe {
-                command.pre_exec(|| {
-                    if libc::setsid() < 0 {
-                        Err(std::io::Error::last_os_error())
-                    } else {
-                        Ok(())
-                    }
-                });
-            }
-        }
-        let mut child = command
-            .spawn()
-            .map_err(|_| RacpError::new("RUNTIME_UNAVAILABLE"))?;
+        let mut child: crate::launcher::BackgroundChild =
+            crate::launcher::spawn(&self.executable, &self.state)?;
         let pid = child.id();
         for _ in 0..300 {
             if let Some(record) = load_record(&self.state)? {
@@ -166,7 +139,7 @@ impl ControlClient {
                     return request(&record, "status").await;
                 }
             }
-            if child.try_wait()?.is_some() {
+            if child.exited()? {
                 return Err(RacpError::new("RUNTIME_UNAVAILABLE"));
             }
             tokio::time::sleep(Duration::from_millis(50)).await;

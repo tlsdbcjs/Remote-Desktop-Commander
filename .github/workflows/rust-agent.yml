@@ -10,6 +10,7 @@ permissions:
 jobs:
   windows-rust:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Install pinned Rust
@@ -24,4 +25,4 @@ jobs:
       - run: uv sync --all-packages --frozen
       - run: cargo build -p racp-agent -p racp-runtime --examples --locked
       - run: cargo build -p racp-agent --locked
-      - run: uv run --frozen pytest tests/rust_agent -q
+      - run: uv run --frozen pytest tests/rust_agent -v --tb=short

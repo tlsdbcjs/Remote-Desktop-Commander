@@ -140,6 +140,7 @@ impl Agent {
         let (sink, mut stream) = socket.split();
         let cancel = shutdown.child_token();
         let peer = Peer::spawn(sink, cancel.clone());
+        let streams = crate::streams::Streams::new(self.clone(), peer.clone());
         *self.peer.write().await = Some(peer);
         let result=async{
    self.phase("hello").await;
@@ -177,12 +178,16 @@ impl Agent {
       if message["type"]=="heartbeat"{*self.lease.lock().await=tokio::time::Instant::now()+Duration::from_millis(lease_ms);}
       else if message["type"]=="request"{self.dispatch(message).await?;}
       else if message["type"]=="cancel"{self.cancel_execution(message["target_operation_id"].as_str().ok_or_else(||RacpError::new("REQUEST_INVALID"))?,message["reason"].as_str().unwrap_or("requested")).await?;}
+      else if message["type"]=="stream_open"{streams.subscribe(message).await?;}
+      else if message["type"]=="stream_ack"{streams.ack(&message).await?;}
+      else if message["type"]=="stream_unsubscribe"{streams.unsubscribe(&message).await?;}
       else{return Err(RacpError::new("REQUEST_INVALID"));}
      }
     }
    }Ok(())
   }.await;
         cancel.cancel();
+        streams.close().await;
         if let Some(peer) = self.peer.write().await.take() {
             peer.close().await;
         }

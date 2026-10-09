@@ -12,7 +12,7 @@ use windows_sys::Win32::{
     Foundation::*,
     Security::SECURITY_ATTRIBUTES,
     Storage::FileSystem::*,
-    System::{JobObjects::*, Pipes::CreatePipe, Threading::*},
+    System::{Console::*, JobObjects::*, Pipes::CreatePipe, Threading::*},
 };
 fn wide(value: &std::ffi::OsStr) -> Vec<u16> {
     value.encode_wide().chain(Some(0)).collect()
@@ -109,17 +109,18 @@ impl Attributes {
             return Err(RacpError::new("EXECUTION_FAILED"));
         }
         this.initialized = true;
-        if unsafe {
-            UpdateProcThreadAttribute(
-                this.raw(),
-                0,
-                PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
-                handles.as_ptr().cast(),
-                std::mem::size_of_val(handles),
-                std::ptr::null_mut(),
-                std::ptr::null(),
-            )
-        } == 0
+        if !handles.is_empty()
+            && unsafe {
+                UpdateProcThreadAttribute(
+                    this.raw(),
+                    0,
+                    PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
+                    handles.as_ptr().cast(),
+                    std::mem::size_of_val(handles),
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                )
+            } == 0
         {
             return Err(RacpError::new("EXECUTION_FAILED"));
         }
@@ -140,42 +141,130 @@ pub struct OwnedProcess {
     process: OwnedHandle,
     job: OwnedHandle,
     pid: u32,
+    console: Option<HPCON>,
     pub stdout: Pipe,
     pub stderr: Pipe,
 }
 impl OwnedProcess {
-    pub fn spawn(spec: CommandSpec) -> Result<Self, RacpError> {
-        let program = executable(&spec)?;
-        if program
-            .extension()
-            .is_none_or(|e| !e.to_string_lossy().eq_ignore_ascii_case("exe"))
+    pub fn spawn_pty(spec: CommandSpec, cols: u16, rows: u16) -> Result<(Self, File), RacpError> {
+        let (input_read, input_write) = pipe()?;
+        let (stdout, out_write) = pipe()?;
+        let mut console = 0;
+        if unsafe {
+            CreatePseudoConsole(
+                COORD {
+                    X: cols as i16,
+                    Y: rows as i16,
+                },
+                input_read.as_raw_handle(),
+                out_write.as_raw_handle(),
+                0,
+                &mut console,
+            )
+        } < 0
         {
-            return Err(RacpError::new("INVALID_ARGUMENT"));
+            return Err(RacpError::new("CAPABILITY_UNAVAILABLE"));
         }
-        let program = wide(program.as_os_str());
-        let cwd = wide(spec.cwd.path.as_os_str());
-        let mut command = wide(std::ffi::OsStr::new(
-            &spec
-                .argv
-                .iter()
-                .map(|a| quote(a))
-                .collect::<Vec<_>>()
-                .join(" "),
-        ));
-        if command.len() > 32768 {
-            return Err(RacpError::new("INVALID_ARGUMENT"));
+        let result = (|| {
+            let mut attributes = Attributes::new(&[])?;
+            if unsafe {
+                UpdateProcThreadAttribute(
+                    attributes.raw(),
+                    0,
+                    PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE as usize,
+                    console as *const core::ffi::c_void,
+                    std::mem::size_of::<HPCON>(),
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                )
+            } == 0
+            {
+                return Err(RacpError::new("EXECUTION_FAILED"));
+            }
+            let mut startup = STARTUPINFOEXW::default();
+            startup.StartupInfo.cb = std::mem::size_of::<STARTUPINFOEXW>() as u32;
+            startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+            startup.lpAttributeList = attributes.raw();
+            let null = wide(std::ffi::OsStr::new("NUL"));
+            let stderr = File::from(own(unsafe {
+                CreateFileW(
+                    null.as_ptr(),
+                    GENERIC_READ,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    std::ptr::null(),
+                    OPEN_EXISTING,
+                    0,
+                    std::ptr::null_mut(),
+                )
+            })?);
+            let mut process = Self::launch(spec, stdout, stderr, &startup, false, Some(console))?;
+            process.stderr.eof = true;
+            Ok((process, File::from(input_write)))
+        })();
+        drop(input_read);
+        drop(out_write);
+        if result.is_err() {
+            unsafe { ClosePseudoConsole(console) };
         }
-        let mut environment = Vec::<u16>::new();
-        let mut vars: Vec<_> = spec.environment.iter().collect();
-        vars.sort_by_key(|(k, _)| k.to_ascii_uppercase());
-        for (k, v) in vars {
-            environment.extend(format!("{k}={v}").encode_utf16());
-            environment.push(0);
+        result
+    }
+    pub fn resize(&self, cols: u16, rows: u16) -> Result<(), RacpError> {
+        let console = self
+            .console
+            .ok_or_else(|| RacpError::new("HANDLE_EXPIRED"))?;
+        if unsafe {
+            ResizePseudoConsole(
+                console,
+                COORD {
+                    X: cols as i16,
+                    Y: rows as i16,
+                },
+            )
+        } < 0
+        {
+            return Err(RacpError::new("HANDLE_EXPIRED"));
         }
-        environment.push(0);
-        if environment.len() == 1 {
-            environment.push(0);
+        Ok(())
+    }
+    pub fn finish_pty(&mut self, mut receive: impl FnMut(&[u8])) -> Result<Option<i64>, RacpError> {
+        self.kill_tree()?;
+        let (receiver, closing) = if let Some(console) = self.console.take() {
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                unsafe { ClosePseudoConsole(console) };
+                let _ = tx.send(());
+            });
+            (Some(rx), true)
+        } else {
+            (None, false)
+        };
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut finished = !closing;
+        let mut code = None;
+        let mut block = [0u8; 65536];
+        loop {
+            for _ in 0..16 {
+                match self.stdout.read_available(&mut block)? {
+                    Some(n) if n > 0 => receive(&block[..n]),
+                    _ => break,
+                }
+            }
+            if let Some(exit) = self.poll()? {
+                code = Some(exit);
+            }
+            if receiver.as_ref().is_some_and(|rx| rx.try_recv().is_ok()) {
+                finished = true;
+            }
+            if finished && code.is_some() && self.tree_empty()? && self.stdout.eof() {
+                return Ok(code);
+            }
+            if std::time::Instant::now() >= until {
+                return Err(RacpError::new("CLEANUP_FAILED"));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
         }
+    }
+    pub fn spawn(spec: CommandSpec) -> Result<Self, RacpError> {
         let (stdout, out_write) = pipe()?;
         let (stderr, err_write) = pipe()?;
         let sa = SECURITY_ATTRIBUTES {
@@ -208,6 +297,47 @@ impl OwnedProcess {
         startup.StartupInfo.hStdOutput = handles[1];
         startup.StartupInfo.hStdError = handles[2];
         startup.lpAttributeList = attributes.raw();
+        Self::launch(spec, stdout, stderr, &startup, true, None)
+    }
+    fn launch(
+        spec: CommandSpec,
+        stdout: File,
+        stderr: File,
+        startup: &STARTUPINFOEXW,
+        inherit: bool,
+        console: Option<HPCON>,
+    ) -> Result<Self, RacpError> {
+        let program = executable(&spec)?;
+        if program
+            .extension()
+            .is_none_or(|e| !e.to_string_lossy().eq_ignore_ascii_case("exe"))
+        {
+            return Err(RacpError::new("INVALID_ARGUMENT"));
+        }
+        let program = wide(program.as_os_str());
+        let cwd = wide(spec.cwd.path.as_os_str());
+        let mut command = wide(std::ffi::OsStr::new(
+            &spec
+                .argv
+                .iter()
+                .map(|a| quote(a))
+                .collect::<Vec<_>>()
+                .join(" "),
+        ));
+        if command.len() > 32768 {
+            return Err(RacpError::new("INVALID_ARGUMENT"));
+        }
+        let mut environment = Vec::<u16>::new();
+        let mut vars: Vec<_> = spec.environment.iter().collect();
+        vars.sort_by_key(|(k, _)| k.to_ascii_uppercase());
+        for (k, v) in vars {
+            environment.extend(format!("{k}={v}").encode_utf16());
+            environment.push(0);
+        }
+        environment.push(0);
+        if environment.len() == 1 {
+            environment.push(0);
+        }
         let job = own(unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) })?;
         let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
         limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
@@ -229,9 +359,13 @@ impl OwnedProcess {
                 command.as_mut_ptr(),
                 std::ptr::null(),
                 std::ptr::null(),
-                1,
+                i32::from(inherit),
                 CREATE_SUSPENDED
-                    | CREATE_NO_WINDOW
+                    | if console.is_none() {
+                        CREATE_NO_WINDOW
+                    } else {
+                        0
+                    }
                     | CREATE_UNICODE_ENVIRONMENT
                     | EXTENDED_STARTUPINFO_PRESENT,
                 environment.as_ptr().cast(),
@@ -258,6 +392,7 @@ impl OwnedProcess {
             process,
             job,
             pid: info.dwProcessId,
+            console,
             stdout: Pipe {
                 file: stdout,
                 eof: false,
@@ -309,6 +444,9 @@ impl OwnedProcess {
 }
 impl Drop for OwnedProcess {
     fn drop(&mut self) {
+        if self.console.is_some() {
+            let _ = self.finish_pty(|_| {});
+        }
         let _ = self.kill_tree();
         unsafe { WaitForSingleObject(self.process.as_raw_handle(), 5000) };
     }

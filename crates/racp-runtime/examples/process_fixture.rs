@@ -17,6 +17,20 @@ fn main() {
                 .write_all(&vec![b'x'; 1024 * 1024])
                 .unwrap();
         }
+        Some("terminal") => {
+            println!("terminal ready");
+            let mut input = String::new();
+            loop {
+                input.clear();
+                if std::io::stdin().read_line(&mut input).unwrap() == 0 {
+                    break;
+                }
+                println!("response={}", input.trim());
+                if input.trim() == "quit" {
+                    break;
+                }
+            }
+        }
         _ => std::process::exit(2),
     }
 }

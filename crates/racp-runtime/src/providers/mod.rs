@@ -14,6 +14,13 @@ pub trait Provider: Send + Sync {
     fn inventory(&self) -> Vec<Value> {
         vec![]
     }
+    fn stream_read(&self, _: &Value) -> Result<Value, Value> {
+        Err(racp_core::error_value(
+            "CAPABILITY_UNAVAILABLE",
+            "terminal stream unavailable",
+            "not_started",
+        ))
+    }
     fn cleanup(&self) -> BoxFuture<'_, Result<(), RacpError>> {
         Box::pin(async { Ok(()) })
     }
@@ -36,7 +43,9 @@ pub use shell::Shell;
 mod containment;
 mod processes;
 pub use processes::Processes;
+mod terminal;
 use std::sync::Arc;
+pub use terminal::{Terminal, TerminalBuffer};
 pub struct NativeProviders {
     providers: Vec<Arc<dyn Provider>>,
 }
@@ -47,11 +56,26 @@ impl NativeProviders {
                 Arc::new(Filesystem::new(settings)?),
                 Arc::new(Shell::new(settings)?),
                 Arc::new(Processes::new(settings, boot)?),
+                Arc::new(Terminal::new(settings, boot)?),
             ],
         })
     }
 }
 impl Provider for NativeProviders {
+    fn stream_read(&self, request: &Value) -> Result<Value, Value> {
+        match self
+            .providers
+            .iter()
+            .find(|p| p.capabilities().iter().any(|c| c["name"] == "terminal"))
+        {
+            Some(p) => p.stream_read(request),
+            None => Err(racp_core::error_value(
+                "CAPABILITY_UNAVAILABLE",
+                "terminal stream unavailable",
+                "not_started",
+            )),
+        }
+    }
     fn capabilities(&self) -> Vec<Value> {
         self.providers
             .iter()

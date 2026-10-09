@@ -21,6 +21,20 @@ fn fixture_child() {
             println!("started");
             std::thread::sleep(std::time::Duration::from_secs(60));
         }
+        "terminal" => {
+            println!("terminal ready");
+            let mut input = String::new();
+            loop {
+                input.clear();
+                if std::io::stdin().read_line(&mut input).unwrap() == 0 {
+                    break;
+                }
+                println!("response={}", input.trim());
+                if input.trim() == "quit" {
+                    break;
+                }
+            }
+        }
         "tree" => {
             let child = std::process::Command::new(std::env::current_exe().unwrap())
                 .args([

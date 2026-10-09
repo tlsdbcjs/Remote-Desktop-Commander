@@ -163,6 +163,10 @@ impl Pipe {
                 Ok(Some(n))
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+            Err(e) if e.raw_os_error() == Some(libc::EIO) => {
+                self.eof = true;
+                Ok(Some(0))
+            }
             Err(e) => Err(e),
         }
     }
@@ -179,6 +183,120 @@ pub struct OwnedProcess {
 }
 #[cfg(unix)]
 impl OwnedProcess {
+    pub fn spawn_pty(spec: CommandSpec, cols: u16, rows: u16) -> Result<(Self, File), RacpError> {
+        use std::os::{
+            fd::{AsRawFd, FromRawFd},
+            unix::process::CommandExt,
+        };
+        let (mut master, mut slave) = (-1, -1);
+        let size = libc::winsize {
+            ws_row: rows,
+            ws_col: cols,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        if unsafe {
+            libc::openpty(
+                &mut master,
+                &mut slave,
+                std::ptr::null_mut(),
+                std::ptr::null(),
+                &size,
+            )
+        } < 0
+        {
+            return Err(RacpError::new("CAPABILITY_UNAVAILABLE"));
+        }
+        let master = unsafe { File::from_raw_fd(master) };
+        let slave = unsafe { File::from_raw_fd(slave) };
+        for fd in [master.as_raw_fd(), slave.as_raw_fd()] {
+            if unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) } < 0 {
+                return Err(RacpError::new("EXECUTION_FAILED"));
+            }
+        }
+        let flags = unsafe { libc::fcntl(master.as_raw_fd(), libc::F_GETFL) };
+        if flags < 0
+            || unsafe { libc::fcntl(master.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) }
+                < 0
+        {
+            return Err(RacpError::new("EXECUTION_FAILED"));
+        }
+        let input = master.try_clone()?;
+        let cwd = spec.cwd.handle().try_clone()?;
+        let mut command = std::process::Command::new(&spec.argv[0]);
+        command
+            .args(&spec.argv[1..])
+            .env_clear()
+            .envs(spec.environment)
+            .stdin(slave.try_clone()?)
+            .stdout(slave.try_clone()?)
+            .stderr(slave);
+        unsafe {
+            command.pre_exec(move || {
+                if libc::setsid() < 0
+                    || libc::fchdir(cwd.as_raw_fd()) < 0
+                    || libc::ioctl(0, libc::TIOCSCTTY, 0) < 0
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let child = command
+            .spawn()
+            .map_err(|_| RacpError::new("PATH_NOT_FOUND"))?;
+        let pid = child.id();
+        Ok((
+            Self {
+                child,
+                pid,
+                stdout: Pipe {
+                    file: master,
+                    eof: false,
+                },
+                stderr: Pipe {
+                    file: File::open("/dev/null")?,
+                    eof: true,
+                },
+            },
+            input,
+        ))
+    }
+    pub fn resize(&self, cols: u16, rows: u16) -> Result<(), RacpError> {
+        use std::os::fd::AsRawFd;
+        let size = libc::winsize {
+            ws_row: rows,
+            ws_col: cols,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        if unsafe { libc::ioctl(self.stdout.file.as_raw_fd(), libc::TIOCSWINSZ, &size) } < 0 {
+            return Err(RacpError::new("HANDLE_EXPIRED"));
+        }
+        Ok(())
+    }
+    pub fn finish_pty(&mut self, mut receive: impl FnMut(&[u8])) -> Result<Option<i64>, RacpError> {
+        self.kill_tree()?;
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut code = None;
+        let mut block = [0u8; 65536];
+        loop {
+            match self.stdout.read_available(&mut block)? {
+                Some(n) if n > 0 => receive(&block[..n]),
+                _ => {}
+            }
+            if let Some(exit) = self.poll()? {
+                code = Some(exit);
+            }
+            if code.is_some() && self.stdout.eof() {
+                return Ok(code);
+            }
+            if std::time::Instant::now() >= until {
+                return Err(RacpError::new("CLEANUP_FAILED"));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
     pub fn spawn(spec: CommandSpec) -> Result<Self, RacpError> {
         use std::os::{
             fd::{AsRawFd, OwnedFd},
