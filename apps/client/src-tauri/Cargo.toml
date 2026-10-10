@@ -21,5 +21,5 @@ racp-core = { path = "../../../crates/racp-core" }
 racp-contract = { path = "../../../crates/racp-contract" }
 racp-runtime = { path = "../../../crates/racp-runtime" }
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Registry"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Registry", "Win32_UI_WindowsAndMessaging"] }
 

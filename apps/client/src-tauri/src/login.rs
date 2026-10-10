@@ -168,6 +168,16 @@ pub fn set(enabled: bool) -> Result<Value, RacpError> {
         if code != ERROR_SUCCESS && !(code == ERROR_FILE_NOT_FOUND && !enabled) {
             return Err(RacpError::new("LOGIN_FAILED"));
         }
+        if enabled {
+            let mut approved = std::ptr::null_mut();
+            let path = wide(r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run");
+            let code = unsafe { RegOpenKeyExW(HKEY_CURRENT_USER,path.as_ptr(),0,KEY_SET_VALUE,&mut approved) };
+            if code==ERROR_SUCCESS {
+                let approved=Key(approved);
+                let code=unsafe { RegDeleteValueW(approved.0,name.as_ptr()) };
+                if code!=ERROR_SUCCESS && code!=ERROR_FILE_NOT_FOUND { return Err(RacpError::new("LOGIN_FAILED")); }
+            } else if code!=ERROR_FILE_NOT_FOUND { return Err(RacpError::new("LOGIN_FAILED")); }
+        }
         let result = settings()?;
         if result["registered"] != enabled || enabled && result["enabled"] != true {
             return Err(RacpError::new("LOGIN_FAILED"));

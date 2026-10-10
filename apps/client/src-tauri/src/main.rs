@@ -17,12 +17,14 @@ fn navigation(url: &tauri::Url) -> bool {
             && url.host_str() == Some("localhost")
             && url.port() == Some(5173)
 }
+struct TrayItems { start: MenuItem<tauri::Wry>, stop: MenuItem<tauri::Wry> }
 fn tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "현황 창 열기", true, None::<&str>)?;
     let start = MenuItem::with_id(app, "start", "Agent 시작", true, None::<&str>)?;
     let stop = MenuItem::with_id(app, "stop", "Agent 종료", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, "exit", "완전 종료 · Agent와 앱", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &start, &stop, &exit])?;
+    app.manage(TrayItems { start, stop });
     let icon = tauri::image::Image::from_bytes(include_bytes!("../../assets/offline.png"))?;
     TrayIconBuilder::with_id("racp-status")
         .icon(icon)
@@ -73,6 +75,11 @@ fn refresh_tray(app: &tauri::AppHandle, state: &Controller) {
     let connected = value["status"]["connected"] == true;
     let busy = state.busy.load(Ordering::Acquire)
         || value["status"]["active_operations"].as_u64().unwrap_or(0) > 0;
+    if let Some(items) = app.try_state::<TrayItems>() {
+        let running = value["status"]["state"] == "RUNNING";
+        let _ = items.start.set_enabled(!busy && !running);
+        let _ = items.stop.set_enabled(!busy && running);
+    }
     if let Some(tray) = app.tray_by_id("racp-status") {
         let bytes: &[u8] = if busy {
             include_bytes!("../../assets/busy.png")
@@ -94,7 +101,18 @@ fn refresh_tray(app: &tauri::AppHandle, state: &Controller) {
         let _ = tray.set_tooltip(Some(format!("RACP · {label}")));
     }
 }
+fn fatal() -> ! {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_OK, MB_ICONERROR};
+        let text: Vec<u16> = "RACP Client를 시작할 수 없습니다. 설치 파일과 사용자 상태 폴더를 확인해 주세요.".encode_utf16().chain(Some(0)).collect();
+        let title: Vec<u16> = "RACP Client".encode_utf16().chain(Some(0)).collect();
+        MessageBoxW(std::ptr::null_mut(),text.as_ptr(),title.as_ptr(),MB_OK|MB_ICONERROR);
+    }
+    std::process::exit(4)
+}
 fn main() {
+    std::env::remove_var("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER");
     // Fixed WebView2 is selected before Tauri starts any WebView thread.
     if let Ok(executable) = std::env::current_exe() {
         if let Some(root) = executable.parent() {
@@ -106,10 +124,11 @@ fn main() {
             }
         }
     }
+    if !cfg!(debug_assertions) && std::env::var_os("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER").is_none() { fatal(); }
     let controller = match Controller::new() {
         Ok(state) => Arc::new(state),
         Err(_) => {
-            std::process::exit(4);
+            fatal();
         }
     };
     let builder = tauri::Builder::default()
@@ -134,6 +153,7 @@ fn main() {
             let login_launch = std::env::args().any(|arg| arg == login::ARGUMENT);
             let window =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                    .data_directory(app.state::<Arc<Controller>>().state_dir.join("webview-cache"))
                     .title("RACP Client")
                     .inner_size(860.0, 760.0)
                     .min_inner_size(620.0, 620.0)
@@ -185,7 +205,7 @@ fn main() {
         });
     let app = match builder.build(tauri::generate_context!()) {
         Ok(app) => app,
-        Err(_) => std::process::exit(4),
+        Err(_) => fatal(),
     };
     app.run(|app, event| {
         if let tauri::RunEvent::ExitRequested { api, .. } = event {
