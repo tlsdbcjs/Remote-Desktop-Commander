@@ -82,6 +82,7 @@ impl NativeProviders {
             Arc::new(Processes::new(settings, boot)?),
             Arc::new(Terminal::new(settings, boot)?),
             Arc::new(browser::Browser::new(settings, boot, config)?),
+            Arc::new(reversing::Reversing::new(settings,boot)?),
         ];
         #[cfg(windows)]
         let providers = {
