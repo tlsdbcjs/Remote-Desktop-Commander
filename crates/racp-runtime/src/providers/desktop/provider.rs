@@ -143,9 +143,13 @@ impl Desktop {
                     *provider
                         .registrar
                         .lock()
-                        .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = Some(
-                        super::login::Registrar::start(settings, provider.child.clone(), provider.connected.clone())?,
-                    );
+                        .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? =
+                        Some(super::login::Registrar::start(
+                            settings,
+                            provider.child.clone(),
+                            provider.connected.clone(),
+                            provider.status.clone(),
+                        )?);
                 }
                 return Ok(provider);
             }
@@ -177,10 +181,15 @@ impl Desktop {
         Ok(provider)
     }
     fn restore_foreground(&self) -> Result<(), RacpError> {
-        let mut children = self.child.lock()
+        let mut children = self
+            .child
+            .lock()
             .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
-        if !self.enabled || !self.connected.load(Ordering::Acquire) || !children.is_empty()
-            || PinnedPeer::open(std::process::id())?.identity().session == 0 {
+        if !self.enabled
+            || !self.connected.load(Ordering::Acquire)
+            || !children.is_empty()
+            || PinnedPeer::open(std::process::id())?.identity().session == 0
+        {
             return Ok(());
         }
         let mut child = Self::launch(&self.settings)?;
@@ -196,7 +205,10 @@ impl Desktop {
         }
         let mut status = status?;
         status["broker_running"] = json!(true);
-        *self.status.lock().map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = status;
+        *self
+            .status
+            .lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = status;
         children.insert(child.config.session_id, child);
         Ok(())
     }
@@ -539,20 +551,28 @@ impl Desktop {
         Ok(result)
     }
     fn retire_children(&self) -> Result<(), RacpError> {
-        let mut children = self.child.lock()
+        let mut children = self
+            .child
+            .lock()
             .map_err(|_| RacpError::new("CLEANUP_FAILED"))?;
         for child in children.values_mut() {
             child.stop()?;
         }
         children.clear();
-        *self.status.lock().map_err(|_| RacpError::new("CLEANUP_FAILED"))? =
+        *self
+            .status
+            .lock()
+            .map_err(|_| RacpError::new("CLEANUP_FAILED"))? =
             json!({"available":false,"error_code":"SESSION_UNAVAILABLE"});
         Ok(())
     }
     fn shutdown(&self) -> Result<(), RacpError> {
         self.connected.store(false, Ordering::Release);
-        let mut registrar = self.registrar.lock()
-            .map_err(|_| RacpError::new("CLEANUP_FAILED"))?.take();
+        let mut registrar = self
+            .registrar
+            .lock()
+            .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
+            .take();
         if let Some(registrar) = registrar.as_mut() {
             registrar.stop()?;
         }

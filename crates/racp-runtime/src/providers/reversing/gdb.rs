@@ -4,7 +4,7 @@ use crate::{
     identity::ProtectedProcess,
     providers::containment::{self, CommandSpec, OwnedProcess},
 };
-use racp_contract::{digest, RacpError};
+use racp_contract::RacpError;
 use racp_core::{validate_local_path, Workspaces};
 use serde_json::{json, Value};
 use std::{

@@ -184,6 +184,7 @@ impl Registrar {
         settings: &AgentSettings,
         children: Arc<Mutex<BTreeMap<u32, Child>>>,
         connected: Arc<AtomicBool>,
+        status: Arc<Mutex<Value>>,
     ) -> Result<Self, RacpError> {
         let c: Configuration = serde_json::from_slice(&racp_core::read_bounded(
             &settings.data_dir.join("service-login.json"),
@@ -219,14 +220,31 @@ impl Registrar {
             while !stopping.load(Ordering::Acquire) {
                 if pipe.accept().unwrap_or(false) {
                     if connected.load(Ordering::Acquire) {
-                    let _ = adopt(
-                        &mut pipe,
-                        &e,
-                        &c.users,
-                        agent.identity(),
-                        &broker_root,
-                        &children,
-                    );
+                        let adopted = adopt(
+                            &mut pipe,
+                            &e,
+                            &c.users,
+                            agent.identity(),
+                            &broker_root,
+                            &children,
+                        );
+                        if let Ok(session) = adopted {
+                            if let Ok(mut children) = children.lock() {
+                                if let Some(child) = children.get_mut(&session) {
+                                    if let Ok(mut state) = pipe::request(
+                                        &child.config,
+                                        &child.peer,
+                                        json!({"operation":"broker.status"}),
+                                        Duration::from_secs(3),
+                                    ) {
+                                        state["broker_running"] = json!(true);
+                                        if let Ok(mut status) = status.lock() {
+                                            *status = state;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     pipe.disconnect();
                 }
@@ -328,7 +346,7 @@ fn adopt(
     agent: &super::PeerIdentity,
     broker_root: &Path,
     children: &Arc<Mutex<BTreeMap<u32, Child>>>,
-) -> Result<(), RacpError> {
+) -> Result<u32, RacpError> {
     let hello = pipe.read()?;
     if hello.as_object().is_none_or(|v| v.len() != 5)
         || hello["version"] != 1
@@ -466,7 +484,7 @@ fn adopt(
     )?;
     children.insert(session, child);
     pipe.write(&json!({"adopted":true}))?;
-    Ok(())
+    Ok(session)
 }
 pub fn run_login_broker(endpoint_path: &Path) -> Result<(), RacpError> {
     let e = endpoint(endpoint_path)?;

@@ -361,8 +361,8 @@ impl Processes {
                     .lock()
                     .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
                 if let Some(child) = managed.values_mut().find(|m| m.identity(pid, birth)) {
-                    if (child.handle["owner"] != principal
-                        || child.handle["workspace_id"] != request["context"]["workspace_id"])
+                    if child.handle["owner"] != principal
+                        || child.handle["workspace_id"] != request["context"]["workspace_id"]
                     {
                         return Err(RacpError::new("PERMISSION_DENIED"));
                     }
@@ -410,8 +410,8 @@ impl Processes {
             .lock()
             .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
         if let Some(child) = managed.values_mut().find(|m| m.identity(pid, birth)) {
-            if (child.handle["owner"] != principal
-                || child.handle["workspace_id"] != request["context"]["workspace_id"])
+            if child.handle["owner"] != principal
+                || child.handle["workspace_id"] != request["context"]["workspace_id"]
             {
                 return Err(RacpError::new("PERMISSION_DENIED"));
             }

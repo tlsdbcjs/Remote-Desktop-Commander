@@ -21,6 +21,7 @@ from typing import Any
 import psutil
 from racp_domain.version import VERSION
 
+
 @dataclass(frozen=True)
 class ProcessIdentity:
     pid: int

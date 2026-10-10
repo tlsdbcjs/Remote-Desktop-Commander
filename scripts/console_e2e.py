@@ -65,10 +65,17 @@ async def run(node: Path, grep: str | None = None) -> int:
         )
         app = create_app(root / "gateway", trusted_personal=True)
         agent_log = resources.enter_context((root / "agent.log").open("wb"))
-        executable = Path(os.environ.get(
-            "RACP_TEST_AGENT",
-            str(Path("target/debug") / ("racp-agent.exe" if os.name == "nt" else "racp-agent")),
-        )).resolve()
+        executable = await asyncio.to_thread(
+            Path(
+                os.environ.get(
+                    "RACP_TEST_AGENT",
+                    str(
+                        Path("target/debug")
+                        / ("racp-agent.exe" if os.name == "nt" else "racp-agent")
+                    ),
+                )
+            ).resolve
+        )
         if not executable.is_file():
             raise RuntimeError("Build the native Rust Agent before resuming Console acceptance")
         session_id = 0

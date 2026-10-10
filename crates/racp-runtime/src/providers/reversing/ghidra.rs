@@ -7,7 +7,7 @@ use crate::{
 use racp_contract::{digest, new_id, RacpError};
 use racp_core::{atomic_write, private_dir, read_bounded, validate_local_path, Workspaces};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::{
     collections::BTreeMap,
     fs::File,

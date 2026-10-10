@@ -88,6 +88,19 @@ impl Agent {
         );
         status["active_operations"] = json!(self.tasks.lock().await.len());
         status["operations"] = json!(self.execution_inventory().await.unwrap_or_default());
+        if let Some(desktop) = self
+            .providers
+            .capabilities()
+            .into_iter()
+            .find(|p| p["name"] == "desktop")
+        {
+            status["desktop"] = json!({
+                "enabled": desktop["enabled"],
+                "healthy": desktop["healthy"],
+                "unavailable_reason": desktop["unavailable_reason"],
+                "sessions": desktop["attributes"]["sessions"],
+            });
+        }
         status
     }
     async fn phase(&self, phase: &str) {
@@ -294,14 +307,16 @@ impl Agent {
                     }
                     retired = true;
                     agent.lease_retiring.store(false, Ordering::Release);
-                    let ttl = agent.lease.lock().await
+                    let ttl = agent
+                        .lease
+                        .lock()
+                        .await
                         .saturating_duration_since(tokio::time::Instant::now());
                     let status = agent.status.read().await;
                     if !ttl.is_zero() && status["connected"] == true {
-                        agent.providers.connection(
-                            status["connection_epoch"].as_u64().unwrap_or(0),
-                            ttl,
-                        );
+                        agent
+                            .providers
+                            .connection(status["connection_epoch"].as_u64().unwrap_or(0), ttl);
                     }
                 }
                 if !expired {

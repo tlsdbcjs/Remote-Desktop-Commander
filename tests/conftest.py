@@ -1,4 +1,5 @@
 """Shared server fixtures; legacy in-process Python Agent fixtures are retired."""
+
 import os
 from pathlib import Path
 from typing import Any
