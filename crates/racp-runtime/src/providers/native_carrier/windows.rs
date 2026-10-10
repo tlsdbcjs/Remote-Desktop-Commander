@@ -157,6 +157,9 @@ impl Runtime {
         {
             return Err(RacpError::new("REQUEST_INVALID"));
         }
+        if file_version(executable.as_ref().unwrap())? != version {
+            return Err(RacpError::new("PLUGIN_VERSION_MISMATCH"));
+        }
         let actual: std::collections::BTreeSet<_> = std::fs::read_dir(&root)?
             .map(|e| e.map(|e| e.file_name().to_string_lossy().to_ascii_lowercase()))
             .collect::<Result<_, _>>()?;
@@ -272,4 +275,145 @@ pub(super) fn verify_peer(socket: &TcpStream, pid: u32, birth: f64) -> Result<()
         return Err(RacpError::new("PERMISSION_DENIED"));
     }
     Ok(())
+}
+
+fn file_version(path: &std::path::Path) -> Result<String, RacpError> {
+    let name = wide(
+        path.to_str()
+            .ok_or_else(|| RacpError::new("PATH_ACCESS_DENIED"))?,
+    );
+    let mut unused = 0;
+    let size = unsafe { GetFileVersionInfoSizeW(name.as_ptr(), &mut unused) };
+    if size == 0 || size > 1024 * 1024 {
+        return Err(RacpError::new("PLUGIN_VERSION_MISMATCH"));
+    }
+    let mut data = vec![0u8; size as usize];
+    if unsafe { GetFileVersionInfoW(name.as_ptr(), 0, size, data.as_mut_ptr().cast()) } == 0 {
+        return Err(RacpError::new("PLUGIN_VERSION_MISMATCH"));
+    }
+    let mut value = std::ptr::null_mut();
+    let mut length = 0;
+    if unsafe {
+        VerQueryValueW(
+            data.as_ptr().cast(),
+            wide("\\").as_ptr(),
+            &mut value,
+            &mut length,
+        )
+    } == 0
+        || length < std::mem::size_of::<VS_FIXEDFILEINFO>() as u32
+    {
+        return Err(RacpError::new("PLUGIN_VERSION_MISMATCH"));
+    }
+    let info = unsafe { std::ptr::read_unaligned(value.cast::<VS_FIXEDFILEINFO>()) };
+    if info.dwSignature != 0xFEEF04BD {
+        return Err(RacpError::new("PLUGIN_VERSION_MISMATCH"));
+    }
+    Ok(format!(
+        "{}.{}.{}.{}",
+        info.dwFileVersionMS >> 16,
+        info.dwFileVersionMS & 0xffff,
+        info.dwFileVersionLS >> 16,
+        info.dwFileVersionLS & 0xffff
+    ))
+}
+pub(super) fn provision(args: &[String], state: &std::path::Path) -> Result<Value, RacpError> {
+    let option = |name: &str| -> Result<PathBuf, RacpError> {
+        let path = args
+            .windows(2)
+            .find(|v| v[0] == name)
+            .map(|v| PathBuf::from(&v[1]))
+            .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
+        racp_core::validate_local_path(&path)
+    };
+    let source = option("--cdb-directory")?;
+    let root = option("--directory")?;
+    let _lock = racp_core::InstanceLock::acquire(&state.join("native-runtime.lock"))?;
+    if root.try_exists()? || state.join("native-runtime.json").try_exists()? {
+        return Err(RacpError::new("CONFLICT"));
+    }
+    let guards = Workspaces::new(&source, &[])?;
+    let directory = guards.directory("default", &source)?;
+    racp_core::private_dir(&root)?;
+    let destination = Workspaces::new(&root, &[])?;
+    let copied = destination.directory("default", &root)?;
+    let version = file_version(&source.join("cdb.exe"))?;
+    let mut files = serde_json::Map::new();
+    let mut total = 0u64;
+    for name in [
+        "cdb.exe",
+        "dbgeng.dll",
+        "dbghelp.dll",
+        "dbgcore.dll",
+        "symsrv.dll",
+        "exts.dll",
+    ] {
+        let Some(info) = directory.info(name)? else {
+            if ["cdb.exe", "dbgeng.dll", "dbghelp.dll"].contains(&name) {
+                return Err(RacpError::new("CAPABILITY_UNAVAILABLE"));
+            }
+            continue;
+        };
+        if info.directory || info.link || info.size > 64 * 1024 * 1024 {
+            return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+        }
+        total += info.size;
+        if total > 128 * 1024 * 1024 {
+            return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+        }
+        let mut input = directory.open_read(name)?;
+        let before = racp_core::FileInfo::from_file(&input)?;
+        let mut output = copied.create(name)?;
+        let mut hash = Sha256::new();
+        let mut count = 0;
+        let mut bytes = [0u8; 65536];
+        loop {
+            let n = input.read(&mut bytes)?;
+            if n == 0 {
+                break;
+            }
+            count += n as u64;
+            if count > before.size {
+                return Err(RacpError::new("PRECONDITION_FAILED"));
+            }
+            std::io::Write::write_all(&mut output, &bytes[..n])?;
+            hash.update(&bytes[..n]);
+        }
+        output.sync_all()?;
+        if count != before.size
+            || racp_core::FileInfo::from_file(&input)?.revision() != before.revision()
+            || directory.require_file(name)?.revision() != before.revision()
+        {
+            return Err(RacpError::new("PRECONDITION_FAILED"));
+        }
+        files.insert(name.into(), json!(format!("{:x}", hash.finalize())));
+    }
+    let extension = if files.contains_key("exts.dll") {
+        json!("exts.dll")
+    } else {
+        Value::Null
+    };
+    let manifest = serde_json::to_vec(
+        &json!({"version":1,"engine":"cdb-win-x64","engine_version":version,"files":files,"extension":extension}),
+    )?;
+    racp_core::atomic_write(&root.join("manifest.json"), &manifest, false)?;
+    racp_core::atomic_write(
+        &state.join("native-runtime.json"),
+        &serde_json::to_vec(&json!({"root":root,"manifest_sha256":digest(&manifest)}))?,
+        false,
+    )?;
+    if let Err(error) = Runtime::load(state) {
+        let _ = std::fs::remove_file(state.join("native-runtime.json"));
+        return Err(error);
+    }
+    racp_core::atomic_write(
+        &state.join("native-runtime-provenance.json"),
+        &serde_json::to_vec(
+            &json!({"version":1,"engine":"Microsoft Debugging Tools for Windows","engine_version":version,"source":source,"license":"Microsoft SDK license; locally provisioned","bundled":false}),
+        )?,
+        false,
+    )?;
+    Ok(
+        json!({"configured":true,"backend":"cdb-win-x64","backend_version":version,"restart_required":true}),
+    )
 }

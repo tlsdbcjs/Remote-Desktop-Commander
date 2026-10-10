@@ -57,6 +57,7 @@ struct Session {
     protected: Mutex<Option<crate::identity::ProtectedProcess>>,
     tasks: AsyncMutex<Vec<tokio::task::JoinHandle<()>>>,
     started: Mutex<bool>,
+    closing: AsyncMutex<()>,
     root: PathBuf,
 }
 struct Channel {
@@ -229,6 +230,15 @@ impl Session {
         self.tasks.lock().await.push(job);
     }
     async fn close(&self) -> Result<(), RacpError> {
+        let _closing = self.closing.lock().await;
+        if self
+            .handle
+            .lock()
+            .map_err(|_| RacpError::new("CLEANUP_FAILED"))?["state"]
+            == "CLOSED"
+        {
+            return Ok(());
+        }
         self.cancel.cancel();
         for channel in self.channels.lock().await.values() {
             let _ = channel.writer.lock().await.shutdown().await;
@@ -550,6 +560,7 @@ impl NativeCarrier {
                 protected: Mutex::new(None),
                 tasks: AsyncMutex::new(vec![]),
                 started: Mutex::new(false),
+                closing: AsyncMutex::new(()),
                 root,
             });
             let mut url = Value::Null;
@@ -571,8 +582,9 @@ impl NativeCarrier {
             drop(state);
             let watcher = session.clone();
             tokio::spawn(async move {
+                let mut log_bytes = 0usize;
                 loop {
-                    tokio::select! {_=watcher.cancel.cancelled()=>break,_=tokio::time::sleep(Duration::from_millis(50))=>{if watcher.check().is_err(){break;} let failed = watcher.owned.lock().map(|mut owned| { if let Some(child)=owned.as_mut() { let mut bytes=[0u8;8192]; for pipe in [&mut child.stdout,&mut child.stderr] { for _ in 0..16 { match pipe.read_available(&mut bytes) { Ok(Some(n)) if n>0=>(), _=>break } } } child.poll().map(|v|v.is_some()).unwrap_or(true) } else { false } }).unwrap_or(true); if failed {break;}}}
+                    tokio::select! {_=watcher.cancel.cancelled()=>break,_=tokio::time::sleep(Duration::from_millis(50))=>{if watcher.check().is_err(){break;} let failed = watcher.owned.lock().map(|mut owned| { if let Some(child)=owned.as_mut() { let mut bytes=[0u8;8192]; for pipe in [&mut child.stdout,&mut child.stderr] { for _ in 0..16 { match pipe.read_available(&mut bytes) { Ok(Some(n)) if n>0=>{log_bytes=log_bytes.saturating_add(n); if log_bytes>8*1024*1024{return true;}}, _=>break } } } child.poll().map(|v|v.is_some()).unwrap_or(true) } else { false } }).unwrap_or(true); if failed {break;}}}
                 }
                 let _ = watcher.close().await;
             });
@@ -760,5 +772,17 @@ impl Provider for NativeCarrier {
             }
             Ok(())
         })
+    }
+}
+
+pub fn provision_native(args: &[String], state: &std::path::Path) -> Result<Value, RacpError> {
+    #[cfg(windows)]
+    {
+        windows::provision(args, state)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (args, state);
+        Err(RacpError::new("OPERATION_NOT_SUPPORTED"))
     }
 }

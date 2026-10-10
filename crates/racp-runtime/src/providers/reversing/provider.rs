@@ -465,14 +465,26 @@ impl Reversing {
                         std::process::id(),
                     )?;
                     if peer.identity().sid != actor.identity().sid
+                        || peer.identity().session != actor.identity().session
                         || peer.identity().integrity > actor.identity().integrity
                     {
                         return Err(RacpError::new("PERMISSION_DENIED"));
                     }
                     peer.alive()?;
                 }
-                private_dir(&self.root.join(&id))?;
-                None
+                let exe = system
+                    .process(sysinfo::Pid::from_u32(pid))
+                    .and_then(|p| p.exe())
+                    .ok_or_else(|| RacpError::new("PRECONDITION_FAILED"))?;
+                let snapshot = self.copy_target(
+                    &r,
+                    &id,
+                    exe.to_str()
+                        .ok_or_else(|| RacpError::new("PATH_ACCESS_DENIED"))?,
+                    deadline,
+                    &cancel,
+                )?;
+                Some(snapshot)
             } else {
                 let key = if op == "re.open" {
                     "path"
@@ -488,12 +500,47 @@ impl Reversing {
                 .backends
                 .get_mut(&backend_name)
                 .unwrap()
-                .request(op, p, deadline, &cancel)?;
-            let private_id = value["resource_id"]
+                .request(op, p, deadline, &cancel);
+            let value = match value {
+                Ok(value) => value,
+                Err(error) => {
+                    if let Some(backend) = state.backends.get_mut(&backend_name) {
+                        backend.shutdown()?;
+                    }
+                    self.remove_resource(&self.root.join(&id))?;
+                    return Err(error);
+                }
+            };
+            if let Some(target) = &_target {
+                let actual = super::ghidra::file_hash(target, deadline, &cancel)?;
+                if value["target_sha256"] != actual {
+                    state.backends.get_mut(&backend_name).unwrap().shutdown()?;
+                    self.remove_resource(&self.root.join(&id))?;
+                    return Err(RacpError::new("PRECONDITION_FAILED"));
+                }
+            }
+            let private_id = match value["resource_id"]
                 .as_str()
                 .filter(|s| !s.is_empty() && s.len() <= 96)
-                .ok_or_else(|| RacpError::new("PLUGIN_PROTOCOL_ERROR"))?
-                .to_owned();
+            {
+                Some(id) => id.to_owned(),
+                None => {
+                    state.backends.get_mut(&backend_name).unwrap().shutdown()?;
+                    self.remove_resource(&self.root.join(&id))?;
+                    return Err(RacpError::new("PLUGIN_PROTOCOL_ERROR"));
+                }
+            };
+            if op == "debugger.attach"
+                && (value["pid"] != r["payload"]["pid"]
+                    || value["create_time"] != r["payload"]["create_time"]
+                    || crate::identity::process_created(
+                        r["payload"]["pid"].as_u64().unwrap_or(0) as u32
+                    )? != r["payload"]["create_time"].as_f64().unwrap_or(0.0))
+            {
+                state.backends.get_mut(&backend_name).unwrap().shutdown()?;
+                self.remove_resource(&self.root.join(&id))?;
+                return Err(RacpError::new("PRECONDITION_FAILED"));
+            }
             let now = timestamp();
             let mut handle = json!({"id":id,"type":if op=="re.open"{"analysis"}else{"debugger"},"device_id":self.device,"owner":r["context"]["principal_id"],"agent_boot_id":self.boot,"workspace_id":r["context"]["workspace_id"],"provider_instance_id":instance,"resource_revision":"1","created_at":now,"last_access_at":now,"expires_at":(chrono::Utc::now()+chrono::Duration::hours(1)).to_rfc3339_opts(chrono::SecondsFormat::Micros,true),"state":"ACTIVE","availability":"available","backend":backend_name,"backend_version":state.backends[&backend_name].approved.manifest["backend_version"],"ownership":if op=="debugger.attach"{"borrowed"}else{"racp_owned"}});
             for key in [

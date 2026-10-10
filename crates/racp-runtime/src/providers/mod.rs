@@ -58,6 +58,7 @@ impl Provider for EmptyProvider {
 }
 mod filesystem;
 mod native_carrier;
+pub use native_carrier::provision_native;
 mod os_observation;
 pub mod recipes;
 pub use filesystem::Filesystem;

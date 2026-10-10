@@ -527,12 +527,15 @@ fn scheduled_guardian(path: &Path, config: &PairConfig) -> Result<PinnedPeer, Ra
                 settings.SetExecutionTimeLimit(&BSTR::from("PT0S"))?;
                 settings.SetHidden(windows::Win32::Foundation::VARIANT_BOOL(-1))?;
                 let action: IExecAction = task.Actions()?.Create(TASK_ACTION_EXEC)?.cast()?;
-                let exe =
-                    std::env::current_exe().map_err(|_| windows::core::Error::from_win32())?;
+                let exe = std::env::current_exe().map_err(|_| {
+                    windows::core::Error::from_hresult(windows::core::HRESULT(0x80004005u32 as i32))
+                })?;
                 action.SetPath(&BSTR::from(exe.to_string_lossy().as_ref()))?;
                 let text = path.to_string_lossy();
                 if text.contains('"') {
-                    return Err(windows::core::Error::from_win32());
+                    return Err(windows::core::Error::from_hresult(windows::core::HRESULT(
+                        0x80004005u32 as i32,
+                    )));
                 }
                 action.SetArguments(&BSTR::from(format!("guardian --pair-config \"{text}\"")))?;
                 let name = BSTR::from(format!("RACP-Guardian-{}", config.pair_id));
@@ -574,7 +577,9 @@ fn scheduled_guardian(path: &Path, config: &PairConfig) -> Result<PinnedPeer, Ra
                         }
                     }
                     if Instant::now() >= deadline {
-                        return Err(windows::core::Error::from_win32());
+                        return Err(windows::core::Error::from_hresult(windows::core::HRESULT(
+                            0x80004005u32 as i32,
+                        )));
                     }
                     std::thread::sleep(Duration::from_millis(20));
                 }

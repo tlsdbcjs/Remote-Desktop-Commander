@@ -119,6 +119,13 @@ impl Worker {
                     if file_hash(executable, deadline, &cancel)? != *hash {
                         return Err(RacpError::new("PLUGIN_VERSION_MISMATCH"));
                     }
+                    super::gdb::probe(
+                        executable,
+                        Path::new(self.manifest["working_directory"].as_str().unwrap()),
+                        self.manifest["backend_version"].as_str().unwrap(),
+                        deadline,
+                        &cancel,
+                    )?;
                 }
                 Adapter::Ghidra { runtime, .. } => runtime.health(
                     Path::new(self.manifest["working_directory"].as_str().unwrap()),
@@ -185,6 +192,7 @@ impl Worker {
                 let result = driver.execute(op, &p, deadline, &cancel);
                 if op == "debugger.close" && result.is_ok() {
                     sessions.remove(id);
+                    self.reported.remove(id);
                 }
                 result
             }
@@ -214,6 +222,7 @@ impl Worker {
                     .clone();
                 if op == "re.close" {
                     sessions.remove(id);
+                    self.reported.remove(id);
                     return Ok(json!({"closed":true,"analysis_state":"CLOSED"}));
                 }
                 if matches!(op, "re.query" | "re.command") {

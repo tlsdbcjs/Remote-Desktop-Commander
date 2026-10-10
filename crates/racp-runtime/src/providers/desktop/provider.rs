@@ -155,7 +155,7 @@ impl Desktop {
                         .status
                         .lock()
                         .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = state;
-                    *provider
+                    provider
                         .child
                         .lock()
                         .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?

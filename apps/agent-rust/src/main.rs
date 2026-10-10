@@ -61,6 +61,9 @@ async fn main() {
         if action == "configure-service-login" {
             return racp_runtime::providers::desktop::configure_login(&args, &state);
         }
+        if action == "provision-native" {
+            return racp_runtime::providers::provision_native(&args, &state);
+        }
         if matches!(action, "provision-gdb" | "provision-ghidra") {
             return racp_runtime::providers::reversing::provision(action, &args, &state);
         }

@@ -39,7 +39,7 @@ pub fn own(principals: &[String], broker: bool) -> Result<Grants, RacpError> {
     if unsafe {
         OpenProcessToken(
             GetCurrentProcess(),
-            TOKEN_QUERY | READ_CONTROL | WRITE_DAC,
+            TOKEN_QUERY | 0x00020000 | 0x00040000,
             &mut token,
         )
     } == 0

@@ -35,14 +35,14 @@ fn references(v: &Value) -> bool {
         _ => true,
     }
 }
-fn tree(v: &Value, depth: usize, nodes: &mut usize) -> bool {
+fn tree(v: &Value, depth: usize, nodes: &mut usize, maximum: usize) -> bool {
     *nodes += 1;
-    if depth > 16 || *nodes > 10000 {
+    if depth > 16 || *nodes > maximum {
         return false;
     }
     match v {
-        Value::Object(o) => o.values().all(|v| tree(v, depth + 1, nodes)),
-        Value::Array(a) => a.iter().all(|v| tree(v, depth + 1, nodes)),
+        Value::Object(o) => o.values().all(|v| tree(v, depth + 1, nodes, maximum)),
+        Value::Array(a) => a.iter().all(|v| tree(v, depth + 1, nodes, maximum)),
         _ => true,
     }
 }
@@ -89,7 +89,7 @@ pub fn decode(raw: &[u8], limit: usize) -> Result<Value, RacpError> {
                 ) -> Result<Strict, A::Error> {
                     let mut v = vec![];
                     while let Some(Strict(item)) = a.next_element()? {
-                        if v.len() >= 10000 {
+                        if v.len() >= 20000 {
                             return Err(serde::de::Error::custom("nodes"));
                         }
                         v.push(item);
@@ -102,7 +102,7 @@ pub fn decode(raw: &[u8], limit: usize) -> Result<Value, RacpError> {
                 ) -> Result<Strict, A::Error> {
                     let mut v = serde_json::Map::new();
                     while let Some(key) = a.next_key::<String>()? {
-                        if v.contains_key(&key) || v.len() >= 10000 {
+                        if v.contains_key(&key) || v.len() >= 20000 {
                             return Err(serde::de::Error::custom("duplicate or nodes"));
                         }
                         let Strict(item) = a.next_value()?;
@@ -116,7 +116,18 @@ pub fn decode(raw: &[u8], limit: usize) -> Result<Value, RacpError> {
     }
     let Strict(value) =
         serde_json::from_slice(raw).map_err(|_| RacpError::new("PLUGIN_PROTOCOL_ERROR"))?;
-    if !value.is_object() || !tree(&value, 0, &mut 0) {
+    if !value.is_object()
+        || !tree(
+            &value,
+            0,
+            &mut 0,
+            if limit == 4 * 1024 * 1024 {
+                40000
+            } else {
+                10000
+            },
+        )
+    {
         return Err(RacpError::new("PLUGIN_PROTOCOL_ERROR"));
     }
     Ok(value)
@@ -296,6 +307,7 @@ impl Supervisor {
             .ok_or_else(|| RacpError::new("PLUGIN_PROTOCOL_ERROR"))?
             .try_clone()?;
         let writer = std::thread::spawn(move || stdin.write_all(&raw));
+        let mut safe_failure = false;
         let mut result = (|| {
             let mut chunk = [0u8; 8192];
             loop {
@@ -348,6 +360,23 @@ impl Supervisor {
                         return Err(RacpError::new("PLUGIN_PROTOCOL_ERROR"));
                     }
                     if message["state"] != "SUCCEEDED" {
+                        if message["state"] == "FAILED"
+                            && message["error"]["execution_state"] == "not_started"
+                        {
+                            let code = match message["error"]["code"].as_str().unwrap_or("") {
+                                "INVALID_ARGUMENT" => Some("INVALID_ARGUMENT"),
+                                "HANDLE_EXPIRED" => Some("HANDLE_EXPIRED"),
+                                "PRECONDITION_FAILED" => Some("PRECONDITION_FAILED"),
+                                "PERMISSION_DENIED" => Some("PERMISSION_DENIED"),
+                                "RESOURCE_BUSY" => Some("RESOURCE_BUSY"),
+                                "OPERATION_NOT_SUPPORTED" => Some("OPERATION_NOT_SUPPORTED"),
+                                _ => None,
+                            };
+                            if let Some(code) = code {
+                                safe_failure = true;
+                                return Err(RacpError::new(code));
+                            }
+                        }
                         return Err(RacpError::new("PLUGIN_OPERATION_FAILED"));
                     }
                     let value = message["result"].clone();
@@ -375,7 +404,7 @@ impl Supervisor {
             }
             std::thread::sleep(Duration::from_millis(2));
         }
-        if result.is_err() {
+        if result.is_err() && !safe_failure {
             self.shutdown()?;
         }
         writer

@@ -521,3 +521,66 @@ pub fn target_metadata(path: &Path) -> Result<Value, RacpError> {
         json!({"target_sha256":format!("{:x}",hash.finalize()),"architecture":arch,"image_base":format!("0x{base:x}")}),
     )
 }
+
+/// Inspect the installed tool using the same contained native process boundary as execution.
+pub fn probe(
+    tool: &Path,
+    cwd: &Path,
+    expected: &str,
+    deadline: Instant,
+    cancel: &CancellationToken,
+) -> Result<String, RacpError> {
+    let guards = Workspaces::new(cwd, &[])?;
+    let mut process = OwnedProcess::spawn(CommandSpec {
+        argv: vec![tool.to_string_lossy().into_owned(), "--version".into()],
+        environment: containment::environment(&Value::Null)?,
+        cwd: guards.directory("default", cwd)?,
+    })?;
+    let _protection = ProtectedProcess::register(process.pid())?;
+    let result = (|| {
+        let mut output = vec![];
+        let mut stderr = 0;
+        let mut buffer = [0u8; 8192];
+        loop {
+            if cancel.is_cancelled() {
+                return Err(RacpError::new("CANCELLED"));
+            }
+            if Instant::now() >= deadline {
+                return Err(RacpError::new("TIMEOUT"));
+            }
+            for _ in 0..8 {
+                match process.stdout.read_available(&mut buffer)? {
+                    Some(n) if n > 0 => output.extend_from_slice(&buffer[..n]),
+                    _ => break,
+                }
+            }
+            for _ in 0..8 {
+                match process.stderr.read_available(&mut buffer)? {
+                    Some(n) if n > 0 => stderr += n,
+                    _ => break,
+                }
+            }
+            if output.len() + stderr > 65536 {
+                return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+            }
+            if process.poll()?.is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let text =
+            std::str::from_utf8(&output).map_err(|_| RacpError::new("PLUGIN_VERSION_MISMATCH"))?;
+        let banner = text.lines().next().unwrap_or("").trim_end_matches('\r');
+        if !banner.starts_with("GNU gdb")
+            || !banner.split_whitespace().any(|part| part == expected) && banner != expected
+        {
+            return Err(RacpError::new("PLUGIN_VERSION_MISMATCH"));
+        }
+        Ok(banner.to_owned())
+    })();
+    process.kill_tree()?;
+    if !process.tree_empty()? {
+        return Err(RacpError::new("CLEANUP_FAILED"));
+    }
+    result
+}

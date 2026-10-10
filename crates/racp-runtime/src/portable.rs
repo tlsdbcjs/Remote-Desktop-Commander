@@ -223,7 +223,7 @@ pub fn report_failure() {
 }
 
 #[cfg(windows)]
-pub fn grant_webview(runtime: &Path) -> Result<(), RacpError> {
+pub fn grant_webview(runtime: &std::path::Path) -> Result<(), RacpError> {
     use std::os::windows::process::CommandExt;
     racp_core::validate_local_path(runtime)?;
     if !runtime.join("msedgewebview2.exe").is_file() {
