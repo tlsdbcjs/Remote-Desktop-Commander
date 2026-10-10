@@ -365,7 +365,7 @@ impl Desktop {
             .child
             .lock()
             .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
-        let dead: Vec<_> = guard.iter_mut().filter(|(_, child)| !child.process.alive()).map(|(id, _)| *id).collect();
+        let dead: Vec<_> = guard.iter_mut().filter_map(|(id, child)| (!child.process.alive()).then_some(*id)).collect();
         for id in dead {
             if let Some(child) = guard.get_mut(&id) { child.stop()?; }
             guard.remove(&id);
