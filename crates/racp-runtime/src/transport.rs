@@ -96,7 +96,7 @@ impl Agent {
     async fn heartbeat(&self) -> Result<(), RacpError> {
         let mut value = self.base("heartbeat").await;
         value["health"] = json!("healthy");
-        value["handles"] = json!(self.providers.inventory());
+        value["handles"] = json!(self.providers.inventory().into_iter().filter(|h| h["availability"] == "available").take(128).collect::<Vec<_>>());
         value["capabilities"] = json!(self.providers.capabilities());
         self.send(value).await
     }
@@ -198,7 +198,10 @@ impl Agent {
     else {value["expired"]=json!([outcome]);}
     self.send(value).await?;
    }
-   let mut reconcile=self.base("reconcile").await;reconcile["records"]=json!([]);reconcile["complete"]=json!(true);reconcile["handles"]=json!(self.providers.inventory());reconcile["active"]=json!(self.execution_inventory().await?);reconcile["expired"]=json!([]);self.send(reconcile).await?;
+   for handles in self.providers.inventory().chunks(128) {
+    let mut value=self.base("reconcile").await;value["complete"]=json!(false);value["handles"]=json!(handles);value["active"]=json!([]);value["records"]=json!([]);value["expired"]=json!([]);self.send(value).await?;
+   }
+   let mut reconcile=self.base("reconcile").await;reconcile["records"]=json!([]);reconcile["complete"]=json!(true);reconcile["handles"]=json!([]);reconcile["active"]=json!(self.execution_inventory().await?);reconcile["expired"]=json!([]);self.send(reconcile).await?;
    let ack=tokio::select!{_=shutdown.cancelled()=>return Ok(()),v=receive(&mut stream)=>v?};if ack["type"]!="heartbeat"||ack["connection_epoch"]!=epoch||ack["device_id"]!=self.settings.device_id||ack["agent_boot_id"]!=self.boot_id{return Err(RacpError::new("REQUEST_INVALID"));}
    let lease_ms=welcome["execution_lease_ttl_ms"].as_u64().filter(|n|*n>0&&*n<=86400000).ok_or_else(||RacpError::new("REQUEST_INVALID"))?;
    let interval_ms=welcome["heartbeat_interval_ms"].as_u64().filter(|n|*n>0&&*n<=60000).ok_or_else(||RacpError::new("REQUEST_INVALID"))?;

@@ -98,11 +98,14 @@ pub fn configure_login(args: &[String], state: &Path) -> Result<Value, RacpError
         .map(|a| a[1].clone())
         .collect();
     validate_users(&users)?;
+    racp_core::private_dir(state)?;
+    access::path_acl(state, &format!("D:P(A;OICI;FA;;;{})(A;OICI;FA;;;{})(A;OICI;FA;;;BA){}", e.agent_sid, e.service_sid, users.iter().map(|u| format!("(A;;FRFX;;;{u})")).collect::<String>()))?;
     let path = PathBuf::from(option("--endpoint")?);
     racp_core::validate_local_path(&path)?;
     if path.try_exists()? || state.join("service-login.json").try_exists()? {
         return Err(RacpError::new("CONFLICT"));
     }
+    prepare_buckets(&path, &e, &users)?;
     racp_core::atomic_write(&path, &serde_json::to_vec(&e)?, false)?;
     access::path_acl(
         &path,
@@ -184,6 +187,7 @@ impl Registrar {
         if e.device_id != settings.device_id {
             return Err(RacpError::new("PERMISSION_DENIED"));
         }
+        let broker_root=prepare_buckets(&c.endpoint,&e,&c.users)?;
         let grants = access::own(&c.users, false)?;
         let mut pipe = Pipe::listen(
             &e.pipe(),
@@ -202,7 +206,7 @@ impl Registrar {
             let _grants = grants;
             while !stopping.load(Ordering::Acquire) {
                 if pipe.accept().unwrap_or(false) {
-                    let _ = adopt(&mut pipe, &e, &c.users, agent.identity(), &children);
+                    let _ = adopt(&mut pipe, &e, &c.users, agent.identity(), &broker_root, &children);
                     pipe.disconnect();
                 }
             }
@@ -300,6 +304,7 @@ fn adopt(
     e: &Endpoint,
     users: &[String],
     agent: &super::PeerIdentity,
+    broker_root: &Path,
     children: &Arc<Mutex<BTreeMap<u32, Child>>>,
 ) -> Result<(), RacpError> {
     let hello = pipe.read()?;
@@ -325,13 +330,14 @@ fn adopt(
     {
         return Err(RacpError::new("PERMISSION_DENIED"));
     }
-    let path = PathBuf::from(
-        hello["pair_path"]
-            .as_str()
-            .ok_or_else(|| RacpError::new("PERMISSION_DENIED"))?,
-    );
-    racp_core::validate_local_path(&path)?;
-    if path.file_name().is_none_or(|n| n != "pair.bin") || !path.is_absolute() {
+    let path=racp_core::validate_local_path(&PathBuf::from(hello["pair_path"].as_str().ok_or_else(||RacpError::new("PERMISSION_DENIED"))?))?;
+    let registration=path.parent().ok_or_else(||RacpError::new("PERMISSION_DENIED"))?;
+    let name=registration.file_name().and_then(|n|n.to_str()).unwrap_or("");
+    if path.file_name().is_none_or(|n|n!="pair.bin") || registration.parent()!=Some(broker_root.join(&sid).as_path()) || name.len()!=45 || !name.starts_with("registration_") || !name[13..].bytes().all(|c|c.is_ascii_hexdigit() && !c.is_ascii_uppercase()) {
+        return Err(RacpError::new("PERMISSION_DENIED"));
+    }
+    access::require_owner(registration,&sid)?;
+    if peer.executable()?.to_string_lossy().to_lowercase()!=std::env::current_exe()?.to_string_lossy().to_lowercase() {
         return Err(RacpError::new("PERMISSION_DENIED"));
     }
     let mut children = children
@@ -394,6 +400,9 @@ fn adopt(
         .ok_or_else(|| RacpError::new("PERMISSION_DENIED"))? as u32;
     let guardian = PinnedPeer::open(guardian_pid)?;
     config.require_broker(guardian.identity())?;
+    if !guardian.outside_jobs()? || guardian.executable()?.to_string_lossy().to_lowercase()!=std::env::current_exe()?.to_string_lossy().to_lowercase() {
+        return Err(RacpError::new("INPUT_GUARDIAN_UNAVAILABLE"));
+    }
     if guardian.identity().created != receipt["guardian"]["created"].as_f64().unwrap_or(0.0) {
         return Err(RacpError::new("PERMISSION_DENIED"));
     }
@@ -419,6 +428,22 @@ fn adopt(
 pub fn run_login_broker(endpoint_path: &Path) -> Result<(), RacpError> {
     let e = endpoint(endpoint_path)?;
     let actor = PinnedPeer::open(std::process::id())?;
+    if actor.identity().session == 0 || actor.identity().administrator || actor.identity().integrity > 0x2000 {
+        return Err(RacpError::new("PERMISSION_DENIED"));
+    }
+    let _single = racp_core::InstanceLock::acquire(&PathBuf::from(std::env::var_os("LOCALAPPDATA").ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?).join("RACP/login-brokers").join(format!("{}-{}.lock", e.device_id, actor.identity().session)))?;
+    use std::os::windows::process::CommandExt;
+    loop {
+        let mut child = std::process::Command::new(std::env::current_exe()?).arg("broker-register").arg("--login-endpoint").arg(endpoint_path)
+            .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).creation_flags(0x08000000).spawn()?;
+        child.wait()?;
+        actor.alive()?;
+        std::thread::sleep(Duration::from_secs(3));
+    }
+}
+pub fn register_login_broker(endpoint_path: &Path) -> Result<(), RacpError> {
+    let e = endpoint(endpoint_path)?;
+    let actor = PinnedPeer::open(std::process::id())?;
     if actor.identity().session == 0
         || actor.identity().administrator
         || actor.identity().integrity > 0x2000
@@ -433,11 +458,7 @@ pub fn run_login_broker(endpoint_path: &Path) -> Result<(), RacpError> {
     }
     let server = PinnedPeer::open(server_pid)?;
     e.agent(server.identity())?;
-    let local = PathBuf::from(
-        std::env::var_os("LOCALAPPDATA").ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?,
-    )
-    .join("RACP/login-brokers")
-    .join(new_id("registration"));
+    let local=endpoint_path.parent().ok_or_else(||RacpError::new("LOCAL_STATE_FAILED"))?.join("login-brokers").join(&actor.identity().sid).join(new_id("registration"));
     racp_core::private_dir(&local)?;
     access::path_acl(
         &local,
@@ -463,6 +484,8 @@ pub fn run_login_broker(endpoint_path: &Path) -> Result<(), RacpError> {
     let mut document = BTreeMap::from([
         ("pair".into(), serde_json::to_string(&config)?),
         ("device_id".into(), e.device_id),
+        ("broker_pid".into(), actor.identity().pid.to_string()),
+        ("broker_created".into(), actor.identity().created.to_string()),
     ]);
     SecretStore::new(path.clone()).save(&document, false)?;
     let guardian = scheduled_guardian(&path, &config)?;
@@ -589,4 +612,58 @@ fn scheduled_guardian(path: &Path, config: &PairConfig) -> Result<PinnedPeer, Ra
     })
     .join()
     .map_err(|_| RacpError::new("INPUT_GUARDIAN_UNAVAILABLE"))?
+}
+
+
+pub fn login_startup(endpoint_path: &Path, remove: bool) -> Result<Value, RacpError> {
+    use windows_sys::Win32::System::Registry::*;
+    let e = endpoint(endpoint_path)?;
+    let actor = PinnedPeer::open(std::process::id())?;
+    if actor.identity().session == 0 || actor.identity().administrator {
+        return Err(RacpError::new("PERMISSION_DENIED"));
+    }
+    let exe = std::env::current_exe()?;
+    let path = endpoint_path.to_string_lossy();
+    let exe = exe.to_string_lossy();
+    if path.contains('"') || exe.contains('"') { return Err(RacpError::new("REQUEST_INVALID")); }
+    let expected = format!("\"{exe}\" broker-login --login-endpoint \"{path}\"");
+    let wide = |s: &str| s.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
+    let mut key = std::ptr::null_mut();
+    if unsafe { RegCreateKeyExW(HKEY_CURRENT_USER, wide(r"Software\Microsoft\Windows\CurrentVersion\Run").as_ptr(), 0, std::ptr::null(), REG_OPTION_NON_VOLATILE, KEY_QUERY_VALUE | KEY_SET_VALUE, std::ptr::null(), &mut key, std::ptr::null_mut()) } != ERROR_SUCCESS {
+        return Err(RacpError::new("LOCAL_STATE_FAILED"));
+    }
+    struct Key(HKEY);
+    impl Drop for Key { fn drop(&mut self) { unsafe { RegCloseKey(self.0); } } }
+    let key = Key(key);
+    let name = wide(&format!("RACP-Broker-{}", e.device_id));
+    let mut size = 0;
+    let mut kind = 0;
+    let found = unsafe { RegQueryValueExW(key.0, name.as_ptr(), std::ptr::null(), &mut kind, std::ptr::null_mut(), &mut size) };
+    if found != ERROR_SUCCESS && found != ERROR_FILE_NOT_FOUND { return Err(RacpError::new("LOCAL_STATE_FAILED")); }
+    if found == ERROR_SUCCESS {
+        if kind != REG_SZ || size > 32768 || size % 2 != 0 { return Err(RacpError::new("PRECONDITION_FAILED")); }
+        let mut raw = vec![0u16; size as usize / 2];
+        if unsafe { RegQueryValueExW(key.0, name.as_ptr(), std::ptr::null(), &mut kind, raw.as_mut_ptr().cast(), &mut size) } != ERROR_SUCCESS { return Err(RacpError::new("LOCAL_STATE_FAILED")); }
+        let value = String::from_utf16(&raw[..raw.iter().position(|c| *c == 0).unwrap_or(raw.len())]).map_err(|_| RacpError::new("PRECONDITION_FAILED"))?;
+        if value != expected { return Err(RacpError::new("PRECONDITION_FAILED")); }
+    }
+    let status = if remove {
+        if found == ERROR_FILE_NOT_FOUND { ERROR_SUCCESS } else { unsafe { RegDeleteValueW(key.0, name.as_ptr()) } }
+    } else {
+        let raw = wide(&expected);
+        unsafe { RegSetValueExW(key.0, name.as_ptr(), 0, REG_SZ, raw.as_ptr().cast(), (raw.len() * 2) as u32) }
+    };
+    if status != ERROR_SUCCESS { return Err(RacpError::new("LOCAL_STATE_FAILED")); }
+    Ok(json!({"login_enabled":!remove,"credential_material":false,"already_running_processes":"preserved"}))
+}
+
+fn prepare_buckets(path:&Path,e:&Endpoint,users:&[String])->Result<PathBuf,RacpError>{
+    let root=path.parent().ok_or_else(||RacpError::new("REQUEST_INVALID"))?.join("login-brokers");
+    racp_core::private_dir(&root)?;
+    access::path_acl(&root,&format!("D:P(A;OICI;FA;;;{})(A;OICI;FA;;;{})(A;OICI;FA;;;BA){}",e.agent_sid,e.service_sid,users.iter().map(|u|format!("(A;;FRFX;;;{u})")).collect::<String>()))?;
+    for user in users{
+        let bucket=root.join(user);racp_core::private_dir(&bucket)?;
+        access::path_acl(&bucket,&format!("D:P(A;OICI;FA;;;{})(A;OICI;FA;;;{})(A;OICI;FA;;;{})",e.agent_sid,e.service_sid,user))?;
+    }
+    Ok(root)
 }

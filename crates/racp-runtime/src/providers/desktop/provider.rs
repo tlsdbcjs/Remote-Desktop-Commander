@@ -365,7 +365,11 @@ impl Desktop {
             .child
             .lock()
             .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
-        guard.retain(|_, child| child.process.alive() || child.guardian.alive());
+        let dead: Vec<_> = guard.iter_mut().filter(|(_, child)| !child.process.alive()).map(|(id, _)| *id).collect();
+        for id in dead {
+            if let Some(child) = guard.get_mut(&id) { child.stop()?; }
+            guard.remove(&id);
+        }
         if request["operation"] == "desktop.sessions" {
             let mut sessions = vec![];
             for child in guard.values_mut() {
@@ -534,9 +538,9 @@ impl Provider for Desktop {
     ) -> BoxFuture<'_, Result<Value, RacpError>> {
         let provider = self.clone();
         Box::pin(async move {
-            tokio::task::spawn_blocking(move || provider.execute_native(request, cancel))
-                .await
-                .map_err(|_| RacpError::new("EXECUTION_UNKNOWN"))?
+            let result = tokio::task::spawn_blocking(move || provider.execute_native(request, cancel))
+                .await.map_err(|_| RacpError::new("EXECUTION_UNKNOWN"))??;
+            Ok(json!({"state":"SUCCEEDED","result":result,"error":null}))
         })
     }
     fn cleanup(&self) -> BoxFuture<'_, Result<(), RacpError>> {

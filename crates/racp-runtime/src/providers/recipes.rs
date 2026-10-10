@@ -232,6 +232,7 @@ pub fn run_worker() -> Result<(), RacpError> {
                 .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?,
         );
         racp_core::validate_local_path(path)?;
+        if path.try_exists()? { return Err(RacpError::new("CONFLICT")); }
         let result = if operation == "process.dump" {
             windows::dump(&p, path)
         } else {

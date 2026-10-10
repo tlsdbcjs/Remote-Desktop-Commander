@@ -7,7 +7,7 @@ use std::path::PathBuf;
 async fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("racp-agent {VERSION}\n\nUsage: racp-agent <command> --state-dir <absolute-path>\n\nCommands:\n  run       Run the registered Agent in the foreground (Ctrl+C stops it)\n  start     Start the registered Agent in the background\n  status    Show background Agent state as JSON\n  stop      Stop the background Agent and report cleanup\n  info      Show enrollment and execution identity (no credentials)\n  settings  Show editable settings and revision\n  activity  Show recent operation activity\n  bridge    Read one bounded JSON request from stdin and write a JSON result\n\nForeground options: --enable-cdp, --browser-allow-origin <origin> (repeatable)\nRegistration/settings updates use bridge JSON on stdin; do not put secrets in arguments.\nThe state directory is explicit so a manual run cannot silently select an existing profile.");
+        println!("racp-agent {VERSION}\n\nUsage: racp-agent <command> --state-dir <absolute-path>\n\nCommands:\n  provision-gdb / provision-ghidra / provision-native  Approve explicit local analysis tools\n  service   Fixed Windows SCM host (--state-dir or --config)\n  configure-service-login  Configure allowed user SIDs and endpoint\n  broker-login / broker-login-install / broker-login-remove  User-session registration\n  run       Run the registered Agent in the foreground (Ctrl+C stops it)\n  start     Start the registered Agent in the background\n  status    Show background Agent state as JSON\n  stop      Stop the background Agent and report cleanup\n  info      Show enrollment and execution identity (no credentials)\n  settings  Show editable settings and revision\n  activity  Show recent operation activity\n  bridge    Read one bounded JSON request from stdin and write a JSON result\n\nForeground options: --enable-cdp, --browser-allow-origin <origin> (repeatable)\nRegistration/settings updates use bridge JSON on stdin; do not put secrets in arguments.\nThe state directory is explicit so a manual run cannot silently select an existing profile.");
         return;
     }
     if args.iter().any(|a| a == "--version") {
@@ -46,14 +46,25 @@ async fn main() {
             return racp_runtime::maintenance::prepare(&args).await;
         }
         #[cfg(windows)]
-        if action == "broker-login" {
+        if matches!(action, "broker-login" | "broker-register" | "broker-login-install" | "broker-login-remove") {
             let endpoint = args
                 .windows(2)
                 .find(|a| a[0] == "--login-endpoint")
                 .map(|a| PathBuf::from(&a[1]))
                 .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
-            racp_runtime::providers::desktop::run_login_broker(&endpoint)?;
+            if matches!(action, "broker-login-install" | "broker-login-remove") {
+                return racp_runtime::providers::desktop::login_startup(&endpoint, action == "broker-login-remove");
+            }
+            if action=="broker-login" { racp_runtime::providers::desktop::run_login_broker(&endpoint)?; }
+            else { racp_runtime::providers::desktop::register_login_broker(&endpoint)?; }
             return Ok(Value::Null);
+        }
+        #[cfg(windows)]
+        if action=="service" {
+            if let Some(path)=args.windows(2).find(|a|a[0]=="--config") {
+                service::run_config(PathBuf::from(&path[1]))?;
+                return Ok(Value::Null);
+            }
         }
         let state = state.ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
         racp_core::validate_local_path(&state)?;
@@ -164,6 +175,8 @@ async fn main() {
                 "serve"
                     | "run"
                     | "broker"
+                    | "broker-login"
+                    | "broker-register"
                     | "guardian"
                     | "service"
                     | "collection-worker"
@@ -179,6 +192,8 @@ async fn main() {
                 "serve"
                     | "run"
                     | "broker"
+                    | "broker-login"
+                    | "broker-register"
                     | "guardian"
                     | "service"
                     | "plugin-gdb"

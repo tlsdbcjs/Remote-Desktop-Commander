@@ -341,7 +341,7 @@ impl Agent {
                     Some(error_value(
                         error.code.0,
                         "execution interrupted or rejected",
-                        if state == "UNKNOWN" {
+                        if matches!(state, "UNKNOWN" | "TIMED_OUT" | "CANCELLED") {
                             "unknown"
                         } else {
                             "not_started"

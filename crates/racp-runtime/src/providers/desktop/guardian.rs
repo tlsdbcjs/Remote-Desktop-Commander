@@ -32,6 +32,14 @@ pub fn run_guardian(path: &Path) -> Result<(), RacpError> {
     pair.require_broker(identity.identity())?;
     let controller = PinnedPeer::open(pair.agent_pid)?;
     pair.require_agent(controller.identity())?;
+    let broker = if let Some(pid) = document.get("broker_pid") {
+        let peer = PinnedPeer::open(pid.parse().map_err(|_| RacpError::new("PERMISSION_DENIED"))?)?;
+        pair.require_broker(peer.identity())?;
+        if document.get("broker_created").and_then(|v| v.parse::<f64>().ok()) != Some(peer.identity().created) {
+            return Err(RacpError::new("PERMISSION_DENIED"));
+        }
+        Some(peer)
+    } else { None };
     let mut inside = 0;
     if unsafe { IsProcessInJob(GetCurrentProcess(), std::ptr::null_mut(), &mut inside) } == 0
         || inside != 0
@@ -60,7 +68,7 @@ pub fn run_guardian(path: &Path) -> Result<(), RacpError> {
     let status = path.with_file_name("guardian-status.json");
     let mut stopping = None;
     loop {
-        let stop = controller.alive().is_err()
+        let stop = controller.alive().is_err() || broker.as_ref().is_some_and(|p| p.alive().is_err())
             || !path.try_exists()?
             || path.with_file_name("guardian-stop").try_exists()?;
         if stop && stopping.is_none() {
