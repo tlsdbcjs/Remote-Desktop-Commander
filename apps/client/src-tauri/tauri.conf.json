@@ -4,9 +4,9 @@
   "version": "0.1.21",
   "identifier": "app.racp.client",
   "build": {
-    "beforeDevCommand": "pnpm --dir .. exec vite --port 5173",
+    "beforeDevCommand": "pnpm exec vite --port 5173",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "pnpm --dir .. build",
+    "beforeBuildCommand": "pnpm build",
     "frontendDist": "../renderer-dist"
   },
   "app": {
@@ -47,4 +47,3 @@
     }
   }
 }
-
