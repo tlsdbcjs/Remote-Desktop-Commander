@@ -42,8 +42,8 @@ fn fixture() -> (Fixture, Value) {
         .lines()
         .find_map(|line| {
             line.unwrap()
-                .strip_prefix("memory_fixture=")
-                .map(|s| serde_json::from_str::<Value>(s).unwrap())
+                .split_once("memory_fixture=")
+                .map(|(_, raw)| serde_json::from_str::<Value>(raw).unwrap())
         })
         .unwrap();
     (child, value)
