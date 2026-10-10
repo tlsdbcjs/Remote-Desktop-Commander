@@ -10,6 +10,9 @@ on:
     paths: ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "apps/agent-rust/**", "tests/rust_agent/**", ".github/workflows/rust-agent.yml"]
   pull_request:
     paths: ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "apps/agent-rust/**", "tests/rust_agent/**", ".github/workflows/rust-agent.yml"]
+concurrency:
+  group: rust-agent-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -24,13 +27,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22.23.0"
-      - name: Build standalone Windows Rust Agent (tests deferred)
+      - name: Compile Windows Rust Agent (tests deferred)
+        run: cargo build -p racp-agent --release --locked --target x86_64-pc-windows-msvc
+      - name: Package standalone Windows Rust Agent
+        if: ${{ github.ref_name == 'master' || github.event_name == 'workflow_dispatch' }}
         shell: pwsh
         run: ./scripts/build_rust_agent.ps1 -BuildId "${{ github.run_id }}-${{ github.run_attempt }}"
       - uses: actions/upload-artifact@v4
         with:
           name: racp-agent-win-x64-${{ github.sha }}
           path: |
+            target/x86_64-pc-windows-msvc/release/racp-agent.exe
             dist/rust-agent/**/*.zip
             dist/rust-agent/**/SHA256SUMS
             dist/rust-agent/**/build-manifest.json
