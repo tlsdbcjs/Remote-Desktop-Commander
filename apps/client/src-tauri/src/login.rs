@@ -88,7 +88,12 @@ fn entry(key: &Key) -> Result<Option<String>, RacpError> {
     Ok(Some(String::from_utf16_lossy(&buffer[..end])))
 }
 pub fn settings() -> Result<Value, RacpError> {
-    if std::env::args().any(|arg| arg == "--portable-state") || std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("portable.json").exists())).unwrap_or(false) {
+    if std::env::args().any(|arg| arg == "--portable-state")
+        || std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("portable.json").exists()))
+            .unwrap_or(false)
+    {
         return Ok(json!({"available":false,"registered":false,"enabled":false,"owned":false}));
     }
     #[cfg(windows)]
@@ -141,7 +146,12 @@ pub fn settings() -> Result<Value, RacpError> {
     }
 }
 pub fn set(enabled: bool) -> Result<Value, RacpError> {
-    if std::env::args().any(|arg| arg == "--portable-state") || std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("portable.json").exists())).unwrap_or(false) {
+    if std::env::args().any(|arg| arg == "--portable-state")
+        || std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("portable.json").exists()))
+            .unwrap_or(false)
+    {
         return Err(RacpError::new("LOGIN_UNAVAILABLE"));
     }
     #[cfg(windows)]

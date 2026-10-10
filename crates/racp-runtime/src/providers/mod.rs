@@ -43,6 +43,10 @@ pub trait Provider: Send + Sync {
             "not_started",
         ))
     }
+    /// Retire expired-lease resources while preserving registration infrastructure.
+    fn expire_lease(&self) -> BoxFuture<'_, Result<(), RacpError>> {
+        self.cleanup()
+    }
     fn cleanup(&self) -> BoxFuture<'_, Result<(), RacpError>> {
         Box::pin(async { Ok(()) })
     }
@@ -198,6 +202,14 @@ impl Provider for NativeProviders {
             Some(provider) => provider.execute(request, cancel),
             None => Box::pin(async { Err(RacpError::new("CAPABILITY_UNAVAILABLE")) }),
         }
+    }
+    fn expire_lease(&self) -> BoxFuture<'_, Result<(), RacpError>> {
+        Box::pin(async move {
+            for p in &self.providers {
+                p.expire_lease().await?;
+            }
+            Ok(())
+        })
     }
     fn cleanup(&self) -> BoxFuture<'_, Result<(), RacpError>> {
         Box::pin(async move {

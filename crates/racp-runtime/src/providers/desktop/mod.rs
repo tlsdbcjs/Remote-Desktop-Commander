@@ -43,4 +43,6 @@ mod access;
 #[cfg(windows)]
 mod login;
 #[cfg(windows)]
-pub use login::{configure_login, login_startup, register_login_broker, run_login_broker, verify_config_identity};
+pub use login::{
+    configure_login, login_startup, register_login_broker, run_login_broker, verify_config_identity,
+};

@@ -12,11 +12,18 @@ static CONTEXT: OnceLock<ServiceContext> = OnceLock::new();
 fn name() -> Vec<u16> {
     "RACPAgent".encode_utf16().chain(Some(0)).collect()
 }
-pub fn run(state: PathBuf) -> Result<(), RacpError> { run_inner(state, None) }
+pub fn run(state: PathBuf) -> Result<(), RacpError> {
+    run_inner(state, None)
+}
 pub fn run_config(path: PathBuf) -> Result<(), RacpError> {
     racp_core::validate_local_path(&path)?;
-    let value: serde_json::Value=serde_json::from_slice(&racp_core::read_bounded(&path,16384,true)?)?;
-    let state=PathBuf::from(value["data_dir"].as_str().ok_or_else(|| RacpError::new("CONFIG_UNREADABLE"))?);
+    let value: serde_json::Value =
+        serde_json::from_slice(&racp_core::read_bounded(&path, 16384, true)?)?;
+    let state = PathBuf::from(
+        value["data_dir"]
+            .as_str()
+            .ok_or_else(|| RacpError::new("CONFIG_UNREADABLE"))?,
+    );
     run_inner(state, Some(path))
 }
 fn run_inner(state: PathBuf, configuration: Option<PathBuf>) -> Result<(), RacpError> {
@@ -147,24 +154,42 @@ unsafe extern "system" fn main(_: u32, _: *mut *mut u16) {
             .get()
             .ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?;
         racp_runtime::providers::desktop::verify_config_identity(&context.state)?;
-        let (settings, credential, browser, credential_state) = if let Some(config)=&context.configuration {
-            configured(config)?
-        } else {
-            let (settings,values)=racp_core::load_settings(&context.state,true)?;
-            (settings,values["credential"].clone(),racp_runtime::providers::browser::BrowserConfig::bundled(),context.state.clone())
-        };
-        if settings.data_dir!=context.state && context.configuration.is_some(){return Err(RacpError::new("SETTINGS_CHANGED"));}
-        let _data_lock=racp_core::InstanceLock::acquire(&settings.data_dir.join("agent.lock"))?;
+        let (settings, credential, browser, credential_state) =
+            if let Some(config) = &context.configuration {
+                configured(config)?
+            } else {
+                let (settings, values) = racp_core::load_settings(&context.state, true)?;
+                (
+                    settings,
+                    values["credential"].clone(),
+                    racp_runtime::providers::browser::BrowserConfig::bundled(),
+                    context.state.clone(),
+                )
+            };
+        if settings.data_dir != context.state && context.configuration.is_some() {
+            return Err(RacpError::new("SETTINGS_CHANGED"));
+        }
+        let _data_lock = racp_core::InstanceLock::acquire(&settings.data_dir.join("agent.lock"))?;
         let _lock = racp_core::InstanceLock::acquire(&credential_state.join(format!(
             "agent-{}.lock",
             racp_contract::digest(&settings.device_id)
         )))?;
-        let agent = racp_runtime::Agent::with_browser(settings, credential, browser)?;
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
-        report(handle, SERVICE_RUNNING, 0, 0);
-        runtime.block_on(async{let running=agent.run(context.cancel.clone());tokio::pin!(running);tokio::select!{result=&mut running=>result,_=context.cancel.cancelled()=>{report(handle,SERVICE_STOP_PENDING,0,1);running.await}}})
+        runtime.block_on(async {
+            let agent = racp_runtime::Agent::with_browser(settings, credential, browser)?;
+            report(handle, SERVICE_RUNNING, 0, 0);
+            let running = agent.run(context.cancel.clone());
+            tokio::pin!(running);
+            tokio::select! {
+                result = &mut running => result,
+                _ = context.cancel.cancelled() => {
+                    report(handle, SERVICE_STOP_PENDING, 0, 1);
+                    running.await
+                }
+            }
+        })
     })();
     report(
         handle,
@@ -178,39 +203,109 @@ unsafe extern "system" fn main(_: u32, _: *mut *mut u16) {
     );
 }
 
-fn configured(path:&std::path::Path)->Result<(racp_core::AgentSettings,String,racp_runtime::providers::browser::BrowserConfig,PathBuf),RacpError>{
-    let mut config:serde_json::Value=serde_json::from_slice(&racp_core::read_bounded(path,16384,true)?)?;
-    let schema:serde_json::Value=serde_json::from_str(include_str!("../../../docs/protocol/agent-service-config-v1.schema.json"))?;
-    racp_contract::validate_schema(&schema,&config)?;
-    for (key,value) in [("service_name",serde_json::json!("RACPAgent")),("allowed_workspaces",serde_json::json!([])),("desktop_login_users",serde_json::json!([])),("profile",serde_json::json!("read_only")),("browser_cdp",serde_json::json!(false)),("browser_allowed_origins",serde_json::json!([]))] {
-        if config.get(key).is_none(){config[key]=value;}
+fn configured(
+    path: &std::path::Path,
+) -> Result<
+    (
+        racp_core::AgentSettings,
+        String,
+        racp_runtime::providers::browser::BrowserConfig,
+        PathBuf,
+    ),
+    RacpError,
+> {
+    let mut config: serde_json::Value =
+        serde_json::from_slice(&racp_core::read_bounded(path, 16384, true)?)?;
+    let schema: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../docs/protocol/agent-service-config-v1.schema.json"
+    ))?;
+    racp_contract::validate_schema(&schema, &config)?;
+    for (key, value) in [
+        ("service_name", serde_json::json!("RACPAgent")),
+        ("allowed_workspaces", serde_json::json!([])),
+        ("desktop_login_users", serde_json::json!([])),
+        ("profile", serde_json::json!("read_only")),
+        ("browser_cdp", serde_json::json!(false)),
+        ("browser_allowed_origins", serde_json::json!([])),
+    ] {
+        if config.get(key).is_none() {
+            config[key] = value;
+        }
     }
-    let actor=racp_runtime::providers::desktop::native_identity::PinnedPeer::open(std::process::id())?;
-    if config["service_name"]!="RACPAgent" || config["agent_sid"]!=actor.identity().sid || !actor.identity().service_sids.contains(config["service_sid"].as_str().unwrap_or("")) {
+    let actor =
+        racp_runtime::providers::desktop::native_identity::PinnedPeer::open(std::process::id())?;
+    if config["service_name"] != "RACPAgent"
+        || config["agent_sid"] != actor.identity().sid
+        || !actor
+            .identity()
+            .service_sids
+            .contains(config["service_sid"].as_str().unwrap_or(""))
+    {
         return Err(RacpError::new("PERMISSION_DENIED"));
     }
-    let credentials=PathBuf::from(config["credentials"].as_str().ok_or_else(||RacpError::new("CONFIG_UNREADABLE"))?);
+    let credentials = PathBuf::from(
+        config["credentials"]
+            .as_str()
+            .ok_or_else(|| RacpError::new("CONFIG_UNREADABLE"))?,
+    );
     racp_core::validate_local_path(&credentials)?;
-    let credential_state=credentials.parent().ok_or_else(||RacpError::new("CONFIG_UNREADABLE"))?.to_owned();
-    let stored=racp_core::SecretStore::new(credentials).load()?;
-    let get=|name:&str|stored.get(name).cloned().ok_or_else(||RacpError::new("CONFIG_UNREADABLE"));
-    let mut settings:racp_core::AgentSettings=serde_json::from_value(serde_json::json!({"version":2,"gateway":get("gateway")?,"device_id":get("device_id")?,"workspace":config["workspace"],"data_dir":config["data_dir"],"allowed_workspaces":config["allowed_workspaces"],"profile":config["profile"],"ca_file":config["ca_file"],"desktop_enabled":config["desktop_login_users"].as_array().is_some_and(|a|!a.is_empty()),"permissions":null}))?;
-    if settings.ca_file.is_none(){settings.ca_file=stored.get("ca_file").map(PathBuf::from);}
+    let credential_state = credentials
+        .parent()
+        .ok_or_else(|| RacpError::new("CONFIG_UNREADABLE"))?
+        .to_owned();
+    let stored = racp_core::SecretStore::new(credentials).load()?;
+    let get = |name: &str| {
+        stored
+            .get(name)
+            .cloned()
+            .ok_or_else(|| RacpError::new("CONFIG_UNREADABLE"))
+    };
+    let mut settings: racp_core::AgentSettings = serde_json::from_value(
+        serde_json::json!({"version":2,"gateway":get("gateway")?,"device_id":get("device_id")?,"workspace":config["workspace"],"data_dir":config["data_dir"],"allowed_workspaces":config["allowed_workspaces"],"profile":config["profile"],"ca_file":config["ca_file"],"desktop_enabled":config["desktop_login_users"].as_array().is_some_and(|a|!a.is_empty()),"permissions":null}),
+    )?;
+    if settings.ca_file.is_none() {
+        settings.ca_file = stored.get("ca_file").map(PathBuf::from);
+    }
     settings.validate(true)?;
-    if let Some(plugin)=config["plugin_config"].as_str(){
-        let raw=racp_core::read_bounded(std::path::Path::new(plugin),65536,true)?;
-        let target=settings.data_dir.join("plugins.json");
+    if let Some(plugin) = config["plugin_config"].as_str() {
+        let raw = racp_core::read_bounded(std::path::Path::new(plugin), 65536, true)?;
+        let target = settings.data_dir.join("plugins.json");
         if target.try_exists()? {
-            if racp_core::read_bounded(&target,65536,true)?!=raw{return Err(RacpError::new("CONFLICT"));}
-        } else { racp_core::atomic_write(&target,&raw,false)?; }
+            if racp_core::read_bounded(&target, 65536, true)? != raw {
+                return Err(RacpError::new("CONFLICT"));
+            }
+        } else {
+            racp_core::atomic_write(&target, &raw, false)?;
+        }
     }
     if settings.desktop_enabled && !settings.data_dir.join("service-login.json").try_exists()? {
-        let mut args=vec!["--device-id".into(),settings.device_id.clone(),"--agent-sid".into(),actor.identity().sid.clone(),"--service-sid".into(),config["service_sid"].as_str().unwrap().into(),"--endpoint".into(),settings.data_dir.join("desktop-login-endpoint.json").to_string_lossy().into_owned()];
-        for user in config["desktop_login_users"].as_array().unwrap(){args.push("--login-user".into());args.push(user.as_str().unwrap().into());}
-        racp_runtime::providers::desktop::configure_login(&args,&settings.data_dir)?;
+        let mut args = vec![
+            "--device-id".into(),
+            settings.device_id.clone(),
+            "--agent-sid".into(),
+            actor.identity().sid.clone(),
+            "--service-sid".into(),
+            config["service_sid"].as_str().unwrap().into(),
+            "--endpoint".into(),
+            settings
+                .data_dir
+                .join("desktop-login-endpoint.json")
+                .to_string_lossy()
+                .into_owned(),
+        ];
+        for user in config["desktop_login_users"].as_array().unwrap() {
+            args.push("--login-user".into());
+            args.push(user.as_str().unwrap().into());
+        }
+        racp_runtime::providers::desktop::configure_login(&args, &settings.data_dir)?;
     }
-    let mut browser=racp_runtime::providers::browser::BrowserConfig::bundled();
-    browser.cdp_enabled=config["browser_cdp"]==true;
-    browser.allow_origins=config["browser_allowed_origins"].as_array().into_iter().flatten().filter_map(|v|v.as_str().map(str::to_owned)).collect();
-    Ok((settings,get("credential")?,browser,credential_state))
+    let mut browser = racp_runtime::providers::browser::BrowserConfig::bundled();
+    browser.cdp_enabled = config["browser_cdp"] == true;
+    browser.allow_origins = config["browser_allowed_origins"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str().map(str::to_owned))
+        .collect();
+    Ok((settings, get("credential")?, browser, credential_state))
 }

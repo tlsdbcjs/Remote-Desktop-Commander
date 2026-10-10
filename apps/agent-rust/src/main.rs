@@ -46,22 +46,31 @@ async fn main() {
             return racp_runtime::maintenance::prepare(&args).await;
         }
         #[cfg(windows)]
-        if matches!(action, "broker-login" | "broker-register" | "broker-login-install" | "broker-login-remove") {
+        if matches!(
+            action,
+            "broker-login" | "broker-register" | "broker-login-install" | "broker-login-remove"
+        ) {
             let endpoint = args
                 .windows(2)
                 .find(|a| a[0] == "--login-endpoint")
                 .map(|a| PathBuf::from(&a[1]))
                 .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
             if matches!(action, "broker-login-install" | "broker-login-remove") {
-                return racp_runtime::providers::desktop::login_startup(&endpoint, action == "broker-login-remove");
+                return racp_runtime::providers::desktop::login_startup(
+                    &endpoint,
+                    action == "broker-login-remove",
+                );
             }
-            if action=="broker-login" { racp_runtime::providers::desktop::run_login_broker(&endpoint)?; }
-            else { racp_runtime::providers::desktop::register_login_broker(&endpoint)?; }
+            if action == "broker-login" {
+                racp_runtime::providers::desktop::run_login_broker(&endpoint)?;
+            } else {
+                racp_runtime::providers::desktop::register_login_broker(&endpoint)?;
+            }
             return Ok(Value::Null);
         }
         #[cfg(windows)]
-        if action=="service" {
-            if let Some(path)=args.windows(2).find(|a|a[0]=="--config") {
+        if action == "service" {
+            if let Some(path) = args.windows(2).find(|a| a[0] == "--config") {
                 service::run_config(PathBuf::from(&path[1]))?;
                 return Ok(Value::Null);
             }

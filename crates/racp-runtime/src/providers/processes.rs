@@ -312,7 +312,8 @@ impl Processes {
                     .values()
                     .find(|m| {
                         m.handle["pid"] == pid
-                            && m.handle["owner"] == principal && m.handle["workspace_id"] == request["context"]["workspace_id"]
+                            && m.handle["owner"] == principal
+                            && m.handle["workspace_id"] == request["context"]["workspace_id"]
                             && m.handle["create_time"] == item["create_time"]
                     })
                 {
@@ -360,7 +361,9 @@ impl Processes {
                     .lock()
                     .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
                 if let Some(child) = managed.values_mut().find(|m| m.identity(pid, birth)) {
-                    if (child.handle["owner"] != principal || child.handle["workspace_id"] != request["context"]["workspace_id"]) {
+                    if (child.handle["owner"] != principal
+                        || child.handle["workspace_id"] != request["context"]["workspace_id"])
+                    {
                         return Err(RacpError::new("PERMISSION_DENIED"));
                     }
                     child.tick()?;
@@ -388,7 +391,11 @@ impl Processes {
                 .lock()
                 .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
                 .values()
-                .any(|child| child.identity(pid, birth) && (child.handle["owner"] != principal || child.handle["workspace_id"] != request["context"]["workspace_id"]))
+                .any(|child| {
+                    child.identity(pid, birth)
+                        && (child.handle["owner"] != principal
+                            || child.handle["workspace_id"] != request["context"]["workspace_id"])
+                })
             {
                 return Err(RacpError::new("PERMISSION_DENIED"));
             }
@@ -403,7 +410,9 @@ impl Processes {
             .lock()
             .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
         if let Some(child) = managed.values_mut().find(|m| m.identity(pid, birth)) {
-            if (child.handle["owner"] != principal || child.handle["workspace_id"] != request["context"]["workspace_id"]) {
+            if (child.handle["owner"] != principal
+                || child.handle["workspace_id"] != request["context"]["workspace_id"])
+            {
                 return Err(RacpError::new("PERMISSION_DENIED"));
             }
             if force {

@@ -263,7 +263,7 @@ impl Agent {
             if !allowed(&op,&self.settings.profile) || !allowed(&op,profile) || (profile=="trusted_personal"&&self.settings.profile!="trusted_personal"&&registry()[&op]["side_effect"]==true){return Err(RacpError::new("PERMISSION_DENIED"));}
             let workspace=request["context"]["workspace_id"].as_str().unwrap_or("default");
             if workspace!="default" && !self.settings.allowed_workspaces.iter().any(|s|s.id==workspace){return Err(RacpError::new("WORKSPACE_NOT_FOUND"));}
-            if tokio::time::Instant::now()>=*self.lease.lock().await {return Err(RacpError::new("DEVICE_OFFLINE"));}
+            if self.lease_retiring.load(std::sync::atomic::Ordering::Acquire) || tokio::time::Instant::now()>=*self.lease.lock().await {return Err(RacpError::new("DEVICE_OFFLINE"));}
             if deadline<=tokio::time::Instant::now(){return Err(RacpError::new("TIMEOUT"));}
             if execution.cancel.is_cancelled(){return Err(RacpError::new("CANCELLED"));}
             self.journal.transition(&id,"RUNNING",None,None)?;

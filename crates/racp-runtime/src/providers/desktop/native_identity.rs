@@ -174,20 +174,34 @@ impl PinnedPeer {
         Ok(peer)
     }
     pub(super) fn executable(&self) -> Result<std::path::PathBuf, RacpError> {
-        let mut raw=vec![0u16;32768];let mut size=raw.len() as u32;
-        if unsafe { QueryFullProcessImageNameW(self.process.as_raw_handle(),0,raw.as_mut_ptr(),&mut size) }==0 || size==0 || size as usize>=raw.len() {
+        let mut raw = vec![0u16; 32768];
+        let mut size = raw.len() as u32;
+        if unsafe {
+            QueryFullProcessImageNameW(self.process.as_raw_handle(), 0, raw.as_mut_ptr(), &mut size)
+        } == 0
+            || size == 0
+            || size as usize >= raw.len()
+        {
             return Err(RacpError::new("PERMISSION_DENIED"));
         }
-        let text=String::from_utf16(&raw[..size as usize]).map_err(|_|RacpError::new("PERMISSION_DENIED"))?;
+        let text = String::from_utf16(&raw[..size as usize])
+            .map_err(|_| RacpError::new("PERMISSION_DENIED"))?;
         racp_core::validate_local_path(&std::path::PathBuf::from(text))
     }
     pub(super) fn outside_jobs(&self) -> Result<bool, RacpError> {
-        let mut inside=0;
-        if unsafe { windows_sys::Win32::System::JobObjects::IsProcessInJob(self.process.as_raw_handle(), std::ptr::null_mut(), &mut inside) } == 0 {
+        let mut inside = 0;
+        if unsafe {
+            windows_sys::Win32::System::JobObjects::IsProcessInJob(
+                self.process.as_raw_handle(),
+                std::ptr::null_mut(),
+                &mut inside,
+            )
+        } == 0
+        {
             return Err(RacpError::new("PERMISSION_DENIED"));
         }
         self.alive()?;
-        Ok(inside==0)
+        Ok(inside == 0)
     }
     pub fn identity(&self) -> &PeerIdentity {
         &self.identity

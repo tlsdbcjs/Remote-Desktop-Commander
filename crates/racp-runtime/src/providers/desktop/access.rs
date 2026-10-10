@@ -196,13 +196,40 @@ pub fn path_acl(path: &std::path::Path, descriptor: &str) -> Result<(), RacpErro
 
 pub(super) fn require_owner(path: &std::path::Path, expected: &str) -> Result<(), RacpError> {
     racp_core::validate_local_path(path)?;
-    let mut name:Vec<u16>=path.to_string_lossy().encode_utf16().chain(Some(0)).collect();
-    let sid_text:Vec<u16>=expected.encode_utf16().chain(Some(0)).collect();
-    let mut owner=std::ptr::null_mut();let mut security=std::ptr::null_mut();let mut sid=std::ptr::null_mut();
-    if unsafe { ConvertStringSidToSidW(sid_text.as_ptr(),&mut sid) }==0 { return Err(RacpError::new("PERMISSION_DENIED")); }
-    let status=unsafe { GetNamedSecurityInfoW(name.as_mut_ptr(),SE_FILE_OBJECT,OWNER_SECURITY_INFORMATION,&mut owner,std::ptr::null_mut(),std::ptr::null_mut(),std::ptr::null_mut(),&mut security) };
-    let matches=status==ERROR_SUCCESS && !owner.is_null() && unsafe { EqualSid(owner,sid) }!=0;
-    unsafe { LocalFree(sid);if !security.is_null() {LocalFree(security);} }
-    if !matches {return Err(RacpError::new("PERMISSION_DENIED"));}
+    let mut name: Vec<u16> = path
+        .to_string_lossy()
+        .encode_utf16()
+        .chain(Some(0))
+        .collect();
+    let sid_text: Vec<u16> = expected.encode_utf16().chain(Some(0)).collect();
+    let mut owner = std::ptr::null_mut();
+    let mut security = std::ptr::null_mut();
+    let mut sid = std::ptr::null_mut();
+    if unsafe { ConvertStringSidToSidW(sid_text.as_ptr(), &mut sid) } == 0 {
+        return Err(RacpError::new("PERMISSION_DENIED"));
+    }
+    let status = unsafe {
+        GetNamedSecurityInfoW(
+            name.as_mut_ptr(),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION,
+            &mut owner,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut security,
+        )
+    };
+    let matches =
+        status == ERROR_SUCCESS && !owner.is_null() && unsafe { EqualSid(owner, sid) } != 0;
+    unsafe {
+        LocalFree(sid);
+        if !security.is_null() {
+            LocalFree(security);
+        }
+    }
+    if !matches {
+        return Err(RacpError::new("PERMISSION_DENIED"));
+    }
     Ok(())
 }

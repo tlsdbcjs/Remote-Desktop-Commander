@@ -36,11 +36,27 @@ fn legacy_state() -> Result<PathBuf, RacpError> {
     #[cfg(windows)]
     {
         let current = std::env::current_exe()?;
-        if current.parent().ok_or_else(|| RacpError::new("RUNTIME_UNAVAILABLE"))?.join("portable.json").try_exists()? {
-            let marker = racp_core::read_bounded(&current.parent().unwrap().join("portable.json"), 1024, false)?;
-            if serde_json::from_slice::<Value>(&marker)? != json!({"version":1,"mode":"isolated"}) { return Err(RacpError::new("LOCAL_STATE_FAILED")); }
-            let local = PathBuf::from(std::env::var_os("LOCALAPPDATA").ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?);
-            return racp_core::validate_local_path(&local.join("RACP/portable-state").join(racp_contract::digest(current.to_string_lossy().to_lowercase())));
+        if current
+            .parent()
+            .ok_or_else(|| RacpError::new("RUNTIME_UNAVAILABLE"))?
+            .join("portable.json")
+            .try_exists()?
+        {
+            let marker = racp_core::read_bounded(
+                &current.parent().unwrap().join("portable.json"),
+                1024,
+                false,
+            )?;
+            if serde_json::from_slice::<Value>(&marker)? != json!({"version":1,"mode":"isolated"}) {
+                return Err(RacpError::new("LOCAL_STATE_FAILED"));
+            }
+            let local = PathBuf::from(
+                std::env::var_os("LOCALAPPDATA")
+                    .ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?,
+            );
+            return racp_core::validate_local_path(&local.join("RACP/portable-state").join(
+                racp_contract::digest(current.to_string_lossy().to_lowercase()),
+            ));
         }
         racp_runtime::maintenance::client_state()
     }

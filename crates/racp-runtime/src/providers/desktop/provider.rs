@@ -14,7 +14,10 @@ use std::{
     collections::BTreeMap,
     io::Write,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::{Duration, Instant},
 };
 use tokio_util::sync::CancellationToken;
@@ -114,6 +117,8 @@ pub struct Desktop {
     spool: PathBuf,
     device: String,
     enabled: bool,
+    settings: AgentSettings,
+    connected: Arc<AtomicBool>,
 }
 impl Desktop {
     pub fn new(settings: &AgentSettings) -> Result<Self, RacpError> {
@@ -128,6 +133,8 @@ impl Desktop {
             spool,
             device: settings.device_id.clone(),
             enabled: settings.desktop_enabled,
+            settings: settings.clone(),
+            connected: Arc::new(AtomicBool::new(false)),
         };
         if provider.enabled {
             let actor = PinnedPeer::open(std::process::id())?;
@@ -137,7 +144,7 @@ impl Desktop {
                         .registrar
                         .lock()
                         .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = Some(
-                        super::login::Registrar::start(settings, provider.child.clone())?,
+                        super::login::Registrar::start(settings, provider.child.clone(), provider.connected.clone())?,
                     );
                 }
                 return Ok(provider);
@@ -168,6 +175,30 @@ impl Desktop {
             }
         }
         Ok(provider)
+    }
+    fn restore_foreground(&self) -> Result<(), RacpError> {
+        let mut children = self.child.lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+        if !self.enabled || !self.connected.load(Ordering::Acquire) || !children.is_empty()
+            || PinnedPeer::open(std::process::id())?.identity().session == 0 {
+            return Ok(());
+        }
+        let mut child = Self::launch(&self.settings)?;
+        let status = pipe::request(
+            &child.config,
+            &child.peer,
+            json!({"operation":"broker.status"}),
+            Duration::from_secs(3),
+        );
+        if !self.connected.load(Ordering::Acquire) || status.is_err() {
+            child.stop()?;
+            return status.map(|_| ());
+        }
+        let mut status = status?;
+        status["broker_running"] = json!(true);
+        *self.status.lock().map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = status;
+        children.insert(child.config.session_id, child);
+        Ok(())
     }
     fn launch(settings: &AgentSettings) -> Result<Child, RacpError> {
         let actor = PinnedPeer::open(std::process::id())?.identity().clone();
@@ -361,13 +392,19 @@ impl Desktop {
         if cancel.is_cancelled() {
             return Err(RacpError::new("CANCELLED"));
         }
+        self.restore_foreground()?;
         let mut guard = self
             .child
             .lock()
             .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
-        let dead: Vec<_> = guard.iter_mut().filter_map(|(id, child)| (!child.process.alive()).then_some(*id)).collect();
+        let dead: Vec<_> = guard
+            .iter_mut()
+            .filter_map(|(id, child)| (!child.process.alive()).then_some(*id))
+            .collect();
         for id in dead {
-            if let Some(child) = guard.get_mut(&id) { child.stop()?; }
+            if let Some(child) = guard.get_mut(&id) {
+                child.stop()?;
+            }
             guard.remove(&id);
         }
         if request["operation"] == "desktop.sessions" {
@@ -391,7 +428,8 @@ impl Desktop {
             .as_u64()
             .filter(|n| *n > 0 && *n <= u32::MAX as u64)
             .map(|n| n as u32);
-        // Clipboard has no session field; choose only an unambiguous live session.
+        // The public clipboard and desktop schemas require session_id.
+        // Keep a single-session fallback for trusted internal callers.
         let session = match session {
             Some(s) => s,
             None if guard.len() == 1 => *guard.keys().next().unwrap(),
@@ -500,27 +538,47 @@ impl Desktop {
         }
         Ok(result)
     }
-    fn shutdown(&self) -> Result<(), RacpError> {
-        if let Some(mut registrar) = self
-            .registrar
-            .lock()
-            .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
-            .take()
-        {
-            registrar.stop()?;
-        }
-        let mut guard = self
-            .child
-            .lock()
+    fn retire_children(&self) -> Result<(), RacpError> {
+        let mut children = self.child.lock()
             .map_err(|_| RacpError::new("CLEANUP_FAILED"))?;
-        for child in guard.values_mut() {
+        for child in children.values_mut() {
             child.stop()?;
         }
-        guard.clear();
+        children.clear();
+        *self.status.lock().map_err(|_| RacpError::new("CLEANUP_FAILED"))? =
+            json!({"available":false,"error_code":"SESSION_UNAVAILABLE"});
+        Ok(())
+    }
+    fn shutdown(&self) -> Result<(), RacpError> {
+        self.connected.store(false, Ordering::Release);
+        let mut registrar = self.registrar.lock()
+            .map_err(|_| RacpError::new("CLEANUP_FAILED"))?.take();
+        if let Some(registrar) = registrar.as_mut() {
+            registrar.stop()?;
+        }
+        // Keep query grants until authenticated Broker shutdown has completed.
+        self.retire_children()?;
+        drop(registrar);
         Ok(())
     }
 }
 impl Provider for Desktop {
+    fn connection(&self, epoch: u64, ttl: Duration) {
+        let active = epoch > 0 && !ttl.is_zero();
+        let previous = self.connected.swap(active, Ordering::AcqRel);
+        if active && !previous {
+            let provider = self.clone();
+            tokio::task::spawn_blocking(move || provider.restore_foreground());
+        }
+    }
+    fn expire_lease(&self) -> BoxFuture<'_, Result<(), RacpError>> {
+        let provider = self.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || provider.retire_children())
+                .await
+                .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
+        })
+    }
     fn capabilities(&self) -> Vec<Value> {
         let status = self
             .status
@@ -538,8 +596,10 @@ impl Provider for Desktop {
     ) -> BoxFuture<'_, Result<Value, RacpError>> {
         let provider = self.clone();
         Box::pin(async move {
-            let result = tokio::task::spawn_blocking(move || provider.execute_native(request, cancel))
-                .await.map_err(|_| RacpError::new("EXECUTION_UNKNOWN"))??;
+            let result =
+                tokio::task::spawn_blocking(move || provider.execute_native(request, cancel))
+                    .await
+                    .map_err(|_| RacpError::new("EXECUTION_UNKNOWN"))??;
             Ok(json!({"state":"SUCCEEDED","result":result,"error":null}))
         })
     }

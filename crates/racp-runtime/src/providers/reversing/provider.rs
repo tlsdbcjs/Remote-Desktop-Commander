@@ -107,13 +107,29 @@ impl Reversing {
             device: settings.device_id.clone(),
             cursor: Cursor::default(),
         };
-        let weak=Arc::downgrade(&provider.state);
-        let guards=provider.guards.clone();let root=provider.root.clone();let spool=provider.spool.clone();let device=provider.device.clone();let boot=provider.boot.clone();
+        let weak = Arc::downgrade(&provider.state);
+        let guards = provider.guards.clone();
+        let root = provider.root.clone();
+        let spool = provider.spool.clone();
+        let device = provider.device.clone();
+        let boot = provider.boot.clone();
         std::thread::spawn(move || loop {
             std::thread::sleep(Duration::from_secs(1));
-            let Some(state)=weak.upgrade() else {break;};
-            let monitor=Self{state,guards:guards.clone(),root:root.clone(),spool:spool.clone(),device:device.clone(),boot:boot.clone(),cursor:Cursor::default()};
-            if let Ok(mut state)=monitor.state.try_lock(){let _=monitor.retire(&mut state);};
+            let Some(state) = weak.upgrade() else {
+                break;
+            };
+            let monitor = Self {
+                state,
+                guards: guards.clone(),
+                root: root.clone(),
+                spool: spool.clone(),
+                device: device.clone(),
+                boot: boot.clone(),
+                cursor: Cursor::default(),
+            };
+            if let Ok(mut state) = monitor.state.try_lock() {
+                let _ = monitor.retire(&mut state);
+            };
         });
         Ok(provider)
     }

@@ -585,7 +585,7 @@ impl NativeCarrier {
             let watcher = session.clone();
             tokio::spawn(async move {
                 let mut log_bytes = 0usize;
-                let mut quota_at=Instant::now();
+                let mut quota_at = Instant::now();
                 loop {
                     tokio::select! {_=watcher.cancel.cancelled()=>break,_=tokio::time::sleep(Duration::from_millis(50))=>{if watcher.check().is_err(){break;} if quota_at.elapsed()>=Duration::from_secs(1){if private_tree(&watcher.root,false).is_err(){break;}quota_at=Instant::now();} let failed = watcher.owned.lock().map(|mut owned| { if let Some(child)=owned.as_mut() { let mut bytes=[0u8;8192]; for pipe in [&mut child.stdout,&mut child.stderr] { for _ in 0..16 { match pipe.read_available(&mut bytes) { Ok(Some(n)) if n>0=>{log_bytes=log_bytes.saturating_add(n); if log_bytes>8*1024*1024{return true;}}, _=>break } } } child.poll().map(|v|v.is_some()).unwrap_or(true) } else { false } }).unwrap_or(true); if failed {break;}}}
                 }
@@ -791,18 +791,29 @@ pub fn provision_native(args: &[String], state: &std::path::Path) -> Result<Valu
 }
 
 fn private_tree(root: &std::path::Path, remove: bool) -> Result<(), RacpError> {
-    if !root.try_exists()? { return Ok(()); }
-    let parent = root.parent().ok_or_else(|| RacpError::new("CLEANUP_FAILED"))?;
+    if !root.try_exists()? {
+        return Ok(());
+    }
+    let parent = root
+        .parent()
+        .ok_or_else(|| RacpError::new("CLEANUP_FAILED"))?;
     let guards = racp_core::Workspaces::new(parent, &[])?;
     let mut stack = vec![(root.to_owned(), false, 0usize)];
     let mut count = 0;
     let mut total = 0u64;
     while let Some((path, visited, depth)) = stack.pop() {
-        if depth > 64 { return Err(RacpError::new("RESOURCE_EXHAUSTED")); }
+        if depth > 64 {
+            return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+        }
         if visited {
             if remove {
                 let dir = guards.parent("default", &path)?;
-                dir.unlink(path.file_name().and_then(|n| n.to_str()).ok_or_else(|| RacpError::new("PATH_ACCESS_DENIED"))?, true)?;
+                dir.unlink(
+                    path.file_name()
+                        .and_then(|n| n.to_str())
+                        .ok_or_else(|| RacpError::new("PATH_ACCESS_DENIED"))?,
+                    true,
+                )?;
             }
             continue;
         }
@@ -810,13 +821,25 @@ fn private_tree(root: &std::path::Path, remove: bool) -> Result<(), RacpError> {
         let dir = guards.directory("default", &path)?;
         for name in dir.names()? {
             count += 1;
-            if count > 20000 { return Err(RacpError::new("RESOURCE_EXHAUSTED")); }
-            let info = dir.info(&name)?.ok_or_else(|| RacpError::new("PATH_ACCESS_DENIED"))?;
-            if info.link { return Err(RacpError::new("PATH_ACCESS_DENIED")); }
-            if info.directory { stack.push((path.join(name), false, depth + 1)); }
-            else {
-                total = total.checked_add(info.size).filter(|n| remove || *n <= 64 * 1024 * 1024).ok_or_else(|| RacpError::new("RESOURCE_EXHAUSTED"))?;
-                if remove { dir.unlink(&name, false)?; }
+            if count > 20000 {
+                return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+            }
+            let info = dir
+                .info(&name)?
+                .ok_or_else(|| RacpError::new("PATH_ACCESS_DENIED"))?;
+            if info.link {
+                return Err(RacpError::new("PATH_ACCESS_DENIED"));
+            }
+            if info.directory {
+                stack.push((path.join(name), false, depth + 1));
+            } else {
+                total = total
+                    .checked_add(info.size)
+                    .filter(|n| remove || *n <= 64 * 1024 * 1024)
+                    .ok_or_else(|| RacpError::new("RESOURCE_EXHAUSTED"))?;
+                if remove {
+                    dir.unlink(&name, false)?;
+                }
             }
         }
     }

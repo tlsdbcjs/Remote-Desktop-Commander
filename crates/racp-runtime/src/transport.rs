@@ -3,7 +3,13 @@ use futures_util::StreamExt;
 use racp_contract::{decode_message, new_id, timestamp, RacpError, VERSION};
 use racp_core::{AgentSettings, Journal, OutputSpool};
 use serde_json::{json, Value};
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tokio::sync::{Mutex, RwLock};
 use tokio_tungstenite::{
     connect_async_tls_with_config,
@@ -25,6 +31,8 @@ pub struct Agent {
     pub(crate) status: Arc<RwLock<Value>>,
     pub(crate) peer: Arc<RwLock<Option<Peer>>>,
     pub(crate) lease: Arc<Mutex<tokio::time::Instant>>,
+    lease_issued: Arc<AtomicBool>,
+    pub(crate) lease_retiring: Arc<AtomicBool>,
 }
 impl Agent {
     pub fn new(settings: AgentSettings, credential: String) -> Result<Self, RacpError> {
@@ -67,12 +75,16 @@ impl Agent {
             status: Arc::new(RwLock::new(status)),
             peer: Arc::new(RwLock::new(None)),
             lease: Arc::new(Mutex::new(tokio::time::Instant::now())),
+            lease_issued: Arc::new(AtomicBool::new(false)),
+            lease_retiring: Arc::new(AtomicBool::new(false)),
         })
     }
     pub async fn snapshot(&self) -> Value {
         let mut status = self.status.read().await.clone();
         status["connected"] = json!(
-            status["connected"] == true && tokio::time::Instant::now() < *self.lease.lock().await
+            status["connected"] == true
+                && !self.lease_retiring.load(Ordering::Acquire)
+                && tokio::time::Instant::now() < *self.lease.lock().await
         );
         status["active_operations"] = json!(self.tasks.lock().await.len());
         status["operations"] = json!(self.execution_inventory().await.unwrap_or_default());
@@ -96,7 +108,13 @@ impl Agent {
     async fn heartbeat(&self) -> Result<(), RacpError> {
         let mut value = self.base("heartbeat").await;
         value["health"] = json!("healthy");
-        value["handles"] = json!(self.providers.inventory().into_iter().filter(|h| h["availability"] == "available").take(128).collect::<Vec<_>>());
+        value["handles"] = json!(self
+            .providers
+            .inventory()
+            .into_iter()
+            .filter(|h| h["availability"] == "available")
+            .take(128)
+            .collect::<Vec<_>>());
         value["capabilities"] = json!(self.providers.capabilities());
         self.send(value).await
     }
@@ -205,7 +223,7 @@ impl Agent {
    let ack=tokio::select!{_=shutdown.cancelled()=>return Ok(()),v=receive(&mut stream)=>v?};if ack["type"]!="heartbeat"||ack["connection_epoch"]!=epoch||ack["device_id"]!=self.settings.device_id||ack["agent_boot_id"]!=self.boot_id{return Err(RacpError::new("REQUEST_INVALID"));}
    let lease_ms=welcome["execution_lease_ttl_ms"].as_u64().filter(|n|*n>0&&*n<=86400000).ok_or_else(||RacpError::new("REQUEST_INVALID"))?;
    let interval_ms=welcome["heartbeat_interval_ms"].as_u64().filter(|n|*n>0&&*n<=60000).ok_or_else(||RacpError::new("REQUEST_INVALID"))?;
-   *self.lease.lock().await=tokio::time::Instant::now()+Duration::from_millis(lease_ms);self.providers.connection(epoch,Duration::from_millis(lease_ms));self.phase("ready").await;self.status.write().await["connected"]=json!(true);
+   *self.lease.lock().await=tokio::time::Instant::now()+Duration::from_millis(lease_ms);self.lease_issued.store(true,Ordering::Release);if !self.lease_retiring.load(Ordering::Acquire){self.providers.connection(epoch,Duration::from_millis(lease_ms));}self.phase("ready").await;self.status.write().await["connected"]=json!(true);
    self.log("agent_connected",json!({"connection_epoch":epoch}));
    let mut timer=tokio::time::interval(Duration::from_millis(interval_ms));timer.tick().await;
    let mut browser_timer=tokio::time::interval(Duration::from_millis(50));let mut browser_sequence=0;
@@ -219,7 +237,7 @@ impl Agent {
       let raw=match frame{Frame::Text(s)=>s.as_bytes().to_vec(),Frame::Close(_)=>break,Frame::Ping(_)|Frame::Pong(_)=>continue,_=>return Err(RacpError::new("REQUEST_INVALID"))};
       let message=decode_message(&raw)?;
       if message["device_id"]!=self.settings.device_id||message["agent_boot_id"]!=self.boot_id||message["connection_epoch"]!=epoch{return Err(RacpError::new("STALE_CONNECTION"));}
-      if message["type"]=="heartbeat"{*self.lease.lock().await=tokio::time::Instant::now()+Duration::from_millis(lease_ms);self.providers.connection(epoch,Duration::from_millis(lease_ms));}
+      if message["type"]=="heartbeat"{*self.lease.lock().await=tokio::time::Instant::now()+Duration::from_millis(lease_ms);if !self.lease_retiring.load(Ordering::Acquire){self.providers.connection(epoch,Duration::from_millis(lease_ms));}}
       else if message["type"]=="request"{self.dispatch(message).await?;}
       else if message["type"]=="cancel"{self.cancel_execution(message["target_operation_id"].as_str().ok_or_else(||RacpError::new("REQUEST_INVALID"))?,message["reason"].as_str().unwrap_or("requested")).await?;}
       else if matches!(message["type"].as_str(),Some("native_subscribe"|"native_packet"|"native_unsubscribe")){self.providers.native_message(message).await?;}
@@ -250,11 +268,41 @@ impl Agent {
             let mut retired = false;
             loop {
                 tokio::select! {_=watched.cancelled()=>break,_=tokio::time::sleep(Duration::from_millis(100))=>{}}
-                let expired = tokio::time::Instant::now() >= *agent.lease.lock().await;
+                let expired = agent.lease_issued.load(Ordering::Acquire)
+                    && tokio::time::Instant::now() >= *agent.lease.lock().await;
                 if expired && !retired {
-                    agent.cancel_all("lease").await?;
-                    agent.providers.cleanup().await?;
+                    agent.lease_retiring.store(true, Ordering::Release);
+                    agent.providers.connection(0, Duration::ZERO);
+                    let retirement = async {
+                        agent.cancel_all("lease").await?;
+                        loop {
+                            let notified = agent.completed.notified();
+                            if agent.tasks.lock().await.is_empty() {
+                                break;
+                            }
+                            notified.await;
+                        }
+                        agent.providers.expire_lease().await
+                    };
+                    let result = tokio::time::timeout(Duration::from_secs(15), retirement)
+                        .await
+                        .map_err(|_| RacpError::new("CLEANUP_UNKNOWN"))
+                        .and_then(|result| result);
+                    if let Err(error) = result {
+                        watched.cancel();
+                        return Err(error);
+                    }
                     retired = true;
+                    agent.lease_retiring.store(false, Ordering::Release);
+                    let ttl = agent.lease.lock().await
+                        .saturating_duration_since(tokio::time::Instant::now());
+                    let status = agent.status.read().await;
+                    if !ttl.is_zero() && status["connected"] == true {
+                        agent.providers.connection(
+                            status["connection_epoch"].as_u64().unwrap_or(0),
+                            ttl,
+                        );
+                    }
                 }
                 if !expired {
                     retired = false;
