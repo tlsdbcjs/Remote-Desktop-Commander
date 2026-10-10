@@ -324,13 +324,14 @@ impl Desktop {
             .as_millis()
             .max(1) as u64;
         let context = json!({"owner_id":request["context"]["principal_id"],"device_id":self.device,"operation_id":request["operation_id"],"timeout_ms":budget});
-        let signal = CancellationSignal::new(&child.path, &request, &cancel)?;
+        let mut signal = CancellationSignal::new(&child.path, &request, &cancel)?;
         let mut result = pipe::request(
             &child.config,
             &child.peer,
             json!({"operation":request["operation"],"payload":request["payload"],"context":context}),
             Duration::from_millis(budget),
         )?;
+        signal.confirmed = true;
         drop(signal);
         if request["operation"] == "desktop.screenshot" {
             let op = request["operation_id"]
@@ -456,6 +457,7 @@ struct CancellationSignal {
     done: Arc<std::sync::atomic::AtomicBool>,
     join: Option<std::thread::JoinHandle<()>>,
     path: PathBuf,
+    confirmed: bool,
 }
 impl CancellationSignal {
     fn new(
@@ -490,6 +492,7 @@ impl CancellationSignal {
             done,
             join: Some(join),
             path,
+            confirmed: false,
         })
     }
 }
@@ -499,6 +502,7 @@ impl Drop for CancellationSignal {
         if let Some(join) = self.join.take() {
             let _ = join.join();
         }
-        let _ = std::fs::remove_file(&self.path);
+        if self.confirmed { let _ = std::fs::remove_file(&self.path); }
+        else { let _ = racp_core::atomic_write(&self.path, b"", false); }
     }
 }

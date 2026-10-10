@@ -199,10 +199,13 @@ impl NativeWatch {
                         })
                         .unwrap_or(true);
                     if must_release {
-                        if release(&shared).is_err() {
+                        let released = release(&shared).is_ok();
+                        if !released {
                             if let Ok(mut s) = shared.lock() {
                                 s.healthy = false;
                             }
+                        } else if let Ok(mut s) = shared.lock() {
+                            if s.held.snapshot().is_empty() && s.counter.healthy() { s.healthy = true; }
                         }
                     }
                     MsgWaitForMultipleObjectsEx(

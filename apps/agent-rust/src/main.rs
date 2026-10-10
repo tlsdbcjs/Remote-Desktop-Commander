@@ -140,6 +140,7 @@ async fn main() {
                     | "broker"
                     | "guardian"
                     | "service"
+                    | "collection-worker"
                     | "plugin-gdb"
                     | "plugin-ghidra"
             ) {

@@ -25,6 +25,7 @@ mod windows;
 #[derive(Clone)]
 pub struct NativeCarrier {
     settings: AgentSettings,
+    native_installed: bool,
     boot: String,
     instance: String,
     root: PathBuf,
@@ -300,10 +301,10 @@ impl Session {
             }
             let mut value = self.envelope("native_opened")?;
             value["scope"] = self.scope.clone();
-            self.outgoing
-                .send(value)
-                .await
-                .map_err(|_| RacpError::new("DEVICE_OFFLINE"))?;
+            tokio::select! {
+                _=self.cancel.cancelled()=>return Err(RacpError::new("HANDLE_EXPIRED")),
+                sent=tokio::time::timeout(Duration::from_secs(5),self.outgoing.send(value))=>sent.map_err(|_|RacpError::new("TIMEOUT"))?.map_err(|_|RacpError::new("DEVICE_OFFLINE"))?,
+            }
             return Ok(());
         }
         if self.envelope(kind)?["stream_id"] != m["stream_id"] {
@@ -313,6 +314,15 @@ impl Session {
             return self.close().await;
         }
         let f = &m["frame"];
+        let fields = match f["type"].as_str() {
+            Some("native.open") => &["type","scope_fingerprint","channel_id"][..],
+            Some("native.data") => &["type","scope_fingerprint","channel_id","byte_offset","data_base64"][..],
+            Some("native.ack" | "native.end") => &["type","scope_fingerprint","channel_id","byte_offset"][..],
+            _ => return Err(RacpError::new("REQUEST_INVALID")),
+        };
+        if !f.as_object().is_some_and(|o| o.len()==fields.len() && fields.iter().all(|k|o.contains_key(*k))) {
+            return Err(RacpError::new("REQUEST_INVALID"));
+        }
         if f["scope_fingerprint"] != self.fingerprint {
             return Err(RacpError::new("PERMISSION_DENIED"));
         }
@@ -430,8 +440,13 @@ impl NativeCarrier {
         let root = settings.data_dir.join("native");
         racp_core::private_dir(&root)?;
         let (outgoing, incoming) = mpsc::channel(128);
+        #[cfg(windows)]
+        let native_installed = windows::Runtime::load(&settings.data_dir).is_ok();
+        #[cfg(not(windows))]
+        let native_installed = false;
         Ok(Self {
             settings: settings.clone(),
+            native_installed,
             boot: boot.into(),
             instance: new_id("native_provider"),
             root,
@@ -546,7 +561,7 @@ impl NativeCarrier {
             let watcher = session.clone();
             tokio::spawn(async move {
                 loop {
-                    tokio::select! {_=watcher.cancel.cancelled()=>break,_=tokio::time::sleep(Duration::from_millis(50))=>{if watcher.check().is_err(){break;}}}
+                    tokio::select! {_=watcher.cancel.cancelled()=>break,_=tokio::time::sleep(Duration::from_millis(50))=>{if watcher.check().is_err(){break;} let failed = watcher.owned.lock().map(|mut owned| { if let Some(child)=owned.as_mut() { let mut bytes=[0u8;8192]; for pipe in [&mut child.stdout,&mut child.stderr] { for _ in 0..16 { match pipe.read_available(&mut bytes) { Ok(Some(n)) if n>0=>(), _=>break } } } child.poll().map(|v|v.is_some()).unwrap_or(true) } else { false } }).unwrap_or(true); if failed {break;}}}
                 }
                 let _ = watcher.close().await;
             });
@@ -558,10 +573,7 @@ impl NativeCarrier {
 }
 impl Provider for NativeCarrier {
     fn capabilities(&self) -> Vec<Value> {
-        #[cfg(windows)]
-        let native = windows::Runtime::load(&self.settings.data_dir).is_ok();
-        #[cfg(not(windows))]
-        let native = false;
+        let native = self.native_installed;
         vec![
             json!({"name":"proxy","version":"1.0.0","operations":["proxy.prepare","proxy.close"],"installed":cfg!(windows),"supported":cfg!(windows),"enabled":cfg!(windows),"healthy":cfg!(windows),"unavailable_reason":if cfg!(windows){None}else{Some("windows_peer_identity_required")},"attributes":{"backend":"process_bound_tcp_carrier","max_channels":16,"system_proxy_changes":false,"ca_installation":false}}),
             json!({"name":"native","version":"1.0.0","operations":["native.prepare","native.start","native.close"],"installed":native,"supported":cfg!(windows),"enabled":native,"healthy":native,"unavailable_reason":if native{None}else{Some("managed_cdb_runtime_missing")},"attributes":{"opaque_native_commands":true,"broad_execution_grant_required":true,"max_channels":16}}),
@@ -580,10 +592,17 @@ impl Provider for NativeCarrier {
         let Ok(mut incoming) = self.incoming.lock() else {
             return vec![];
         };
+        let Ok(sessions) = self.state.try_lock() else { return vec![]; };
         let mut result = vec![];
         for _ in 0..32 {
             match incoming.try_recv() {
-                Ok(v) => result.push(v),
+                Ok(v) => {
+                    let allowed = v["handle_id"].as_str().and_then(|id|sessions.get(id)).is_some_and(|session| {
+                        let live = session.connection.lock().is_ok_and(|c| c.is_some_and(|(epoch,lease)| v["connection_epoch"]==epoch && Instant::now()<lease));
+                        live && (session.check().is_ok() || v["type"]=="native_stopped")
+                    });
+                    if allowed { result.push(v); }
+                },
                 Err(_) => break,
             }
         }
