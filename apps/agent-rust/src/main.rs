@@ -49,6 +49,7 @@ async fn main() {
             service::run(state)?;
             return Ok(Value::Null);
         }
+        if action == "maintenance" { return racp_runtime::maintenance::prepare(&args).await; }
         let mut browser = racp_runtime::providers::browser::BrowserConfig::bundled();
         browser.cdp_enabled = args.iter().any(|a| a == "--enable-cdp");
         browser.allow_origins = args
