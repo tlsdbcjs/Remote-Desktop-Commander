@@ -1,7 +1,7 @@
 # RACP 구현 작업 및 검증 현황 (Implementation Status)
 
 > **Document ID**: `DOC-QA-STATUS`\
-> **Status**: Active · **Target Version**: v0.1.20\
+> **Status**: Active · **Target Version**: v0.1.21\
 > **Last Updated**: 2026-10-10 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
@@ -1569,3 +1569,18 @@ Gateway/서버 Python·별도 Console·기존 host MCP·사용자 DB는 유지�
 - Windows [38016644333](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38016644333)에서 9c3989e native release Agent와 pinned Chromium ZIP 빌드·artifact 업로드 PASS. 테스트 job은 SKIPPED다. Python/Node 없는 배포 payload와 파일별 SHA-256 manifest를 생성했다. 이후 추가한 Rust desktop 읽기 Broker(GDI PNG/preview, WTS logon/lock·desktop 확인, OS peer-pinned Named Pipe, 보호된 Job과 Artifact spool)는 별도 빌드 대상이며 acceptance는 사용자 요청으로 보류한다. 입력·UIA·Guardian·서비스와 리버싱·Tauri 전환은 아직 미완료다.
 
 - Windows [38017082032](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38017082032)의 384737f checkpoint에서 Rust desktop 읽기 Broker를 포함한 production release 빌드·ZIP·artifact 업로드 PASS, acceptance job SKIPPED. 동봉 ZIP SHA-256: `f054aa9f6c1a6b3c2597f0aba5420d1bf11eb862c48bac6d7c916d53242db5cd`. [Windows Agent 빌드 다운로드](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38017082032/artifacts/11656414025)에 EXE, Chromium, 실행 가이드 및 파일별 build manifest가 들어 있다. 새 데스크톱 경로의 실제 입력/GUI 테스트는 실행하지 않았다. 클라우드 작업 환경이 이후 offline 상태로 전환되어 로컬 작업은 연결 복구를 기다린다.
+
+## Rust 클라이언트 v0.1.21 네이티브 패키징 증거 (2026-10-10)
+
+Windows [rust-client run 38036784974](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38036784974)는 소스 `0210ee520cc168df065c431d0fefa6eea2f2533d`에서 성공했다. Rust Agent/포터블 런처, Tauri 클라이언트와 React production build, Chromium 1243 및 fixed WebView2 154.0.4258.62의 실제 스테이징과 NSIS/portable/ZIP 패키징을 수행했다. Agent [run 38036784977](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38036784977)과 서비스 Broker/CDB provisioning 변경분 [run 38037685741](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38037685741)도 Windows release 컴파일에 성공했다.
+
+| 산출물 | 바이트 | SHA-256 |
+| :--- | ---: | :--- |
+| `RACP-Client-0.1.21-win-x64-setup.exe` | 395362766 | `cbffa57a6b2d1127d0980118d6442e7b90967fefd72cf971a852930d67959691` |
+| `RACP-Client-0.1.21-win-x64-portable.exe` | 1194188922 | `1230435cb3b272db3b02271067413624e112f624519e4944c10e294bdb417525` |
+| `RACP-Client-0.1.21-win-x64.zip` | 543340387 | `4a2615d5369141c6b6a1583a23e451141566f74bed567cbaa82ce66feb731b06` |
+
+WebView2 CAB SHA-256: `e8f55a4bde27c7f82512402b56a58539b5ec8928be4e500e077b6f66c9ef4668`. 기록은 해당 소스에 한정하며 이후 변경분은 다음 빌드로 구분한다. 이전 실패 묶음과 다른 버전 산출물은 보존한다.
+
+> [!IMPORTANT]
+> 사용자 지시에 따라 테스트만 보류한다. 이 빌드에서는 자동 테스트, GUI smoke, 실제 설치/업데이트/제거 및 2-PC acceptance를 실행하지 않았다. 구현 완료 판단과 테스트 통과를 혼동하지 않는다. 패키지는 unsigned 개발용이며 macOS/Linux 네이티브 빌드는 보류한다. 클라이언트 배포에는 CPython/Node/Electron이 필요 없다. Gateway/CLI 서버 측 Python은 유지한다.

@@ -1,8 +1,8 @@
 # RACP Agent Guidelines & Version Management
 
 > **Document ID**: `DOC-GOV-AGENTS`\
-> **Status**: Active · **Target Version**: v0.1.10\
-> **Last Updated**: 2026-10-07 · **Classification**: Repository Agent Guidelines
+> **Status**: Active · **Target Version**: v0.1.21\
+> **Last Updated**: 2026-10-10 · **Classification**: Repository Agent Guidelines
 
 This document defines repository instructions, operational principles, and semantic versioning policies for AI agents (Codex, Antigravity, Gemini, etc.) and contributors working on the **Remote-Desktop-Commander (RACP)** codebase.
 
@@ -23,8 +23,9 @@ This document defines repository instructions, operational principles, and seman
 
 - **Name**: Remote-Desktop-Commander (RACP - Remote Access and Control Protocol)
 - **Architecture**:
-  - Python workspace (`uv` workspace): `apps/agent`, `apps/cli`, `apps/gateway`, `packages/domain`, `packages/protocol`, `packages/policy`, `packages/observability`, `packages/sdk`
-  - Node / Web / Desktop workspace (`pnpm` workspace): `apps/client` (Electron + React), `apps/console` (React + Vite)
+  - Python workspace (`uv` workspace): `apps/cli`, `apps/gateway`, `packages/domain`, `packages/protocol`, `packages/policy`, `packages/observability`, `packages/sdk`
+  - Rust workspace: `apps/agent-rust`, `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`; independent Tauri workspace `apps/client/src-tauri`
+  - Node / Web / Desktop workspace (`pnpm` workspace): `apps/client` (Tauri + Rust + React), `apps/console` (React + Vite)
 - **Current Baseline Version**: Read `packages/domain/src/racp_domain/version.py` (SSOT).
 
 ---
@@ -90,7 +91,6 @@ When `scripts/version.py` runs, it atomically updates all target files:
 
 1. **Python Workspace Configurations**:
    - `pyproject.toml` (root workspace)
-   - `apps/agent/pyproject.toml`
    - `apps/cli/pyproject.toml`
    - `apps/gateway/pyproject.toml`
    - `packages/domain/pyproject.toml`
@@ -122,12 +122,12 @@ When `scripts/version.py` runs, it atomically updates all target files:
   ```
 - **CLI Commands**:
   - `python -m racp_cli --version` -> `racp 0.1.8`
-  - `python -m racp_agent.main --version` -> `racp-agent 0.1.8`
+  - `cargo run -p racp-agent -- --version` -> `racp-agent 0.1.8`
   - `python -m racp_gateway.main --version` -> `racp-gateway 0.1.8`
 - **Client Application**:
   - Displayed prominently in the top header as `<span className="version-badge">v0.1.8</span>`.
 - **Dynamic Wheels & Build Scripts**:
-  - `scripts/build.py` and `scripts/build_windows_client.py` reference `racp_domain.version.VERSION` dynamically.
+  - `scripts/build.py` and `scripts/build-client.mjs` reference `racp_domain.version.VERSION` dynamically.
 
 ---
 
@@ -188,14 +188,14 @@ Use [`.agents/skills/desktop-build/SKILL.md`](.agents/skills/desktop-build/SKILL
 > [!IMPORTANT]
 > Build only Windows by default. Do not start macOS/Linux builds, containers, or their CI jobs during routine builds. Their native runners can be enabled explicitly using the workflow dispatch input `include_deferred_platforms`.
 
-- Entry point: `uv run python scripts/build_client.py --platform win --arch x64`. Use `--node <path>` when the pinned Node is not on PATH; `--dry-run` prints paths/targets without building.
-- Build Python, Chromium, and native dependencies on the matching OS and architecture. Reject mismatched bundles instead of copying Windows binaries to macOS/Linux. `.exe` applies to Windows; macOS/Linux use their native executable formats.
-- Packaging SSOT: `apps/client/electron-builder.json`; `apps/client/electron-builder.cjs` resolves the current workspace version and native paths.
-- Staging: `dist/client-agent/<version>/<win|mac|linux>-<arch>/`; output: `dist/client-desktop/<version>/<win|mac|linux>-<arch>/`.
+- Entry point: `node scripts/build-client.mjs --platform win --arch x64`. Use pinned Node 22.23.0, pnpm 11.19.0 and Rust 1.90.0; `--dry-run` prints paths/targets without building.
+- Build Rust, Chromium, fixed WebView2, and native dependencies on the matching OS and architecture. Reject mismatched bundles instead of copying Windows binaries to macOS/Linux. `.exe` applies to Windows; macOS/Linux use their native executable formats.
+- Packaging SSOT: `apps/client/src-tauri/tauri.conf.json`, `installer.nsh`, and `scripts/build-client.mjs`; manifests verify the current version, architecture and staged file hashes.
+- Staging: `dist/client-agent/<version>/<win|mac|linux>-<arch>/<build-id>/`; output: `dist/client-desktop/<version>/<win|mac|linux>-<arch>/<build-id>/`.
 - Bump PATCH once per build/change batch with `scripts/version.py`, refresh `uv.lock`, and reuse that version for retries and all platform artifacts. Never bump once per output format.
-- Bundle Electron, CPython 3.12.11, current workspace wheels and pinned Playwright Chromium. Never package enrollment tokens, credentials, gateway-specific settings, or local device state.
+- Bundle the native Tauri client, Rust Agent, pinned Chromium and SHA-256-admitted fixed WebView2. Do not bundle CPython, Node or Electron. Never package enrollment tokens, credentials, gateway-specific settings, or local device state.
 - Preserve existing outputs. On a failed build, inspect and move only the failed batch into a sibling quarantine path before retrying; do not delete unrelated `dist/` contents.
-- Verify lint/types/version tests, frontend build/Node tests, native Agent imports, Windows unpacked/portable smoke and packaging manifest integrity. Record checksums, passed checks and deferred platforms in [Implementation Status](docs/quality/implementation-status.md).
+- Verify production Rust/TypeScript builds and packaging manifest integrity. Automated tests, GUI smoke and native acceptance are currently deferred by explicit user instruction; do not run them during this migration. Record checksums, passed checks and deferred platforms in [Implementation Status](docs/quality/implementation-status.md).
 
 > [!NOTE]
 > Development builds are unsigned and use `--publish never`; successful packaging does not establish clean-machine installation, upgrade/uninstall, signing, notarization, or native macOS/Linux acceptance.

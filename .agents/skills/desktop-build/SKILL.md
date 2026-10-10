@@ -1,92 +1,50 @@
 ---
 name: desktop-build
 description: >-
-  Build and package the RACP Electron desktop client with its native Agent runtime,
+  Build and package the native RACP Tauri/Rust client and Rust Agent,
   define Windows/macOS/Linux setup and portable artifacts, or maintain desktop build CI.
 ---
 
 # RACP Desktop Build
 
 > **Document ID**: `DOC-SKILL-DESKTOP-BUILD`\
-> **Status**: Active · **Target Version**: v0.1.10\
-> **Last Updated**: 2026-10-07 · **Classification**: Build Operations
-
-## Table of Contents
-
-- [Platform policy](#platform-policy)
-- [Build procedure](#build-procedure)
-- [Verification and retries](#verification-and-retries)
-- [Deferred platforms](#deferred-platforms)
+> **Status**: Active · **Target Version**: v0.1.21\
+> **Last Updated**: 2026-10-10 · **Classification**: Build Operations
 
 ## Platform policy
 
-Build Windows x64 by default. Keep macOS/Linux definitions but defer their builds
-until the user explicitly requests them. Do not use Linux Docker or enable the
-additional CI runners as part of an ordinary Windows build.
-
-| Target | Setup | Portable |
-| :--- | :--- | :--- |
-| `win-x64` | NSIS setup EXE | Single portable EXE; ZIP with executable/resources |
-| `mac-x64`, `mac-arm64` | DMG with `.app` | ZIP with `.app` |
-| `linux-x64`, `linux-arm64` | deb | AppImage |
-
-> [!IMPORTANT]
-> Agent Python, native modules, and Chromium must match the build host's OS and
-> architecture. Never reuse a Windows Agent on macOS/Linux. EXE is Windows-only.
+Build Windows x64 by default. macOS DMG/ZIP and Linux deb/AppImage definitions are deferred until explicitly requested. Do not launch their native builds, Docker containers or additional CI runners for routine Windows builds. Use `--dry-run` to inspect their proposed artifacts.
 
 ## Build procedure
 
-1. Inspect the working tree and SSOT version. Apply the [Version Manager](../version-manager/SKILL.md)
-   policy: bump PATCH once for the change/build batch, then `uv sync --all-packages`
-   to refresh local workspace versions in `uv.lock`. Reuse the version for retries.
-2. Use Python 3.12.11, Node 22.23.0 and pnpm 11.19.0. On Windows, the existing
-   `.tools/node-v22.23.0-win-x64/node.exe` and its Corepack provide the pinned Node/pnpm.
-   If absent, acquire the checksum-verified workspace runtime with
-   `uv run python scripts/bootstrap_node.py`.
-3. Run the entry point from the repository root:
+1. Inspect the working tree and SSOT version. Bump PATCH once per change/build batch; reuse that version for every retry and artifact format. Python is used for the repository version tool and Gateway only.
+2. Use native Windows x64, Rust 1.90.0, Node 22.23.0 and pnpm 11.19.0.
+3. From the repository root:
 
 ```powershell
-uv run python scripts/build_client.py --platform win --arch x64 --node .tools/node-v22.23.0-win-x64/node.exe
+pnpm install --frozen-lockfile
+node scripts/build-client.mjs --platform win --arch x64
 ```
 
-The script synchronizes frozen dependencies, builds current wheels, installs pinned
-Chromium, stages the Agent, builds/tests the frontend, packages all formats, runs
-Windows unpacked/portable smoke checks and writes SHA-256/size evidence to
-`build-manifest.json`. It never publishes artifacts.
+The entry point builds both native Agent and portable launcher, downloads build-only Playwright 1.63.0 to obtain Chromium revision 1243, validates fixed WebView2 against `scripts/webview2-runtime-lock.json`, builds Tauri/React, and packages NSIS setup, self-extracting portable EXE and ZIP. The installed payload requires no Python, Node or Electron.
 
-Configuration SSOT is [electron-builder.json](../../../apps/client/electron-builder.json).
-Load it through [electron-builder.cjs](../../../apps/client/electron-builder.cjs), which
-resolves `dist/client-agent/<version>/<target>-<arch>/` and
-`dist/client-desktop/<version>/<target>-<arch>/`. The pre-pack hook checks the Agent's
-version, platform, architecture, lock digest and file hashes. Do not bypass it.
+Configuration is maintained in [tauri.conf.json](../../../apps/client/src-tauri/tauri.conf.json) and [installer.nsh](../../../apps/client/src-tauri/installer.nsh). [build-client.mjs](../../../scripts/build-client.mjs) owns staging, exact payload inventory and artifact evidence. The Agent and browser must match the build host's OS and architecture.
+
+Output batches are `dist/client-desktop/<version>/win-x64/<build-id>/` and `dist/client-agent/<version>/win-x64/<build-id>/`. The manifest records source revision, locked dependency digests, runtime versions, file hashes, artifact sizes and deferred tests. Do not bypass inventory verification.
 
 ## Verification and retries
 
-Run the repository's Ruff/Mypy/version gates and the affected desktop tests. Run
-`scripts/client_e2e.py --node <pinned-node>` against the newly staged runtime. A packaged
-smoke must use a fresh `--user-data-dir` and verify isolation before making any IPC calls.
-Use `apps/client/tests/packaged-smoke.cjs` for the unpacked executable and
-`apps/client/tests/portable-smoke.cjs` for the NSIS portable launcher; pass the artifact
-path as the first argument to pinned Node. The launcher needs a loopback Chromium
-debugging connection because it does not forward Playwright's Electron inspector pipe.
-Do not stop or reconfigure an existing registered client as a build test.
+Automated tests, native acceptance and GUI smoke are explicitly deferred by the user for this migration. Run production builds and package integrity checks; do not describe a successful build as tested feature parity. A later acceptance session must use a fresh isolated profile and must not stop or reconfigure an existing registered client.
 
-Existing output paths stop the build. For a failed attempt, inspect and move only that
-batch's staging/output directories to unique sibling quarantine names, then retry using
-the same version. Preserve other releases and user state.
+Preserve all previous outputs and user data. Existing batch paths stop the build. A failed attempt quarantines only its output batch; inspect the cause and retry under the same version with a new build ID. Do not clear unrelated `dist/`, staging or caches.
 
-Record actual checks and artifact hashes in [Implementation Status](../../../docs/quality/implementation-status.md).
-Mark macOS/Linux as defined/deferred, and distinguish packaging from clean-PC
-installation, upgrade/uninstall and native platform acceptance.
-
-> [!NOTE]
-> These are unsigned development artifacts. Signing/notarization and publishing need
-> their own explicitly requested release work.
+Record actual build results and checksums in [Implementation Status](../../../docs/quality/implementation-status.md). Development packages are unsigned. Signing, publishing, notarization and clean-PC installation/upgrade/uninstall acceptance are separate work.
 
 ## Deferred platforms
 
-Use `--platform mac|linux --arch x64|arm64 --dry-run` on any host to inspect the plan.
-After an explicit request, remove `--dry-run` on a matching native host. For CI,
-`include_deferred_platforms=true` explicitly enables macOS arm64 and Linux x64 runners;
-normal push/PR/manual runs build Windows only. See the
-[Desktop Client Guide](../../../docs/guides/desktop-client-guide.md#6-개발-빌드-및-패키징-절차).
+```bash
+node scripts/build-client.mjs --platform mac --arch arm64 --dry-run
+node scripts/build-client.mjs --platform linux --arch x64 --dry-run
+```
+
+See the [Desktop Client Guide](../../../docs/guides/desktop-client-guide.md#6-개발-빌드-및-패키징-절차).
