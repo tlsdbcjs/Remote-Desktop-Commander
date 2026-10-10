@@ -56,7 +56,11 @@ impl Agent {
                 || matches!(
                     operation,
                     "process.inspect" | "process.list" | "process.tree"
-                ) && !racp_core::permission_allows_field(&permissions, "process.arguments.read"))
+                ) && !record
+                    .result
+                    .as_ref()
+                    .is_some_and(|v| v["arguments_included"] == false)
+                    && !racp_core::permission_allows_field(&permissions, "process.arguments.read"))
         {
             return Err(RacpError::new("PERMISSION_DENIED"));
         }
@@ -96,11 +100,6 @@ impl Agent {
         visit(value);
     }
     pub(crate) async fn outcome(&self, record: Record) -> Result<Value, RacpError> {
-        let permissions = self
-            .settings
-            .permissions
-            .clone()
-            .unwrap_or_else(|| racp_core::legacy_permissions(self.settings.desktop_enabled));
         let operation = record.request["operation"].as_str().unwrap_or("");
         let authorization = self.authorize_record(&record);
         if authorization.is_err() || !allowed(operation, &self.settings.profile) {
@@ -418,7 +417,12 @@ impl Agent {
         if !result["spool_path"].is_string() && serde_json::to_vec(result)?.len() > 65536 {
             let path = self.outputs.root().join(format!("{id}.json"));
             racp_core::atomic_write(&path, &serde_json::to_vec(result)?, true)?;
+            let redacted =
+                !racp_core::permission_allows_field(&permissions, "process.arguments.read");
             *result = json!({"artifact_id":null,"spool_path":path,"artifact_media_type":"application/json","truncated":true});
+            if redacted {
+                result["arguments_included"] = json!(false);
+            }
         }
         // A desktop capture can have an independently uploaded PNG preview.
         for pointer in ["", "/preview"] {

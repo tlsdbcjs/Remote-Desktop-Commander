@@ -42,8 +42,25 @@ async fn main() {
             }
             return Ok(Value::Null);
         }
+        if action == "maintenance" {
+            return racp_runtime::maintenance::prepare(&args).await;
+        }
+        #[cfg(windows)]
+        if action == "broker-login" {
+            let endpoint = args
+                .windows(2)
+                .find(|a| a[0] == "--login-endpoint")
+                .map(|a| PathBuf::from(&a[1]))
+                .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
+            racp_runtime::providers::desktop::run_login_broker(&endpoint)?;
+            return Ok(Value::Null);
+        }
         let state = state.ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
         racp_core::validate_local_path(&state)?;
+        #[cfg(windows)]
+        if action == "configure-service-login" {
+            return racp_runtime::providers::desktop::configure_login(&args, &state);
+        }
         if matches!(action, "provision-gdb" | "provision-ghidra") {
             return racp_runtime::providers::reversing::provision(action, &args, &state);
         }

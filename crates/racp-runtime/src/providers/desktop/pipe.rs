@@ -27,7 +27,7 @@ fn wide(value: &str) -> Vec<u16> {
         .chain(Some(0))
         .collect()
 }
-fn nonce() -> String {
+pub(super) fn nonce() -> String {
     let bytes: [u8; 32] = rand::random();
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -36,12 +36,16 @@ fn fields(value: &Value, expected: &[&str]) -> bool {
         .as_object()
         .is_some_and(|m| m.len() == expected.len() && expected.iter().all(|k| m.contains_key(*k)))
 }
-struct Pipe {
-    handle: OwnedHandle,
-    deadline: Instant,
+pub(super) struct Pipe {
+    pub(super) handle: OwnedHandle,
+    pub(super) deadline: Instant,
 }
 impl Pipe {
-    fn complete(&self, overlap: &mut OVERLAPPED, pending: bool) -> Result<u32, RacpError> {
+    pub(super) fn complete(
+        &self,
+        overlap: &mut OVERLAPPED,
+        pending: bool,
+    ) -> Result<u32, RacpError> {
         let raw = self.handle.as_raw_handle();
         if pending {
             let remaining = self
@@ -64,7 +68,7 @@ impl Pipe {
         }
         Ok(size)
     }
-    fn overlap() -> Result<(OVERLAPPED, OwnedHandle), RacpError> {
+    pub(super) fn overlap() -> Result<(OVERLAPPED, OwnedHandle), RacpError> {
         let event = unsafe { CreateEventW(std::ptr::null(), 1, 0, std::ptr::null()) };
         if event.is_null() {
             return Err(RacpError::new("RESOURCE_EXHAUSTED"));
@@ -76,7 +80,7 @@ impl Pipe {
         };
         Ok((overlap, event))
     }
-    fn read(&self) -> Result<Value, RacpError> {
+    pub(super) fn read(&self) -> Result<Value, RacpError> {
         if Instant::now() >= self.deadline {
             return Err(RacpError::new("TIMEOUT"));
         }
@@ -101,7 +105,7 @@ impl Pipe {
         }
         decode_pipe_message(&raw[..size])
     }
-    fn write(&self, value: &Value) -> Result<(), RacpError> {
+    pub(super) fn write(&self, value: &Value) -> Result<(), RacpError> {
         if Instant::now() >= self.deadline {
             return Err(RacpError::new("TIMEOUT"));
         }
@@ -374,5 +378,115 @@ pub fn request(
             _ => "EXECUTION_UNKNOWN",
         };
         Err(RacpError::new(code))
+    }
+}
+
+impl Pipe {
+    pub(super) fn listen(name: &str, descriptor: &str) -> Result<Self, RacpError> {
+        let mut security = std::ptr::null_mut();
+        if unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                wide(descriptor).as_ptr(),
+                SDDL_REVISION_1,
+                &mut security,
+                std::ptr::null_mut(),
+            )
+        } == 0
+        {
+            return Err(RacpError::new("PERMISSION_DENIED"));
+        }
+        let attributes = SECURITY_ATTRIBUTES {
+            nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: security,
+            bInheritHandle: 0,
+        };
+        let handle = unsafe {
+            CreateNamedPipeW(
+                wide(name).as_ptr(),
+                PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS,
+                1,
+                (MAX_PIPE_MESSAGE + 1) as u32,
+                (MAX_PIPE_MESSAGE + 1) as u32,
+                0,
+                &attributes,
+            )
+        };
+        unsafe {
+            LocalFree(security);
+        }
+        if handle == INVALID_HANDLE_VALUE {
+            return Err(RacpError::new("PERMISSION_DENIED"));
+        }
+        Ok(Self {
+            handle: unsafe { OwnedHandle::from_raw_handle(handle) },
+            deadline: Instant::now(),
+        })
+    }
+    pub(super) fn accept(&mut self) -> Result<bool, RacpError> {
+        self.deadline = Instant::now() + Duration::from_millis(250);
+        let (mut overlap, _event) = Self::overlap()?;
+        if unsafe { ConnectNamedPipe(self.handle.as_raw_handle(), &mut overlap) } == 0 {
+            match unsafe { GetLastError() } {
+                ERROR_PIPE_CONNECTED => (),
+                ERROR_IO_PENDING => {
+                    if let Err(e) = self.complete(&mut overlap, true) {
+                        self.disconnect();
+                        if e.code.0 == "TIMEOUT" {
+                            return Ok(false);
+                        }
+                        return Err(e);
+                    }
+                }
+                _ => return Err(RacpError::new("EXECUTION_UNKNOWN")),
+            }
+        }
+        self.deadline = Instant::now() + Duration::from_secs(10);
+        Ok(true)
+    }
+    pub(super) fn disconnect(&self) {
+        unsafe {
+            DisconnectNamedPipe(self.handle.as_raw_handle());
+        }
+    }
+    pub(super) fn connect(name: &str) -> Result<Self, RacpError> {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let raw = unsafe {
+                CreateFileW(
+                    wide(name).as_ptr(),
+                    0x100103,
+                    0,
+                    std::ptr::null(),
+                    OPEN_EXISTING,
+                    FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IMPERSONATION,
+                    std::ptr::null_mut(),
+                )
+            };
+            if raw != INVALID_HANDLE_VALUE {
+                let pipe = Self {
+                    handle: unsafe { OwnedHandle::from_raw_handle(raw) },
+                    deadline,
+                };
+                let mode = PIPE_READMODE_MESSAGE;
+                if unsafe {
+                    SetNamedPipeHandleState(raw, &mode, std::ptr::null(), std::ptr::null())
+                } == 0
+                {
+                    return Err(RacpError::new("PERMISSION_DENIED"));
+                }
+                return Ok(pipe);
+            }
+            if Instant::now() >= deadline {
+                return Err(RacpError::new("TIMEOUT"));
+            }
+            if !matches!(
+                unsafe { GetLastError() },
+                ERROR_FILE_NOT_FOUND | ERROR_PIPE_BUSY | ERROR_SEM_TIMEOUT
+            ) {
+                return Err(RacpError::new("PERMISSION_DENIED"));
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
     }
 }

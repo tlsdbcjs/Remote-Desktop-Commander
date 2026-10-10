@@ -234,6 +234,8 @@ fn startup(install: &Path, name: &str, mode: &str) -> Result<bool, RacpError> {
         return Ok(true);
     }
     if mode == "finalize" {
+        #[cfg(windows)]
+        crate::portable::grant_webview(&install.join("webview2"))?;
         let value = wide(&format!(
             "\"{}\" racp-background-agent",
             install.join("racp-client.exe").display()
@@ -259,7 +261,11 @@ pub async fn prepare(args: &[String]) -> Result<Value, RacpError> {
         return Err(RacpError::new("OPERATION_NOT_SUPPORTED"));
     }
     let install = racp_core::validate_local_path(&PathBuf::from(option(args, "--install-dir")?))?;
-    let state = racp_core::validate_local_path(&PathBuf::from(option(args, "--state-dir")?))?;
+    let state = if args.iter().any(|a| a == "--state-auto") {
+        client_state()?
+    } else {
+        racp_core::validate_local_path(&PathBuf::from(option(args, "--state-dir")?))?
+    };
     let executable = option(args, "--executable-name")?;
     if executable != "racp-client.exe" {
         return Err(RacpError::new("REQUEST_INVALID"));
@@ -272,6 +278,8 @@ pub async fn prepare(args: &[String]) -> Result<Value, RacpError> {
     #[cfg(windows)]
     startup(&install, &login, "inspect")?;
     if mode == "finalize" {
+        #[cfg(windows)]
+        crate::portable::grant_webview(&install.join("webview2"))?;
         #[cfg(windows)]
         startup(&install, &login, "finalize")?;
         return Ok(json!({"startup_migrated":true,"data":"preserved"}));
@@ -306,4 +314,29 @@ pub async fn prepare(args: &[String]) -> Result<Value, RacpError> {
     #[cfg(not(windows))]
     let removed = false;
     Ok(json!({"agent":"STOPPED","data":"preserved","backup":saved,"startup_removed":removed}))
+}
+
+/// Installer and desktop host select the same established per-user profile.
+pub fn client_state() -> Result<PathBuf, RacpError> {
+    let roaming = PathBuf::from(
+        std::env::var_os("APPDATA").ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?,
+    );
+    racp_core::validate_local_path(&roaming)?;
+    let candidates = [
+        "@racp/client/agent",
+        "RACP Client/agent",
+        "racp-client/agent",
+        "client/agent",
+    ];
+    let mut found = Vec::new();
+    for candidate in candidates {
+        let path = racp_core::validate_local_path(&roaming.join(candidate))?;
+        if path.join("credential.bin").try_exists()? {
+            found.push(path);
+        }
+    }
+    if found.len() > 1 {
+        return Err(RacpError::new("STATE_AMBIGUOUS"));
+    }
+    Ok(found.pop().unwrap_or_else(|| roaming.join(candidates[0])))
 }

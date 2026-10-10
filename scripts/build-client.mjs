@@ -48,6 +48,8 @@ try{
  await cp(agentOutput,path.join(staged,"agent"),{recursive:true,errorOnExist:true,force:false});
  await writeFile(path.join(staged,"agent-manifest.json"),JSON.stringify(agentManifest,null,2)+"\n");
  const webview=await stageWebView();
+ const oldBundle=path.join(root,"apps/client/src-tauri/target/x86_64-pc-windows-msvc/release/bundle");
+ if(await exists(oldBundle))await rename(oldBundle,oldBundle+".preserved-"+batch);
  run(process.execPath,[path.join(root,"apps/client/node_modules/@tauri-apps/cli/tauri.js"),"build","--target","x86_64-pc-windows-msvc","--bundles","nsis"],path.join(root,"apps/client"));
  const release=path.join(root,"apps/client/src-tauri/target/x86_64-pc-windows-msvc/release");
  const installers=(await readdir(path.join(release,"bundle/nsis"))).filter(name=>name.endsWith(".exe"));
@@ -59,6 +61,7 @@ try{
  await cp(path.join(staged,"agent"),path.join(payload,"agent"),{recursive:true});
  await cp(path.join(staged,"webview2"),path.join(payload,"webview2"),{recursive:true});
  await cp(path.join(root,"LICENSE"),path.join(payload,"LICENSE"));
+ await writeFile(path.join(payload,"portable.json"),JSON.stringify({version:1,mode:"isolated"})+"\n");
  await amd64(path.join(payload,"racp-client.exe"));
  const files=await inventory(payload);
  const manifest={version:1,product_version:version,platform,architecture:arch,files};

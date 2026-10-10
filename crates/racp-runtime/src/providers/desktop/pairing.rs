@@ -136,7 +136,10 @@ impl PairConfig {
     }
     pub fn proof(&self, role: &str, server: &str, client: &str) -> Result<String, RacpError> {
         self.validate()?;
-        if !matches!(role, "broker" | "agent") || !hex(server, 64) || !hex(client, 64) {
+        if !matches!(role, "broker" | "agent" | "login-broker")
+            || !hex(server, 64)
+            || !hex(client, 64)
+        {
             return Err(RacpError::new("PERMISSION_DENIED"));
         }
         // Pair IDs, roles and nonces are validated ASCII. Preserve Python json.dumps spacing.

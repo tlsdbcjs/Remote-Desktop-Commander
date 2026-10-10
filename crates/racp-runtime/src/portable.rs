@@ -197,27 +197,55 @@ pub fn launch() -> Result<(), RacpError> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        let system = PathBuf::from(std::env::var_os("SystemRoot").ok_or_else(failure)?)
-            .join("System32/icacls.exe");
-        racp_core::validate_local_path(&system)?;
-        let status = std::process::Command::new(system)
-            .arg(root.join("webview2"))
-            .args([
-                "/grant",
-                "*S-1-15-2-2:(OI)(CI)(RX)",
-                "*S-1-15-2-1:(OI)(CI)(RX)",
-            ])
-            .creation_flags(0x08000000)
-            .status()?;
-        if !status.success() {
-            return Err(failure());
-        }
+        grant_webview(&root.join("webview2"))?;
         std::process::Command::new(root.join("racp-client.exe"))
             .args(["--portable-state"])
             .arg(profile)
             .current_dir(&root)
             .creation_flags(0x08000000)
             .spawn()?;
+    }
+    Ok(())
+}
+pub fn report_failure() {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+        let text:Vec<u16>="RACP 포터블 파일을 열 수 없습니다. 파일 무결성과 압축 해제 폴더를 확인해 주세요. 사용자 데이터는 보존됩니다.".encode_utf16().chain(Some(0)).collect();
+        let title: Vec<u16> = "RACP Client".encode_utf16().chain(Some(0)).collect();
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text.as_ptr(),
+            title.as_ptr(),
+            MB_OK | MB_ICONERROR,
+        );
+    }
+}
+
+#[cfg(windows)]
+pub fn grant_webview(runtime: &Path) -> Result<(), RacpError> {
+    use std::os::windows::process::CommandExt;
+    racp_core::validate_local_path(runtime)?;
+    if !runtime.join("msedgewebview2.exe").is_file() {
+        return Err(failure());
+    }
+    let system = PathBuf::from(std::env::var_os("SystemRoot").ok_or_else(failure)?)
+        .join("System32/icacls.exe");
+    racp_core::validate_local_path(&system)?;
+    let status = std::process::Command::new(system)
+        .arg(runtime)
+        .args([
+            "/grant",
+            "*S-1-15-2-2:(OI)(CI)(RX)",
+            "*S-1-15-2-1:(OI)(CI)(RX)",
+        ])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .creation_flags(0x08000000)
+        .status()?;
+    if !status.success() {
+        return Err(failure());
     }
     Ok(())
 }

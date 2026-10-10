@@ -19,18 +19,97 @@ use std::{
 };
 use tokio_util::sync::CancellationToken;
 
-struct Child {
-    guardian: std::process::Child,
-    _guardian_protection: ProtectedProcess,
-    process: OwnedProcess,
-    _protection: ProtectedProcess,
-    peer: PeerIdentity,
-    config: PairConfig,
-    path: PathBuf,
+pub(super) enum BrokerProcess {
+    Local(OwnedProcess),
+    Registered(super::login::BrokerJob),
+}
+impl BrokerProcess {
+    pub(super) fn alive(&mut self) -> bool {
+        match self {
+            Self::Local(p) => p.poll().is_ok_and(|v| v.is_none()),
+            Self::Registered(p) => p.alive(),
+        }
+    }
+    fn kill_tree(&mut self) -> Result<(), RacpError> {
+        match self {
+            Self::Local(p) => p.kill_tree(),
+            Self::Registered(p) => p.kill(),
+        }
+    }
+    fn tree_empty(&mut self) -> Result<bool, RacpError> {
+        match self {
+            Self::Local(p) => p.tree_empty(),
+            Self::Registered(p) => p.empty(),
+        }
+    }
+    fn drain(&mut self) {
+        if let Self::Local(p) = self {
+            let mut bytes = [0u8; 4096];
+            for pipe in [&mut p.stdout, &mut p.stderr] {
+                for _ in 0..16 {
+                    match pipe.read_available(&mut bytes) {
+                        Ok(Some(n)) if n > 0 => (),
+                        _ => break,
+                    }
+                }
+            }
+        }
+    }
+}
+pub(super) enum GuardianProcess {
+    Local(std::process::Child),
+    Registered(PinnedPeer),
+}
+impl GuardianProcess {
+    fn alive(&mut self) -> bool {
+        match self {
+            Self::Local(p) => p.try_wait().is_ok_and(|v| v.is_none()),
+            Self::Registered(p) => p.alive().is_ok(),
+        }
+    }
+}
+pub(super) struct Child {
+    pub(super) guardian: GuardianProcess,
+    pub(super) _guardian_protection: ProtectedProcess,
+    pub(super) process: BrokerProcess,
+    pub(super) _protection: ProtectedProcess,
+    pub(super) peer: PeerIdentity,
+    pub(super) config: PairConfig,
+    pub(super) path: PathBuf,
+}
+impl Child {
+    pub(super) fn stop(&mut self) -> Result<(), RacpError> {
+        if self.process.alive() {
+            let _ = pipe::request(
+                &self.config,
+                &self.peer,
+                json!({"operation":"broker.stop"}),
+                Duration::from_secs(3),
+            );
+        }
+        self.process.kill_tree()?;
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !self.process.tree_empty()? {
+            if Instant::now() >= deadline {
+                return Err(RacpError::new("CLEANUP_FAILED"));
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        racp_core::atomic_write(&self.path.with_file_name("guardian-stop"), b"", true)?;
+        while self.guardian.alive() {
+            if Instant::now() >= deadline {
+                return Err(RacpError::new("CLEANUP_FAILED"));
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let _ = std::fs::remove_file(&self.path);
+        Ok(())
+    }
 }
 #[derive(Clone)]
 pub struct Desktop {
-    child: Arc<Mutex<Option<Child>>>,
+    child: Arc<Mutex<BTreeMap<u32, Child>>>,
+    registrar: Arc<Mutex<Option<super::login::Registrar>>>,
     status: Arc<Mutex<Value>>,
     spool: PathBuf,
     device: String,
@@ -41,7 +120,8 @@ impl Desktop {
         let spool = settings.data_dir.join("spool");
         private_dir(&spool)?;
         let provider = Self {
-            child: Arc::new(Mutex::new(None)),
+            child: Arc::new(Mutex::new(BTreeMap::new())),
+            registrar: Arc::new(Mutex::new(None)),
             status: Arc::new(Mutex::new(
                 json!({"available":false,"error_code":if settings.desktop_enabled { "SESSION_UNAVAILABLE" } else { "DESKTOP_NOT_CONFIGURED" }}),
             )),
@@ -50,6 +130,18 @@ impl Desktop {
             enabled: settings.desktop_enabled,
         };
         if provider.enabled {
+            let actor = PinnedPeer::open(std::process::id())?;
+            if actor.identity().session == 0 {
+                if settings.data_dir.join("service-login.json").try_exists()? {
+                    *provider
+                        .registrar
+                        .lock()
+                        .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = Some(
+                        super::login::Registrar::start(settings, provider.child.clone())?,
+                    );
+                }
+                return Ok(provider);
+            }
             if let Ok(child) = Self::launch(settings) {
                 let state = pipe::request(
                     &child.config,
@@ -66,7 +158,8 @@ impl Desktop {
                     *provider
                         .child
                         .lock()
-                        .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = Some(child);
+                        .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+                        .insert(child.config.session_id, child);
                 } else {
                     let mut child = child;
                     let _ = child.process.kill_tree();
@@ -172,9 +265,9 @@ impl Desktop {
         let peer = PinnedPeer::open(process.pid())?.identity().clone();
         config.require_broker(&peer)?;
         Ok(Child {
-            guardian,
+            guardian: GuardianProcess::Local(guardian),
             _guardian_protection: guardian_protection,
-            process,
+            process: BrokerProcess::Local(process),
             _protection: protection,
             peer,
             config,
@@ -272,28 +365,41 @@ impl Desktop {
             .child
             .lock()
             .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
-        let Some(child) = guard.as_mut() else {
-            if request["operation"] == "desktop.sessions" {
-                return Ok(json!({"sessions":[],"configured":self.enabled}));
-            }
-            return Err(RacpError::new("SESSION_UNAVAILABLE"));
-        };
-        if child.process.poll()?.is_some() {
-            *self
-                .status
-                .lock()
-                .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = json!({"available":false,"broker_running":false,"error_code":"SESSION_UNAVAILABLE"});
-            return Err(RacpError::new("SESSION_UNAVAILABLE"));
-        }
-        let mut buffer = [0u8; 4096];
-        for pipe in [&mut child.process.stdout, &mut child.process.stderr] {
-            for _ in 0..16 {
-                match pipe.read_available(&mut buffer) {
-                    Ok(Some(n)) if n > 0 => (),
-                    _ => break,
+        guard.retain(|_, child| child.process.alive() || child.guardian.alive());
+        if request["operation"] == "desktop.sessions" {
+            let mut sessions = vec![];
+            for child in guard.values_mut() {
+                if child.process.alive() {
+                    if let Ok(mut status) = pipe::request(
+                        &child.config,
+                        &child.peer,
+                        json!({"operation":"broker.status"}),
+                        Duration::from_secs(1),
+                    ) {
+                        status["broker_running"] = json!(true);
+                        sessions.push(status);
+                    }
                 }
             }
+            return Ok(json!({"sessions":sessions,"configured":self.enabled}));
         }
+        let session = request["payload"]["session_id"]
+            .as_u64()
+            .filter(|n| *n > 0 && *n <= u32::MAX as u64)
+            .map(|n| n as u32);
+        // Clipboard has no session field; choose only an unambiguous live session.
+        let session = match session {
+            Some(s) => s,
+            None if guard.len() == 1 => *guard.keys().next().unwrap(),
+            _ => return Err(RacpError::new("SESSION_UNAVAILABLE")),
+        };
+        let child = guard
+            .get_mut(&session)
+            .ok_or_else(|| RacpError::new("SESSION_UNAVAILABLE"))?;
+        if !child.process.alive() {
+            return Err(RacpError::new("SESSION_UNAVAILABLE"));
+        }
+        child.process.drain();
         let mut status = pipe::request(
             &child.config,
             &child.peer,
@@ -316,7 +422,10 @@ impl Desktop {
         if request["operation"] == "desktop.sessions" {
             return Ok(json!({"sessions":[status]}));
         }
-        if request["payload"]["session_id"] != child.config.session_id {
+        if request["payload"]
+            .get("session_id")
+            .is_some_and(|v| v != child.config.session_id)
+        {
             return Err(RacpError::new("SESSION_UNAVAILABLE"));
         }
         let budget = deadline
@@ -388,35 +497,22 @@ impl Desktop {
         Ok(result)
     }
     fn shutdown(&self) -> Result<(), RacpError> {
+        if let Some(mut registrar) = self
+            .registrar
+            .lock()
+            .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
+            .take()
+        {
+            registrar.stop()?;
+        }
         let mut guard = self
             .child
             .lock()
-            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
-        if let Some(child) = guard.as_mut() {
-            let _ = pipe::request(
-                &child.config,
-                &child.peer,
-                json!({"operation":"broker.stop"}),
-                Duration::from_millis(500),
-            );
-            child.process.kill_tree()?;
-            if !child.process.tree_empty()? {
-                return Err(RacpError::new("CLEANUP_FAILED"));
-            }
-            racp_core::atomic_write(&child.path.with_file_name("guardian-stop"), b"", false)?;
-            let deadline = Instant::now() + Duration::from_secs(3);
-            loop {
-                if child.guardian.try_wait()?.is_some() {
-                    break;
-                }
-                if Instant::now() >= deadline {
-                    return Err(RacpError::new("CLEANUP_FAILED"));
-                }
-                std::thread::sleep(Duration::from_millis(20));
-            }
-            let _ = std::fs::remove_file(&child.path);
-            *guard = None;
+            .map_err(|_| RacpError::new("CLEANUP_FAILED"))?;
+        for child in guard.values_mut() {
+            child.stop()?;
         }
+        guard.clear();
         Ok(())
     }
 }
@@ -428,7 +524,7 @@ impl Provider for Desktop {
             .map(|s| s.clone())
             .unwrap_or_else(|_| json!({"available":false}));
         vec![
-            json!({"name":"desktop","version":"1.0.0","supported":true,"enabled":self.enabled,"healthy":status["broker_running"]==true,"unavailable_reason":status["error_code"],"operations":["clipboard.state","clipboard.read","clipboard.write","desktop.sessions","desktop.monitors","desktop.windows","desktop.foreground","desktop.screenshot","desktop.inspect","desktop.lease_acquire","desktop.lease_renew","desktop.lease_release","desktop.activate","desktop.move","desktop.click","desktop.type","desktop.key","desktop.scroll","desktop.drag","desktop.invoke","desktop.set_value"],"attributes":{"backend":"rust-windows-local-session-broker","sessions":[status],"input_guardian_available":true,"capture":"visible_rectangle","service_cross_session_launch":false}}),
+            json!({"name":"desktop","version":"1.0.0","supported":true,"enabled":self.enabled,"healthy":status["broker_running"]==true,"unavailable_reason":status["error_code"],"operations":["clipboard.state","clipboard.read","clipboard.write","desktop.sessions","desktop.monitors","desktop.windows","desktop.foreground","desktop.screenshot","desktop.inspect","desktop.lease_acquire","desktop.lease_renew","desktop.lease_release","desktop.activate","desktop.move","desktop.click","desktop.type","desktop.key","desktop.scroll","desktop.drag","desktop.invoke","desktop.set_value"],"attributes":{"backend":"rust-windows-paired-session-broker","sessions":[status],"input_guardian_available":true,"capture":"visible_rectangle","service_cross_session_registration":true,"service_cross_session_launch":false}}),
         ]
     }
     fn execute(

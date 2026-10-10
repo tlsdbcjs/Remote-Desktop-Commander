@@ -6,7 +6,7 @@
   racp_present_${MODE}:
     InitPluginsDir
     File /oname=$PLUGINSDIR\racp-maintenance.exe "${RACP_MAINTENANCE_SOURCE}"
-    nsExec::ExecToStack /TIMEOUT=60000 '"$PLUGINSDIR\racp-maintenance.exe" maintenance --install-dir "$INSTDIR" --state-dir "$APPDATA\@racp\client\agent" --executable-name "racp-client.exe" --login-name "app.racp.client" --mode "${MODE}"'
+    nsExec::ExecToStack /TIMEOUT=60000 '"$PLUGINSDIR\racp-maintenance.exe" maintenance --install-dir "$INSTDIR" --state-auto --executable-name "racp-client.exe" --login-name "app.racp.client" --mode "${MODE}"'
     Pop $R0
     Pop $R1
     ${If} $R0 != 0
@@ -23,7 +23,7 @@
   !insertmacro RACP_PREPARE uninstall
 !macroend
 !macro NSIS_HOOK_POSTINSTALL
-  nsExec::ExecToStack /TIMEOUT=30000 '"$INSTDIR\agent\racp-agent.exe" maintenance --install-dir "$INSTDIR" --state-dir "$APPDATA\@racp\client\agent" --executable-name "racp-client.exe" --login-name "app.racp.client" --mode "finalize"'
+  nsExec::ExecToStack /TIMEOUT=30000 '"$INSTDIR\agent\racp-agent.exe" maintenance --install-dir "$INSTDIR" --state-auto --executable-name "racp-client.exe" --login-name "app.racp.client" --mode "finalize"'
   Pop $R0
   Pop $R1
   ${If} $R0 != 0

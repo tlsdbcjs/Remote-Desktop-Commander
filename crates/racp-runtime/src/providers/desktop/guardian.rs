@@ -23,6 +23,11 @@ pub fn run_guardian(path: &Path) -> Result<(), RacpError> {
             .ok_or_else(|| RacpError::new("PERMISSION_DENIED"))?
             .as_bytes(),
     )?;
+    let _query_grants = if let Some(service) = &pair.agent_service_sid {
+        Some(super::access::own(&[service.clone()], false)?)
+    } else {
+        None
+    };
     let identity = PinnedPeer::open(std::process::id())?;
     pair.require_broker(identity.identity())?;
     let controller = PinnedPeer::open(pair.agent_pid)?;

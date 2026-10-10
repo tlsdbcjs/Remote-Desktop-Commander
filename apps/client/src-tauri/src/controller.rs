@@ -35,29 +35,14 @@ fn legacy_state() -> Result<PathBuf, RacpError> {
     }
     #[cfg(windows)]
     {
-        let roaming = PathBuf::from(
-            std::env::var_os("APPDATA").ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?,
-        );
-        racp_core::validate_local_path(&roaming)?;
-        let candidates = [
-            roaming.join("@racp/client/agent"),
-            roaming.join("RACP Client/agent"),
-            roaming.join("racp-client/agent"),
-            roaming.join("client/agent"),
-        ];
-        let mut found = vec![];
-        for path in &candidates {
-            racp_core::validate_local_path(path)?;
-            if path.join("credential.bin").try_exists()? {
-                found.push(path.clone());
-            }
+        let current = std::env::current_exe()?;
+        if current.parent().ok_or_else(|| RacpError::new("RUNTIME_UNAVAILABLE"))?.join("portable.json").try_exists()? {
+            let marker = racp_core::read_bounded(&current.parent().unwrap().join("portable.json"), 1024, false)?;
+            if serde_json::from_slice::<Value>(&marker)? != json!({"version":1,"mode":"isolated"}) { return Err(RacpError::new("LOCAL_STATE_FAILED")); }
+            let local = PathBuf::from(std::env::var_os("LOCALAPPDATA").ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?);
+            return racp_core::validate_local_path(&local.join("RACP/portable-state").join(racp_contract::digest(current.to_string_lossy().to_lowercase())));
         }
-        if found.len() > 1 {
-            return Err(RacpError::new("STATE_AMBIGUOUS"));
-        }
-        Ok(found
-            .pop()
-            .unwrap_or_else(|| roaming.join("@racp/client/agent")))
+        racp_runtime::maintenance::client_state()
     }
     #[cfg(not(windows))]
     {

@@ -72,7 +72,10 @@ fn verify_service_identity() -> Result<(), RacpError> {
     use windows_sys::Win32::Security::*;
     let peer =
         racp_runtime::providers::desktop::native_identity::PinnedPeer::open(std::process::id())?;
-    if peer.identity().session != 0 {
+    if peer.identity().session != 0
+        || peer.identity().sid == "S-1-5-18"
+        || peer.identity().administrator
+    {
         return Err(RacpError::new("PERMISSION_DENIED"));
     }
     let account: Vec<u16> = "NT SERVICE\\RACPAgent"
@@ -134,6 +137,7 @@ unsafe extern "system" fn main(_: u32, _: *mut *mut u16) {
         let context = CONTEXT
             .get()
             .ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?;
+        racp_runtime::providers::desktop::verify_config_identity(&context.state)?;
         let (settings, values) = racp_core::load_settings(&context.state, true)?;
         let _lock = racp_core::InstanceLock::acquire(&context.state.join(format!(
             "agent-{}.lock",

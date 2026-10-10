@@ -37,3 +37,10 @@ mod input;
 mod automation;
 #[cfg(windows)]
 mod clipboard;
+
+#[cfg(windows)]
+mod access;
+#[cfg(windows)]
+mod login;
+#[cfg(windows)]
+pub use login::{configure_login, run_login_broker, verify_config_identity};
