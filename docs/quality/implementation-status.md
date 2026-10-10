@@ -1501,6 +1501,19 @@ Gateway/서버 Python·별도 Console·기존 host MCP·사용자 DB는 유지�
 
 이번 산출물은 계획서와 문서 포털/상호 링크 갱신이다. Rust 구현·Cargo 컴파일·Client 패키징·기존 Agent 중지/Device revoke는 수행하지 않았다. 후속 기능 구현과 Rust 실제 검증은 미완료이며 전체 제품 goal을 완료로 표시하지 않는다.
 
+<a id="rust-plan-review-20261010"></a>
+
+### 27.16 Rust 전환 계획 검토·보완
+
+2026-10-10 [Rust Client 전환 계획](../spec/rust-client-migration-plan.md)을 현재 소스와 비교해 보완했다. 검토 기준 commit은 `c0fe694675ca74d2926d015843c11ee913311584`, 제품 SSOT는 v0.1.20이다. 실제 Registry와 공개 JSON은 각각 **100개 operation**, catalog는 **18개 category / 중복 없는 143개 permission(81 rpc·62 planned)**이며 catalog가 참조하는 미등록 operation은 없었다. 이는 계약 inventory 확인이며 Rust 기능 검증 결과가 아니다.
+
+- 기준 기능 이전·신규 권한 확장·플랫폼별 완료를 구분하고 commit/hash·operation↔permission·backend·test·evidence 추적 필드를 정의했다.
+- R12-D/R12-N과 R13-W/R13-N으로 Windows 우선 경로와 타 OS 인수 의존성을 분리했다. R-PKG 조기 배포 검증과 R06 최소 end-to-end checkpoint를 추가했다.
+- Iced 접근성/IME/software renderer, 격리 profile의 Rust CDP 동등성, blocking OS 호출 취소, durable Journal/UNKNOWN/tombstone, hot policy CAS, Rust state upgrade/rollback, 장애 주입·soak·성능 표본 조건을 구체화했다.
+- schema drift/버전 검사의 `racp_agent` import, root workspace dependency, quality CI를 확인해 레거시 삭제 전 계약 분리와 삭제 후 서버/Console 회귀 gate를 추가했다.
+
+검증은 기준선 집계, 계획서 및 이번 현황 항목의 상대 링크 **40개**, 계획서의 명시적 목차 anchor **15개**, metadata/code fence 형식, `git diff --check` 모두 **PASS**다. 이번 변경은 계획/현황 문서 보완이며 제품 버전·runtime·CI·설치 상태는 변경하지 않았다. Rust 구현, 컴파일, 제품 패키징, 원격/OS 인수는 미실행이다.
+
 작성 후 관련 문서 7개의 표준 metadata·상대 링크/명시 anchor, 계획서의 R00–R14 작업 번호·code fence를 확인했고 오류는 0개였다. 문서 검증이며 기능/플랫폼 실행 검사로 집계하지 않는다.
 ---
 

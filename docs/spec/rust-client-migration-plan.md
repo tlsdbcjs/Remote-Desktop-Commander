@@ -6,7 +6,7 @@
 
 ## 개요
 
-사용자 요청은 **Client 영역 전체를 Rust로 전환하고 레거시를 유지하지 않는 것**이다. GUI만 교체하는 작업이 아니라 GUI·트레이·등록·설정·상주 Agent·Desktop Broker/Guardian·OS Provider·전송·분석 helper 관리·Client 빌드 도구까지 재구성한다. Gateway와 서버 측 Python 코드는 유지한다.
+이 계획의 목표 범위는 **Client 영역 전체를 Rust로 전환하고 레거시를 유지하지 않는 것**이다. GUI만 교체하는 작업이 아니라 GUI·트레이·등록·설정·상주 Agent·Desktop Broker/Guardian·OS Provider·전송·분석 helper 관리·Client 빌드 도구까지 재구성한다. Gateway와 서버 측 Python 코드는 유지한다.
 
 완료된 제품의 기본 Client는 Python·Electron·Node.js·React·Playwright Python을 실행하거나 동봉하지 않는다. 기본 GUI는 **Rust + Iced**로 재작성한다. 기존 React 화면 재사용을 전제로 한 Tauri+React 제안은 이번 전체 전환 기준에서 사용하지 않는다. 외부 분석 엔진이나 브라우저처럼 기능에 필요한 제3자 도구는 기본 Client와 분리된 선택 runtime으로 관리한다.
 
@@ -64,6 +64,19 @@
 5. 지원 OS의 기능·배포·권한·UI·성능을 해당 OS에서 확인한다. Windows 결과를 macOS/Linux 결과로 바꾸지 않는다.
 6. 레거시 제거 목록과 최종 배포 manifest 검사를 통과한다. 구 Client 전용 runtime/test/CI 경로가 남지 않는다.
 
+### 1.3 이전·확장·플랫폼 완료의 구분
+
+전체 범위는 유지하되 서로 다른 산출물을 같은 완료율로 합산하지 않는다.
+
+| 판정 단위 | 대상 | 완료 의미 |
+|---|---|---|
+| 기준 기능 이전 | 기준선 100개 operation 및 연결된 81개 권한 | 계약·거부·정리 의미와 선언한 Windows 기능의 Rust 인수; 기존 미검증 경로도 별도 추적 |
+| 기능 확장 | 62개 planned 권한 및 신규 operation | R11의 개별 구현·검증 또는 근거 있는 플랫폼 한계 판정; 이전 완료가 확장 완료를 뜻하지 않음 |
+| Windows 제품 전환 | Windows의 이전·확장·배포·레거시 제거 | R13-W/R14 통과; macOS/Linux를 지원 제품으로 광고하지 않음 |
+| 전체 플랫폼 전환 | Windows 및 요청된 macOS/Linux native 인수 | R12-N/R13-N까지 통과해야 3-OS 완료로 표시 |
+
+operation과 permission은 다대다 관계다. 100과 143을 합산해 기능 수나 완료율로 사용하지 않는다. 개발 중 `not_implemented`, `unverified`, `deferred`를 숨기지 않으며 이 상태는 최종 `supported` 판정을 대신할 수 없다.
+
 <a id="section-02"></a>
 
 ## 2. 현재 기준선과 전환 원칙
@@ -81,6 +94,18 @@
 - 이미 통과한 Python 경로를 다시 장기간 시험하지 않는다.
 - 미확인 기능은 Rust backlog로 가져온다. 오래된 결과와 새 Rust 결과를 분리한다.
 - 개발 중 기존 소스가 참고용으로 잠시 존재해도 릴리스와 지원 경로는 새 Rust 하나로 정한다. Git history와 증거는 코드 fallback이 아니다.
+
+### 2.1 기준선과 추적 산출물
+
+R00은 버전 문자열뿐 아니라 기준 commit, dirty diff 유무, Registry/catalog/schema의 SHA-256을 고정한다. 같은 0.1.20 안의 변경도 구분한다. 기준 입력은 [Registry](../../packages/protocol/src/racp_protocol/registry.py), [공개 Registry JSON](../protocol/registry-v1.json), [권한 catalog](../../packages/protocol/src/racp_protocol/permission_catalog.json)이다. 각 입력 간 불일치는 이전 전에 해소한다.
+
+추적표는 제안 경로 `native/tests/fixtures/migration-inventory.json`에 기계 판독 형식으로 두고 결과·증거는 [구현 현황](../quality/implementation-status.md)에 연결한다. 이 문서 개정 시점에는 해당 산출물이 아직 없다. 필수 필드는 다음과 같다.
+
+- `operation_id`, `permission_ids`, `category`, `baseline_kind`(기존/확장), `source_path`, `contract_digest`.
+- `platform`, `backend`, `owner_task`, `implementation_state`, `availability_reason`, `required_runtime`.
+- `test_ids`, `evidence_ref`, `evidence_commit`, `cleanup_assertions`, `blocking_dependency`.
+
+R00 검사는 ID 중복·누락, 존재하지 않는 operation 참조, 권한 연결 누락을 실패로 처리한다. 다중 권한의 AND/OR 의미와 출력 권한도 보존한다. 이후 신규 ID는 기준선을 조용히 바꾸지 않고 delta로 추가한다. 카테고리 off·grant deny·승인 필요·OS/runtime 부재·출력 권한 회수는 공통 정책 검사와 기능별 대표 인수로 연결한다.
 
 <a id="section-03"></a>
 
@@ -112,6 +137,19 @@ Iced는 [공식 Rust GUI](https://book.iced.rs/)이며 [upstream](https://github
 
 Client의 기존 Python GDB/Ghidra wrapper와 프로젝트 소유 Java bridge도 그대로 남기지 않는다. Rust에서 native CLI/API/JNI 등을 직접 사용하는 isolated helper 또는 host 분석 경로로 재설계한다. vendor API가 특정 언어 plugin을 요구할 경우 Client 밖의 선택 host 분석 연동으로 구분하고, 그 조건을 숨긴 채 Client 전체 Rust 완료를 선언하지 않는다.
 
+### 3.3 초기 기술 검증과 결정 시점
+
+Iced는 초기 선택이며 R01의 제품 적합성 검증 후 확정한다. R00은 Rust MSRV/toolchain, Iced/wgpu/tiny-skia, Tokio, TLS, SQLite, Windows bindings, tray 의존성의 버전·feature·license·지원 OS 최소 버전을 기록한다. 후보 조합을 먼저 고정한 뒤 다음 gate를 통과시킨다.
+
+| 시점 | 검증 항목 | 실패 시 조치 |
+|---|---|---|
+| R01 | 한글 조합/후보창·붙여넣기·Tab/단축키·Narrator의 이름/역할/상태·100/150/200% DPI·다중 모니터 이동 | Rust toolkit 또는 접근성 연동을 재검토하고 결정 기록; 핵심 조작 접근성 미충족 상태에서 화면 전면 재작성 확대 금지 |
+| R01 | GPU 비활성 VM에서 software renderer 선택·트레이·single instance·닫기/종료·Agent 단절 표시 | 실제 선택된 renderer와 장애 복구 확인; 컴파일 성공을 UX 합격으로 처리하지 않음 |
+| R02–R03 | 사설 CA·hostname/만료 오류·HTTP CONNECT proxy·재연결·secret store 잠금/부재 | 지원 조건 명시; TLS 검증 해제나 평문 secret 저장으로 우회하지 않음 |
+| R07 이후, R10 본 구현 전 | Rust CDP로 격리 profile·frame/selector·upload/download 최소 실험 | 필요한 Chromium/CDP 조합과 미지원 동작을 조기에 확정 |
+
+최종 선택 근거는 관련 ADR에 남기고 실행 증거는 현황 SSOT에 기록한다. upstream의 renderer 제공 사실만으로 tray·접근성·IME 통합이 자동 충족된다고 보지 않는다.
+
 <a id="section-04"></a>
 
 ## 4. 목표 구조와 실행 경계
@@ -137,6 +175,16 @@ flowchart LR
 - IPC peer의 사용자/session/PID·생성 시각 또는 OS peer credential을 검증하고 메시지 크기·동시 호출·deadline·권한을 제한한다. privileged Agent가 임의 UI 프로세스의 명령을 수용하지 않는다.
 - snapshot 요청 + 변경 이벤트 + reconnect 후 resync를 사용한다. 이벤트 sequence 누락을 감지하고 동일 데이터를 지속적으로 다시 렌더링하지 않는다.
 - blocking OS API는 bounded worker로 분리한다. 취소·deadline·lease가 끝난 worker가 늦게 결과를 publish하지 못한다.
+
+### 4.1 실행 주체·격리·종료 책임
+
+기본 Agent는 로그인 사용자 권한으로 실행하고, 시스템 서비스·승격 helper는 필요한 capability에 한정한다. 서비스의 Session 0에서 사용자 화면을 조작하지 않는다. Broker는 지정한 로그인 session에서만 시작하며 잠금·로그오프·사용자 전환 시 기존 observation/approval/input lease를 폐기한다. GUI와 Agent의 소유 사용자·session이 달라지면 새 인증/권한 판단을 거친다.
+
+local IPC는 OS ACL/peer identity 외에 연결별 handshake·프로토콜 버전·challenge와 요청 scope를 검사한다. 실행 파일 이름이나 PID만으로 신뢰하지 않으며, 같은 사용자 권한을 이미 장악한 악성 코드까지 별도 보안 경계로 차단한다고 주장하지 않는다. 승인 응답은 Agent가 발급한 대기 요청에만 결합한다. privileged helper는 허용된 typed 명령만 수용한다.
+
+`spawn_blocking` 작업은 시작 후 `abort`로 중단되지 않는다는 [Tokio 계약](https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html)을 설계에 반영한다. 짧은 OS query는 bounded pool·동시성 한도로 제어하고 COM apartment/thread-affinity를 지킨다. 중단 불가능하거나 무기한 block 가능한 API는 종료 가능한 소유 helper process로 분리한다. deadline은 결과 폐기만이 아니라 실제 작업·handle·입력 회수까지 검증한다.
+
+R04는 queue/channel별 용량·worker 수·shutdown budget을 정하고 control/heartbeat/cancel이 대용량 stream에 막히지 않게 한다. 종료 순서는 신규 접수 차단→lease/입력 해제→소유 작업 취소→Journal/출력 정리→bounded 종료다. 강제 종료에도 Guardian이 key/button release를 수행하며 실패한 cleanup은 별도 상태로 남긴다.
 
 <a id="section-05"></a>
 
@@ -186,6 +234,8 @@ Gateway를 Rust로 바꾸지 않는다. 서버가 사용하는 [protocol 계약]
 - descriptor/code/schema 변경은 원자적 변경 배치로 관리하고 CI drift 검사를 둔다.
 - Python server의 모델/도구는 server 범위에 유지할 수 있지만 Cargo 빌드·Client 실행에서 Python을 호출하지 않는다. Rust가 소비하는 schema/catalog/fixture는 저장소에서 고정된 입력이다.
 
+JSON Schema에 표현되지 않는 Pydantic custom validator·권한 조합·정규화·실패 code도 입력/출력 vector로 추출한다. R02는 schema 일치와 실행 의미 일치를 별도 판정한다. Python/Rust 비교 harness는 개발/CI 도구이며 배포 Client의 runtime dependency가 아니다. 실제 통신 fixture는 token·개인 경로·파일 내용 등을 제거하고 재현 가능한 소유 fixture로 치환한다.
+
 ### 6.2 상태·수명주기
 
 Device/boot/connection epoch/principal/workspace/session/permission revision을 접수·실행·stream·출력·renew·replay 시점에 검사한다. PID는 생성 시각/OS handle과 함께 확인한다. clock은 deadline/lease에 monotonic 기준을 사용하며 wall-clock timestamp를 authority로 쓰지 않는다.
@@ -203,6 +253,22 @@ mutation은 Journal 접수 이후 실행한다. 동일 idempotency key의 재전
 - hot policy는 Agent IPC의 validation→새 immutable snapshot→commit→관련 resource retirement→receipt 순서로 적용한다. credentials/gateway/승격처럼 restart가 필요한 항목은 분명히 구분한다.
 - future `ManagedPolicySource`는 검증된 별도 constraint를 공급하는 인터페이스만 둔다. 현재는 local source이며 실제 Server→Client policy 전달은 구현하지 않는다.
 - 광역 shell/argv/native debugger·proxy가 실행 프로그램의 모든 OS 행위를 checkbox만으로 격리한다고 설명하지 않는다.
+
+### 6.4 충돌·복구·호환 계약
+
+| 경계 | 설계·검증 조건 |
+|---|---|
+| wire 버전 | 제품 SemVer와 wire/schema 버전을 구분. Hello의 버전·capability로 미지원 조합을 작업 접수 전에 거부하고 supported Gateway 범위를 명시 |
+| canonical/validator | 중복 JSON key, absent/null/default, 정수 범위·float 표현·Unicode 정규화·path case를 fixture로 고정. 기존 digest를 다른 canonical 표준으로 임의 교체하지 않음 |
+| mutation Journal | durable accept→실행 시작→side effect→결과 commit 경계별 crash 주입. 외부 OS 변경과 DB를 하나의 transaction으로 볼 수 없으므로 exactly-once 성공을 보장한다고 쓰지 않음 |
+| 재전송·보존 | 동일 scope/key+다른 payload는 conflict. 결과 만료 후에도 mutation key tombstone을 보존하고 자동 재실행 금지. outcome 불명은 UNKNOWN으로 조회/명시적 resolution |
+| 재부팅·시간 | boot가 바뀌면 이전 monotonic lease/approval을 재사용하지 않음. suspend/resume 후 현재 authority를 재검하고 오래된 input lease를 폐기 |
+| DB/디스크 | Journal schema version·WAL/durability·backup/checkpoint·disk-full/corruption 처리 명시. durable 기록 불가 시 mutation 접수 차단; 메모리 전용 성공 응답 금지 |
+| hot policy | expected revision CAS, 원자적 snapshot 교체 후 신규 접수 차단·진행 중 출력 재검. commit 성공과 retirement 완료를 receipt에서 구분하고 실패 자원은 격리/재정리 |
+| 이벤트·Artifact | snapshot+sequence 연결의 경합, gap/resync, 중복·역순 ACK, 재연결 scope, bytes/hash/MIME·최대 크기, disk spool quota·만료·중간 취소를 검사 |
+| 관측·로그 | operation/request/trace ID와 boot/epoch/revision을 연결. token·cookie·clipboard·원문 payload를 기본 로그에서 제외; 로그/덤프 retention과 크기 제한 |
+
+기존 [Journal](../../packages/sdk/src/racp_sdk/journal.py)의 deduplication/UNKNOWN/tombstone 의미를 계약 fixture로 추출한다. 새 Rust state 형식 도입과 향후 **Rust→Rust 설정/DB 업그레이드**는 별도 문제다. 구 Python 설정 자동 이전을 제외하더라도 새 제품의 schema upgrade·중단 복구·지원하지 않는 downgrade 거부는 R03 및 R13-W/R13-N에서 설계·검증한다.
 
 <a id="section-07"></a>
 
@@ -235,6 +301,12 @@ mutation은 Journal 접수 이후 실행한다. 동일 idempotency key의 재전
 
 browser는 기본적으로 설치된 지원 Chromium 계열 또는 선택 managed runtime을 Rust CDP로 제어한다. 기존 Playwright 동작의 selector/frame/upload/download/관측 의미를 재구현하고 Python/Node driver로 우회하지 않는다. 다른 browser engine은 실제 지원 조건을 별도로 판정한다.
 
+### 7.1 Browser 이전의 별도 계약
+
+기본 제어 대상은 **Agent가 소유한 격리 browser process와 전용 profile**이다. 사용자의 기본 profile·cookie DB·열린 개인 탭을 자동 연결/복사하지 않는다. Chrome 136 이후 기본 데이터 디렉터리에 대한 remote-debugging switch가 제한된다는 [Chrome 공식 안내](https://developer.chrome.com/blog/remote-debugging-port)를 반영한다. 지원 browser binary/CDP 버전 조합, profile 수명, 실행 권한, debug endpoint 접근 경계를 manifest에 고정한다.
+
+CDP 연결 성공만으로 Playwright 기능 동등성을 인정하지 않는다. auto-wait/actionability·strict selector·navigation timeout·OOPIF/frame·dialog·popup·download 완료·upload 경로·browser crash를 별도 vector로 옮긴다. arbitrary evaluate/cookies/storage는 광역 실행·민감 출력 권한을 따로 검사한다. 종료 시 소유 process/profile만 정리하며 browser endpoint를 외부 네트워크에 노출하지 않는다.
+
 <a id="section-08"></a>
 
 ## 8. 플랫폼별 구현
@@ -262,25 +334,32 @@ Windows를 첫 구현/인수 대상으로 삼는다. macOS/Linux adapter와 패�
 
 | ID | 선행 | 작업·산출물 | 완료 gate |
 |---|---|---|---|
-| R00 | 없음 | Client dependency/operation/권한 inventory, 언어 중립 fixture, 레거시 제거 목록, toolchain/dependency pin·license inventory | 100개 operation·143개 ID·기존 수명주기/배포 진입점에 누락 없는 추적표 |
-| R01 | R00 | Cargo workspace·Iced UI 골격·theme/fonts/IME/DPI·트레이·single instance·GPU/software path | native Rust 화면의 입력/재렌더링/VM 사용성. Python/JS 실행 없이 동작 |
+| R00 | 없음 | commit/hash 기준선·operation/권한 inventory·언어 중립 fixture·레거시 소비자 목록·toolchain/license 후보 pin | §2.1 추적표·100개 operation·143개 ID·수명주기/배포 진입점에 누락 없음 |
+| R01 | R00 | Cargo workspace·Iced UI 골격·theme/fonts/IME/DPI·트레이·single instance·GPU/software path | §3.3 접근성/입력/VM gate, toolkit 확정. Python/JS 실행 없이 동작 |
 | R02 | R00 | wire/validator/canonical digest/TLS/WSS·Artifact 계약·서버 drift checker | 정상/거부 cross-language vector와 실제 Python Gateway handshake |
 | R03 | R02 | 설정·OS secret store·one-use 연결 파일·등록·local authenticated IPC·상태 이벤트 | 새 등록→저장→재시작·위조/다른-user IPC 거부·구 설정 자동 import 없음 |
-| R04 | R02,R03 | dispatcher/Journal/queue/lease/deadline/취소/reconnect/replay/resource registry | mutation 1회·crash/UNKNOWN/partial·bounded cleanup·late output 거부 |
+| R04 | R02,R03 | dispatcher/Journal/queue/lease/deadline/취소/reconnect/replay/resource registry | §6.4 crash 경계별 재실행 방지·UNKNOWN/partial·bounded cleanup·late output 거부 |
 | R05 | R03,R04 | catalog/profile/constraints·공통 UI·local approval·hot retirement·future policy 경계 | 최초 등록/편집 동일 의미·off direct RPC 거부·승인 재사용 불가·revocation 회수 |
 | R06 | R04,R05 | files/system/storage observation·search/image/patch·hash·Artifact | 허용 workspace·link/race/bytes/encoding·파일별 원자성·scope/hash 대응 |
 | R07 | R04,R05 | spawn/stop/jobs/PTY/ConPTY·app lifecycle·recipe/script/elevation | owned containment·borrowed 보존·stdout/backpressure·취소·깨끗한 종료 |
 | R08 | R01,R04,R05 | Windows Broker/Guardian·화면/UIA/input/clipboard·user login | 실제 OS 화면/입력·session/DPI/foreground fence·lease/drop/keyup·clipboard CAS |
+| R-PKG | R01,R03,R07,R08 | Windows 패키징 recipe·manifest·서비스/트레이 등록·상태 root·Rust updater 설계 | 개발 staging으로 경로/의존성 검증. 제품 패키징 요청 후 깨끗한 VM의 설치/portable/제거 조기 인수 |
 | R09 | R06,R07 | network/capture/memory/dump/native debugger/proxy·관리 runtime | 원본 Codex MCP의 static/packet/dump/live/HTTP 경로·target/hash·완전한 cleanup |
-| R10 | R05–R09 | browser Rust CDP·관측/입력/파일·console/network/storage | 기존 browser 기능의 Rust 실제 인수·외부 앱/credential 범위 거부 |
+| R10 | R05,R06,R07 및 R07 이후 CDP 실험 | browser Rust CDP·관측/입력/파일·console/network/storage | §7.1 동등성·격리 profile·외부 앱/credential 범위 거부; R09 분석 기능과 독립 진행 가능 |
 | R11 | R05–R10 | 62 후속 권한을 포함한 config/accounts/power/diagnostics/backup/restore/storage 확장 | 각 ID의 구현/필요 조건/기술 한계 판정·고위험 작업의 소유 VM fixture 인수 |
-| R12 | R06–R11 | macOS/Linux adapter·OS 권한·native UI/Agent·배포 정의 | 요청된 native runner에서 플랫폼별 contract/실제 인수; 미실행은 deferred |
-| R13 | R01–R12 | 최적화·전체 회귀·실제 MCP·soak/fault·배포 인수·성능 기록 | 선언한 지원 환경의 기능/성능/정리 gate 모두 충족 |
-| R14 | R13 | 기존 Client 소스/의존성/CI 제거·Rust 패키징·가이드/AGENTS/skills 갱신·지원 종료 | 최종 tree/manifest/CI에 구 Client 실행 경로 없음·새 등록 설치 검증 |
+| R12-D | R00부터, R06–R11과 함께 갱신 | macOS/Linux adapter 인터페이스·OS 제한·배포 정의 | Windows 공통 core에 타 OS handle/경로 가정 없음; native 인수는 미완료로 명시 |
+| R12-N | R12-D, 관련 기능 및 해당 OS 실행 요청/runner | macOS/Linux native UI/Agent·OS 권한·배포 인수 | OS/arch별 실제 증거; 미실행 target은 deferred |
+| R13-W | R01–R11,R-PKG,R12-D | Windows 최적화·전체 회귀·실제 MCP·soak/fault·설치·성능 인수 | Windows 기능/성능/정리/제품 배포 gate 충족; 패키징 요청 전 배포 gate는 대기 |
+| R13-N | R12-N 및 해당 target 패키징 | macOS/Linux 전체 회귀·실제 원격·배포·성능 인수 | 실행한 target별 판정; R13-W를 타 OS 증거로 전용하지 않음 |
+| R14 | R13-W, 서버 의존성 분리 | 기존 Client 소스/의존성/CI 제거·가이드/AGENTS/skills 갱신·지원 종료 | 삭제 후 서버/Console 회귀·최종 tree/manifest/CI·새 등록 재검증. 3-OS 완료는 R13-N도 필요 |
 
-실행 흐름은 `R00 → R01/R02 → R03 → R04 → R05 → R06–R11 → R12 → R13 → R14`다. R01/R02의 독립 작업은 같은 전환 배치에서 진행할 수 있지만 현재 사용자 요청 없이 별도 agent/thread를 만들지 않는다. UI layout 다듬기 때문에 engine/권한/cleanup 구현을 뒤로 미루지 않는다.
+Windows 흐름은 `R00 → R01/R02 → R03 → R04 → R05 → R06–R11 → R13-W → R14`다. R-PKG는 R08 이후 조기에 진행하고 R12-D는 기능별 adapter와 함께 작성한다. `R12-N → R13-N`은 명시한 OS 실행 요청 이후의 별도 경로다. R12-N이 deferred여도 Windows 작업을 계속할 수 있지만 3-OS 완료를 선언할 수 없다. R01/R02의 독립 작업은 같은 전환 배치에서 진행할 수 있지만 현재 사용자 요청 없이 별도 agent/thread를 만들지 않는다. UI layout 다듬기 때문에 engine/권한/cleanup 구현을 뒤로 미루지 않는다.
 
-R00/R02 fixture는 기존 검사 전부를 그대로 복제하지 않는다. 계약이 달라지기 쉬운 경계와 실제 성공 사례를 가져온다. R09의 native MCP 인수가 성공해도 R11의 나머지 후보 또는 R12의 다른 OS 완료를 대신하지 않는다.
+R00/R02 fixture는 기존 검사 전부를 그대로 복제하지 않는다. 계약이 달라지기 쉬운 경계와 실제 성공 사례를 가져온다. R09의 native MCP 인수가 성공해도 R11의 나머지 후보 또는 R12-N의 다른 OS 완료를 대신하지 않는다.
+
+첫 통합 checkpoint는 R06의 최소 read-only 경로로 **새 등록→Gateway handshake→권한 허용/거부→파일 조회/hash→상태 UI→종료**를 완주하는 것이다. 이후 R07의 소유 process 하나에 mutation/Journal/crash 복구를 연결한다. 모든 Provider를 만든 뒤 최초 end-to-end 연결을 시험하는 순서를 피한다.
+
+각 task는 시작 시 담당 범위·입력 fixture·선행 gate·막힌 외부 조건을 확정하고 종료 시 commit·실행 command·환경·증거 경로·미완료를 현황 SSOT에 남긴다. 일정은 R01/R02/CDP 실험과 R-PKG 결과 이후 산정한다. toolkit 부적합·wire digest 불일치·중단 불가능한 helper·설치 실패는 해당 의존 경로의 확대를 중지시키는 gate이며 독립 작업은 계속한다.
 
 <a id="section-10"></a>
 
@@ -298,18 +377,21 @@ R00/R02 fixture는 기존 검사 전부를 그대로 복제하지 않는다. 계
 | RT-PERF | cold/warm UI·IPC·CPU/RAM·streaming | 같은 reference 환경의 P50/P95·표본·원시 수치 |
 | RT-DIST | install/portable/restart/upgrade/uninstall·runtime separation | 실제 설치·실행·manifest·상태/credential 포함 없음 |
 | RT-REMOVAL | 소스/dependency/build/CI의 레거시 제거 | 제거 목록·코드 검색·lock/manifest 검사 |
+| RT-SERVER | Python Gateway/SDK/CLI·웹 Console 유지 | Python Agent 없이 서버 설치/import·API/MCP/schema·Console 검사 통과 |
 
 Rust 자동 검사 예시는 다음과 같다. 실제 gate는 workspace가 생성된 뒤 정확한 command/feature를 확정한다.
 
 ```text
+# repository root에서 native workspace로 이동한 뒤 실행하는 제안 명령
+cd native
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
-cargo run -p xtask -- contract-check
-cargo run -p xtask -- acceptance --platform win --scenario core
+cargo run --locked -p xtask -- contract-check
+cargo run --locked -p xtask -- acceptance --platform win --scenario core
 ```
 
-Rust 검사는 개발 컴파일을 수반한다. 제품 installer/portable/DMG/deb/AppImage 생성·배포와 구분하고, 제품 패키징은 기존 사용자 방침대로 마지막 별도 요청 때 실행한다. 계획서 작성만으로 위 명령을 실행하지 않는다.
+Rust 검사는 개발 컴파일을 수반한다. GPU/software·default/minimal·플랫폼 feature 조합을 명시한 CI matrix로 검사하며 상호 배타적 feature를 무조건 `--all-features`로 합치지 않는다. 제품 installer/portable/DMG/deb/AppImage 생성·배포와 구분하고, 제품 패키징은 별도 실행 요청 때 수행한다. R-PKG에서 recipe·개발 staging 검사를 먼저 준비하고 실제 installer 검증이 미실행이면 RT-DIST를 대기로 남긴다. 계획서 작성만으로 위 명령을 실행하지 않는다.
 
 ### 10.2 W11의 최소 실제 시나리오
 
@@ -321,6 +403,12 @@ Rust 검사는 개발 컴파일을 수반한다. 제품 installer/portable/DMG/d
 6. 실행 후 기존 사용자 앱/clipboard/OS 설정을 보존했는지 확인하고 소유 fixture·시험 Device만 정리한다.
 
 원격 Agent 연결이 없으면 해당 인수만 대기하고 independent Rust 구현을 진행한다. helper·GUI 존재/ONLINE·mock 결과만으로 실제 동작 PASS를 기록하지 않는다. 악성/미확인 대상, 실제 disk format/reboot 등은 일반 시험에 섞지 않고 지정된 격리 VM·소유 가상 디스크·복구 조건에서 수행한다.
+
+### 10.3 장애 주입과 장시간 인수
+
+RT-LIFECYCLE은 실행 전/side effect 후/결과 commit 전의 crash, 연결 flap·중복 요청·epoch 변경·권한 hot off, disk full·DB 손상, OS suspend/resume·session switch, helper hang·Agent/GUI 강제 종료를 다룬다. 기대 결과는 중복 mutation 없음·UNKNOWN/partial의 정확한 노출·입력 해제·소유 자원 회수·borrowed 보존이다. parser/framing/길이·주소 연산 경계는 property/fuzz 검사 후보로 두고 발견된 실패 입력을 고정 회귀 fixture로 남긴다.
+
+초기 soak gate는 reference Windows에서 8시간 연결/idle 및 제한된 stream 반복, 100회 연결 단절/복구다. task/handle/process/queue/spool이 설정된 상한을 지키고 drain 뒤 활성 소유 자원이 기준치로 돌아와야 한다. 메모리 추세와 실패 횟수는 원시 시계열로 남긴다. 이 시간/횟수는 계획 목표이며 실행한 결과가 아니다.
 
 <a id="section-11"></a>
 
@@ -339,7 +427,7 @@ Rust 검사는 개발 컴파일을 수반한다. 제품 installer/portable/DMG/d
 | Agent idle CPU | 평균 ≤ 0.5%의 한 core | 5분 관측, UI/tray 상태 polling용 child process 생성 0회 |
 | binary streaming | 제한한 byte/queue/window 안에서 지속 전달 | peak memory·throughput·backpressure·cancel/lease cleanup을 함께 기록 |
 
-표본은 cold 10회 이상, warm 20회 이상을 초기 기준으로 하고 원시값/P50/P95를 기록한다. Native helper와 managed browser가 실행될 때는 기본 idle과 별도 scenario로 측정한다. 기능을 끄거나 resource 검사를 제거해 목표를 맞추지 않는다. VM software renderer·low-end 환경은 별도 support tier를 선언하고 실제 UX를 확인한다.
+표본은 개발 탐색에서 cold 10회/warm 20회 이상, R13 인수에서는 각 100회 이상을 기준으로 원시값/P50/P95/max와 nearest-rank 계산법을 기록한다. 작은 표본의 P95를 안정적인 제품 보증으로 해석하지 않는다. cold는 프로세스 재시작과 OS/file cache 초기화 조건을 구분한다. release profile·로그 수준·동일 workload를 사용하며 기존 status/activity 4.26초와 새 event-to-render 100ms는 서로 다른 측정이므로 직접 배속 비교하지 않는다. Native helper와 managed browser는 별도 scenario로 측정한다. 기능을 끄거나 resource 검사를 제거해 목표를 맞추지 않는다. VM software renderer·low-end 환경은 별도 support tier를 선언하고 실제 UX를 확인한다.
 
 최적화 우선순위는 fresh subprocess 제거→이벤트/상태 cache→불필요한 OS query 제거→bounded 작업/IO→UI 가상화·부분 갱신→buffer/직렬화/FFI 복사 비용이다. 언어 전환만으로 속도 개선을 확정하지 않는다.
 
@@ -356,7 +444,11 @@ Rust 검사는 개발 컴파일을 수반한다. 제품 installer/portable/DMG/d
 - 제품 version SSOT는 repository 규칙을 따른다. `scripts/version.py`를 Cargo workspace/version 표시·manifest까지 동기화하도록 정비하고 Rust는 `CARGO_PKG_VERSION`을 사용한다. 독립적인 두 version 체계를 만들지 않는다.
 - 전환이 breaking일 수 있어도 MAJOR/MINOR를 임의 지정하지 않는다. 사용자 정의 전까지 전환 릴리스 버전은 미정이다. PATCH는 변경/빌드 배치마다 한 번만 적용하고 retry에 재사용한다.
 - 제품 패키징은 사용자 요청 때 수행한다. macOS/Linux native build/CI 실행은 별도 명시 요청이 필요하며 signing/notarization/publishing은 독립 release 작업이다.
-- 현재 [desktop-build skill](../../.agents/skills/desktop-build/SKILL.md)·[Desktop Client Guide](../guides/desktop-client-guide.md)의 Electron 전제는 R14에서 Rust 절차로 갱신한다. 그 전에는 기존 운영 정의를 새 제품의 인수 증거로 사용하지 않는다.
+- 현재 [desktop-build skill](../../.agents/skills/desktop-build/SKILL.md)·[Desktop Client Guide](../guides/desktop-client-guide.md)의 Electron 전제와 Rust 제안 절차는 R-PKG에서 명확히 구분하고 R14에서 운영 정의를 전환한다. 기존 운영 정의를 새 제품의 인수 증거로 사용하지 않는다.
+
+빌드 orchestration과 제품 runtime의 Rust 전환은 compiler/linker/SDK/NSIS 등 외부 build tool까지 Rust로 다시 작성한다는 뜻이 아니다. build-only dependency와 배포 dependency를 분리하고, Cargo에서 Python/Node를 은밀히 실행하는 build script가 없는지 감사한다. `Cargo.lock`·target·features·toolchain·native SDK를 고정하고 RustSec advisory/license 점검 결과와 예외 근거를 남긴다. dependency에 C/assembly가 포함될 수 있으므로 자체 실행 코드의 Rust 전환을 전체 공급망의 Rust-only 보증으로 표현하지 않는다.
+
+R-PKG는 per-user/per-machine 설치·portable state root·실행 파일/서비스명·다중 instance 충돌을 확정한다. clean VM에서 개발 PC의 DLL/runtime/PATH 없이 시작해야 한다. native updater 또는 수동 교체 경로는 서명/신뢰 키·version/OS/arch/hash·크기 검증→drain/stop→원자적 교체→health check를 설계한다. downgrade/rollback은 **Rust 릴리스끼리** state schema 호환성이 확인된 경우만 허용하며 실패 시 진단 가능한 정지 상태를 유지한다. legacy Client fallback은 만들지 않는다. 제품 signing/publishing은 별도 release gate다.
 
 <a id="section-13"></a>
 
@@ -373,9 +465,17 @@ R14에서 사용처를 조사하고 다음 Client 전용 항목을 제거한다.
 
 서버/Console가 사용하는 pnpm/Python dependency, Gateway 관리 작업, host MCP 도구·DB, 계약 fixtures 및 기존 증거를 함께 지우지 않는다. workspace references·lockfiles·version tool·AGENTS/skills/가이드·CI를 같이 정리한다. 공유 dirty worktree의 다른 작업을 전환 삭제 대상으로 간주하지 않는다.
 
+현재 [schema drift 검사](../../tests/contract/test_schema_drift.py)는 `racp_agent.settings/service_config/plugins.config`를 직접 import하며 [버전 검사](../../tests/unit/test_version.py)도 `racp_agent`를 import한다. [root workspace](../../pyproject.toml)는 `racp-agent`를 dependency로 갖고, [quality CI](../../.github/workflows/quality.yml)는 전체 Python workspace 및 Playwright를 설치한다. 따라서 디렉터리 삭제만으로 R14를 끝낼 수 없다.
+
+R00/R02에서 소비자를 분류하고 R14 삭제 **전에** 서버가 필요한 공통 모델/계약은 서버 공통 패키지로 분리한다. Client 설정 계약은 새 Rust 계약으로 관리하되 기존 `docs/protocol/` 경로를 임의 삭제/이동하지 않는다. 과거 계약의 보존/대체 관계를 문서화하고 더 이상 삭제된 모델을 import하지 않도록 drift 검사를 재구성한다. Client 전용 검사만 Rust 검사로 이전하며 Gateway/Console/공유 계약 회귀는 유지한다. CI의 Linux 서버/Console job은 Client native Linux build와 구분한다.
+
+R14는 삭제 후 새 checkout에서 Python Agent 없는 Gateway/SDK/CLI 설치·import·기존 API/MCP·Console 검사와 Rust clean build를 실행한다. `scripts/version.py`의 Agent/Client 이전 경로, uv/pnpm workspace·lock, schema 생성기·CI path filter도 함께 정비한다. 제거 audit은 파일명 검색 외에 실제 dependency graph·패키지 manifest·실행 child process를 확인한다.
+
 ### 13.2 사용자 설치 전환
 
 새 Rust Client는 새 state schema와 등록 절차를 사용한다. 구 설치/credential/workspace를 몰래 import하거나 기존 Device ID로 가장하지 않는다. 교체 시 자신의 구 Agent를 정상 중지하고 cleanup을 확인한 뒤 새 Client를 등록한다. 구 Device revoke는 명시한 교체 절차에서 owner 권한으로 수행한다. 현재 실행 중인 설치/Device/VM을 계획 작성 단계에서 중단하지 않는다.
+
+전환 runbook은 새 installer/등록 수단·로컬 복구 접근 준비→구 Agent의 신규 작업 차단/drain→입력/helper/자동 시작 회수→새 state 등록→Gateway/기능/cleanup 확인→owner의 구 Device revoke 순서를 명시한다. 새 등록 실패 시 중복 Agent를 자동 시작하지 않고 로컬 진단/재등록 단계에서 멈춘다. 기존 자료 보존과 활성 credential 폐기를 구분하며 uninstall의 state 보존/삭제 정책을 사용자에게 표시한다.
 
 기존 `dist/` 배포물과 acceptance 증거는 역사 자료이며 지원되는 fallback이 아니다. repository 규칙대로 보존하고 레거시 제거를 이유로 unrelated output/사용자 파일을 일괄 삭제하지 않는다.
 
@@ -402,7 +502,7 @@ R14에서 사용처를 조사하고 다음 Client 전용 항목을 제거한다.
 
 전체 전환 완료 전 다음 항목을 **실제 산출물**로 확인한다.
 
-- [ ] R00–R14의 각 gate·artifact·누락/제약 판정이 현황 SSOT에 기록돼 있다.
+- [ ] R00–R14 및 R-PKG의 각 gate·artifact·누락/제약 판정이 현황 SSOT에 기록돼 있다. Windows는 R13-W, 타 OS는 R12-N/R13-N으로 구분한다.
 - [ ] 100개 기준 operation과 143개 권한 후보의 traceability에 미분류·누락이 없다.
 - [ ] Client/UI/Agent/Broker/Guardian/wrapper/build 코드가 Rust이며 Client 실행에 Python/JS fallback이 없다.
 - [ ] Gateway 유지·현재 MCP/계약·권한/승인/Journal/cleanup 조건을 실제 Rust 경로로 확인했다.
@@ -410,6 +510,8 @@ R14에서 사용처를 조사하고 다음 Client 전용 항목을 제거한다.
 - [ ] 지원 OS마다 실제 GUI·native API·상주 lifecycle·원격 분석·설치·성능 결과가 있다.
 - [ ] 모든 mutation/partial/cancel/crash/lease/retirement 시험에서 자신의 자원과 borrowed 대상을 구분했다.
 - [ ] manifest/SBOM/lock·코드/CI 검색으로 구 Client dependency와 실행 진입점 제거를 확인했다.
+- [ ] 삭제 후 clean checkout에서 Python Agent 없는 서버/Console 회귀와 Rust build가 통과했다.
+- [ ] crash 경계·tombstone·hot policy CAS·blocking API 종료·Rust state upgrade/rollback 조건을 실제 검증했다.
 - [ ] 제품 build/signing/deferred OS 등 남은 gate를 완료로 바꾸지 않았다.
 
 이 계획서는 [기존 Agent 구현 계획](agent-permissions-implementation-plan.md)의 **Python/Electron 실행 계획을 대체**한다. 기능 요구사항과 과거 결과는 [권한 아키텍처](agent-permissions-and-capabilities.md), [Windows 계획](windows-engineering-plan.md), [종합 개발정의서](racp-specification-v1.1.md), [구현 현황](../quality/implementation-status.md)에서 이어받는다. [명세서 목록](README.md)·[문서 포털](../README.md)에서 이 문서를 전환 실행 기준으로 찾을 수 있게 한다.
