@@ -187,7 +187,9 @@ pub fn process_created(pid: u32) -> Result<f64, RacpError> {
 }
 
 #[cfg(windows)]
-fn token_sid(process: windows_sys::Win32::Foundation::HANDLE) -> Result<Vec<u8>, RacpError> {
+pub(crate) fn token_sid(
+    process: windows_sys::Win32::Foundation::HANDLE,
+) -> Result<Vec<u8>, RacpError> {
     use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
     use windows_sys::Win32::{
         Security::{

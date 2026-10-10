@@ -40,11 +40,11 @@ async fn origin_fence_prevents_subresource_and_websocket_network_effects() {
     let forbidden = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = forbidden.local_addr().unwrap();
     let hits = Arc::new(AtomicUsize::new(0));
-    let observed = hits.clone();
+    let observed_hits = hits.clone();
     let denied_server = tokio::spawn(async move {
         loop {
             let (_socket, _) = forbidden.accept().await.unwrap();
-            observed.fetch_add(1, Ordering::SeqCst);
+            observed_hits.fetch_add(1, Ordering::SeqCst);
         }
     });
     let site = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -56,8 +56,18 @@ async fn origin_fence_prevents_subresource_and_websocket_network_effects() {
                 use tokio::io::{AsyncReadExt, AsyncWriteExt};
                 let mut request = [0; 8192];
                 let _ = socket.read(&mut request).await.unwrap();
-                let body=format!("<!doctype html><title>Origin fence</title><img src='http://{address}/denied'><script>try{{new WebSocket('ws://{address}/denied')}}catch(e){{}}</script>");
-                socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
+                let worker = request[..].starts_with(b"GET /worker.js ");
+                let body = if worker {
+                    format!("postMessage('native worker');try{{new WebSocket('ws://{address}/denied-worker')}}catch(e){{}}")
+                } else {
+                    format!("<!doctype html><title>Origin fence</title><img src='http://{address}/denied'><script>try{{new WebSocket('ws://{address}/denied')}}catch(e){{}};new Worker('/worker.js').onmessage=()=>{{globalThis.workerReady=true;}};</script>")
+                };
+                let media = if worker {
+                    "text/javascript"
+                } else {
+                    "text/html"
+                };
+                socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: {media}\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
             });
         }
     });
@@ -65,7 +75,31 @@ async fn origin_fence_prevents_subresource_and_websocket_network_effects() {
     let opened = succeeded(execute(&browser, "open", json!({}), "owner_one").await);
     let page = json!({"browser_id":opened["browser_id"],"page_id":opened["pages"][0]["page_id"],"url":format!("{origin}/")});
     succeeded(execute(&browser, "navigate", page, "owner_one").await);
-    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    let mut ready = false;
+    for _ in 0..100 {
+        let snapshot = succeeded(
+            execute(
+                &browser,
+                "snapshot",
+                json!({"browser_id":opened["browser_id"],"page_id":opened["pages"][0]["page_id"]}),
+                "owner_one",
+            )
+            .await,
+        );
+        let mut observation = observed(&opened, &snapshot);
+        observation["expression"] = json!("globalThis.workerReady === true");
+        ready = succeeded(execute(&browser, "evaluate", observation, "owner_one").await)["value"]
+            == true;
+        if ready {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(
+        ready,
+        "allowed dedicated worker must execute while forbidden sockets remain blocked"
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     assert_eq!(
         hits.load(Ordering::SeqCst),
         0,
@@ -773,6 +807,11 @@ async fn browser_process_is_protected_from_generic_termination() {
     };
     let result=processes.execute(json!({"operation":"process.terminate","payload":{"pid":owned["pid"],"create_time":owned["create_time"],"agent_boot_id":"boot_browser","force":true},"remaining_timeout_ms":1000,"context":{"workspace_id":"default","principal_id":"owner_one"}}),CancellationToken::new()).await.unwrap();
     assert_eq!(result["error"]["code"], "PERMISSION_DENIED");
+    #[cfg(all(windows, target_arch = "x86_64"))]
+    {
+        let memory = processes.execute(json!({"operation":"process.memory_read","payload":{"pid":owned["pid"],"create_time":owned["create_time"],"agent_boot_id":"boot_browser","address":"0x1","size_bytes":64},"remaining_timeout_ms":1000,"context":{"workspace_id":"default","principal_id":"owner_one"}}),CancellationToken::new()).await.unwrap();
+        assert_eq!(memory["error"]["code"], "PERMISSION_DENIED");
+    }
     browser.cleanup().await.unwrap();
 }
 

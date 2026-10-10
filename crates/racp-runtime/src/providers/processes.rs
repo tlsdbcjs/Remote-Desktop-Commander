@@ -87,6 +87,7 @@ pub struct Processes {
     instance: String,
     boot: String,
     device: String,
+    spool: std::path::PathBuf,
 }
 impl Processes {
     pub fn new(settings: &AgentSettings, boot: &str) -> Result<Self, RacpError> {
@@ -98,7 +99,9 @@ impl Processes {
             instance: new_id("provider"),
             boot: boot.into(),
             device: settings.device_id.clone(),
+            spool: settings.data_dir.join("spool"),
         };
+        racp_core::private_dir(&this.spool)?;
         let weak = Arc::downgrade(&this.managed);
         tokio::spawn(async move {
             loop {
@@ -375,12 +378,24 @@ impl Processes {
                 std::thread::sleep(Duration::from_millis(20));
             }
         }
-        if operation != "process.terminate" {
-            return Err(RacpError::new("CAPABILITY_UNAVAILABLE"));
-        }
         let system = sysinfo::System::new_all();
         if Self::protected(&system, pid) {
             return Err(RacpError::new("PERMISSION_DENIED"));
+        }
+        if matches!(operation, "process.memory_regions" | "process.memory_read") {
+            if self
+                .managed
+                .lock()
+                .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+                .values()
+                .any(|child| child.identity(pid, birth) && child.handle["owner"] != principal)
+            {
+                return Err(RacpError::new("PERMISSION_DENIED"));
+            }
+            return super::process_memory::collect(&request, &self.spool, &cancel);
+        }
+        if operation != "process.terminate" {
+            return Err(RacpError::new("CAPABILITY_UNAVAILABLE"));
         }
         let force = p["force"].as_bool().unwrap_or(false);
         let mut managed = self
@@ -407,8 +422,19 @@ impl Processes {
 }
 impl Provider for Processes {
     fn capabilities(&self) -> Vec<Value> {
+        #[allow(unused_mut)]
+        let mut operations = vec![
+            "process.list",
+            "process.inspect",
+            "process.tree",
+            "process.spawn",
+            "process.wait",
+            "process.terminate",
+        ];
+        #[cfg(all(windows, target_arch = "x86_64"))]
+        operations.extend(["process.memory_regions", "process.memory_read"]);
         vec![
-            json!({"name":"process","version":"1.0.0","operations":["process.list","process.inspect","process.tree","process.spawn","process.wait","process.terminate"],"installed":true,"supported":true,"enabled":true,"healthy":true,"unavailable_reason":null,"attributes":{"output":"discard","max_active":32,"max_history":64}}),
+            json!({"name":"process","version":"1.0.0","operations":operations,"installed":true,"supported":true,"enabled":true,"healthy":true,"unavailable_reason":null,"attributes":{"output":"discard","max_active":32,"max_history":64}}),
         ]
     }
     fn inventory(&self) -> Vec<Value> {

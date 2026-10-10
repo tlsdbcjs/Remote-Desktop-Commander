@@ -107,6 +107,21 @@ impl Cdp {
                     if let Some(reply) = reply {
                         // CDP diagnostics contain page data; never expose arbitrary Chrome strings.
                         let result = if value.get("error").is_some() {
+                            let category = match value["error"]["message"].as_str().unwrap_or("") {
+                                "Not attached to an active page" | "Not attached to a page" => {
+                                    "inactive_page"
+                                }
+                                "Session with given id not found." => "missing_session",
+                                "Invalid URL pattern" | "Invalid URL pattern." => "invalid_pattern",
+                                "Domain must be enabled" | "Fetch domain is not enabled" => {
+                                    "disabled_domain"
+                                }
+                                _ => "other",
+                            };
+                            eprintln!(
+                                "cdp protocol failure category={category} code={}",
+                                value["error"]["code"].as_i64().unwrap_or(0)
+                            );
                             Err(RacpError::new("EXECUTION_FAILED"))
                         } else {
                             Ok(value["result"].clone())
@@ -187,11 +202,18 @@ impl Cdp {
             .commands
             .try_send(command)
             .map_err(|_| RacpError::new("RESOURCE_EXHAUSTED"))?;
-        tokio::select! { biased;
+        let outcome = tokio::select! { biased;
             _ = cancel.cancelled() => Err(RacpError::new("CANCELLED")),
             _ = self.0.closed.cancelled() => Err(RacpError::new("BROWSER_CLOSED")),
             result = tokio::time::timeout(Duration::from_secs(30), receiver) => result.map_err(|_| RacpError::new("TIMEOUT"))?.map_err(|_| RacpError::new("BROWSER_CLOSED"))?,
+        };
+        if outcome
+            .as_ref()
+            .is_err_and(|error| error.code.0 == "EXECUTION_FAILED")
+        {
+            eprintln!("cdp command failed method={method}");
         }
+        outcome
     }
     pub async fn close(&self) {
         self.0.closed.cancel();

@@ -642,15 +642,17 @@ impl Session {
             state.handle["state"] = json!("CLOSING");
             state.handle["availability"] = json!("unavailable");
         }
-        if self.remote.is_some() {
-            self.cleanup_remote().await?;
-        }
+        // Stop target configuration before disposing contexts. A late attachment failure
+        // during disposal must not close the transport used by scoped cleanup.
         self.stop.cancel();
-        self.proxy.close().await;
-        self.cdp.close().await;
         if let Some(worker) = self.worker.lock().await.take() {
             let _ = worker.await;
         }
+        if self.remote.is_some() {
+            self.cleanup_remote().await?;
+        }
+        self.proxy.close().await;
+        self.cdp.close().await;
         {
             let mut owned = self
                 .process
@@ -715,15 +717,60 @@ impl Session {
                 let Some(session) = weak.upgrade() else { break };
                 let Ok(event) = event else {
                     session.stop.cancel();
-                    session.cdp.close().await;
+                    if !session
+                        .state
+                        .lock()
+                        .is_ok_and(|s| s.handle["state"] == "CLOSING")
+                    {
+                        session.cdp.close().await;
+                    }
                     break;
                 };
                 let method = event["method"].as_str().unwrap_or("").to_owned();
+                let event_target = event["params"]["targetInfo"]["targetId"].clone();
                 let result = session.event(event, &config).await;
                 if let Err(error) = result {
-                    eprintln!("browser event failed method={method} code={}", error.code.0);
+                    if method == "Target.attachedToTarget"
+                        && error.code.0 == "EXECUTION_FAILED"
+                        && !session.stop.is_cancelled()
+                    {
+                        let target = event_target.as_str().unwrap_or("");
+                        if let Ok(current) = session
+                            .cdp
+                            .call("Target.getTargets", json!({}), None, &session.stop)
+                            .await
+                        {
+                            if current["targetInfos"].as_array().is_some_and(|targets| {
+                                !targets.iter().any(|value| value["targetId"] == target)
+                            }) {
+                                if let Ok(mut state) = session.state.lock() {
+                                    for page in state
+                                        .pages
+                                        .values_mut()
+                                        .filter(|page| page.target == target)
+                                    {
+                                        page.handle["state"] = json!("CLOSED");
+                                        page.handle["availability"] = json!("unavailable");
+                                        for frame in page.frames.values_mut() {
+                                            frame.active = false;
+                                            frame.context = None;
+                                        }
+                                    }
+                                }
+                                session.notify.notify_waiters();
+                                continue;
+                            }
+                        }
+                    }
+                    eprintln!("browser event failed method={method} code={} remote={} borrowed={} state={}", error.code.0, session.remote.is_some(), session.borrowed, session.handle()["state"]);
                     session.stop.cancel();
-                    session.cdp.close().await;
+                    if !session
+                        .state
+                        .lock()
+                        .is_ok_and(|s| s.handle["state"] == "CLOSING")
+                    {
+                        session.cdp.close().await;
+                    }
                     break;
                 }
                 session.notify.notify_waiters();
@@ -765,38 +812,53 @@ impl Session {
         } else if method == "Target.attachedToTarget" {
             let target = &params["targetInfo"];
             let child = params["sessionId"].as_str().unwrap_or("");
-            if target["type"] == "page" {
-                let accepted = if self.borrowed {
-                    self.selected.iter().any(|t| target["targetId"] == *t)
-                        || target["browserContextId"] == self.context && !self.context.is_empty()
-                } else {
-                    target["browserContextId"] == self.context
-                };
-                if !accepted {
-                    // Another CDP client may create its own isolated context in our browser.
-                    // Its targets do not belong to this provider session.
-                    if params["waitingForDebugger"] == true {
-                        let _ = self
-                            .cdp
-                            .call(
-                                "Runtime.runIfWaitingForDebugger",
-                                json!({}),
-                                Some(child),
-                                &self.stop,
-                            )
-                            .await;
-                    }
+            let accepted = {
+                let state = self
+                    .state
+                    .lock()
+                    .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+                target["browserContextId"] == self.context && !self.context.is_empty()
+                    || self.borrowed && self.selected.iter().any(|id| target["targetId"] == *id)
+                    || !session.is_empty()
+                        && state.pages.values().any(|page| {
+                            page.session == session
+                                || page
+                                    .frames
+                                    .values()
+                                    .any(|frame| frame.active && frame.session == session)
+                        })
+            };
+            if !accepted
+                || !matches!(
+                    target["type"].as_str(),
+                    Some("page" | "iframe" | "worker" | "shared_worker" | "service_worker")
+                )
+            {
+                // Browser-level discovery includes unrelated and transient Chrome workers.
+                // Never configure or terminate targets outside our context/selected page subtree.
+                if params["waitingForDebugger"] == true {
                     let _ = self
                         .cdp
                         .call(
-                            "Target.detachFromTarget",
-                            json!({"sessionId":child}),
-                            None,
+                            "Runtime.runIfWaitingForDebugger",
+                            json!({}),
+                            Some(child),
                             &self.stop,
                         )
                         .await;
-                    return Ok(());
                 }
+                let _ = self
+                    .cdp
+                    .call(
+                        "Target.detachFromTarget",
+                        json!({"sessionId":child}),
+                        None,
+                        &self.stop,
+                    )
+                    .await;
+                return Ok(());
+            }
+            if target["type"] == "page" {
                 let id = new_id("page");
                 let full = self
                     .state
@@ -961,7 +1023,18 @@ impl Session {
                     )
                     .await?;
             } else {
-                self.configure_network(child, config).await?;
+                // Chromium's dedicated/shared worker sessions expose Network but not Fetch.
+                // Their HTTP traffic also passes the context proxy; sockets are guarded
+                // before worker scripts resume.
+                self.cdp
+                    .call(
+                        "Network.enable",
+                        json!({"maxPostDataSize":0}),
+                        Some(child),
+                        &self.stop,
+                    )
+                    .await?;
+                self.network_policy(child, config).await?;
                 self.cdp
                     .call(
                         "Runtime.evaluate",
