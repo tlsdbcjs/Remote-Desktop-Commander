@@ -38,7 +38,6 @@ VERSION_FILE = ROOT / "packages/domain/src/racp_domain/version.py"
 
 TARGET_PYPROJECTS = [
     ROOT / "pyproject.toml",
-    ROOT / "apps/agent/pyproject.toml",
     ROOT / "apps/cli/pyproject.toml",
     ROOT / "apps/gateway/pyproject.toml",
     ROOT / "packages/domain/pyproject.toml",

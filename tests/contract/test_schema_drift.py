@@ -2,9 +2,6 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from racp_agent.plugins.config import PluginConfig
-from racp_agent.service_config import ServiceConfig
-from racp_agent.settings import AgentSettings
 from racp_gateway.oauth import OAuthResourceConfig
 from racp_protocol.artifacts import TransferComplete, TransferCreate
 from racp_protocol.console import ConsoleEvent, ConsoleLogin, ConsoleSession, DoctorView
@@ -35,9 +32,6 @@ def test_published_schemas_match_runtime_models() -> None:
     )
     for name, model in (
         ("plugin-manifest-v1.schema.json", PluginManifest),
-        ("plugin-installations-v1.schema.json", PluginConfig),
-        ("agent-service-config-v1.schema.json", ServiceConfig),
-        ("agent-settings-v1.schema.json", AgentSettings),
         ("oauth-resource-config-v1.schema.json", OAuthResourceConfig),
         ("artifact-transfer-create-v1.schema.json", TransferCreate),
         ("artifact-transfer-complete-v1.schema.json", TransferComplete),

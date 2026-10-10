@@ -2,7 +2,7 @@
 name = "racp-workspace"
 version = "0.1.21"
 requires-python = ">=3.12,<3.13"
-dependencies = ["racp-gateway", "racp-agent", "racp-cli"]
+dependencies = ["racp-gateway", "racp-cli"]
 
 [tool.uv.workspace]
 members = ["apps/*", "packages/*"]
@@ -10,7 +10,6 @@ exclude = ["apps/console", "apps/client", "apps/agent-rust"]
 
 [tool.uv.sources]
 racp-gateway = { workspace = true }
-racp-agent = { workspace = true }
 racp-cli = { workspace = true }
 racp-domain = { workspace = true }
 racp-protocol = { workspace = true }

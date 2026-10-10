@@ -1,6 +1,6 @@
 """Owned native Windows GUI for W02/W03; records results without injecting input.
 
-Run with the installed Agent Python runtime and a new result path inside the allowed
+Run with the server development Python environment and a new result path inside the allowed
 workspace. Bind its PID/creation time/session/HWND to a fresh desktop.windows result
 before acquiring a lease. Agent boot/epoch and observation IDs come from MCP, not
 this fixture. Close normally through its title bar or wait for the timeout.
@@ -13,13 +13,34 @@ import os
 import re
 import threading
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import psutil
-from racp_agent.broker.identity import process_identity
 from racp_domain.version import VERSION
+
+@dataclass(frozen=True)
+class ProcessIdentity:
+    pid: int
+    created: float
+    session: int
+
+
+def process_identity(pid: int) -> ProcessIdentity:
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    query = kernel.ProcessIdToSessionId
+    query.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    query.restype = wintypes.BOOL
+    session = wintypes.DWORD()
+    process = psutil.Process(pid)
+    created = process.create_time()
+    if not query(pid, ctypes.byref(session)) or process.create_time() != created:
+        raise OSError("Unable to pin the fixture process session")
+    return ProcessIdentity(pid, created, session.value)
 
 
 class AcceptanceWindow:

@@ -4,9 +4,6 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from racp_agent.plugins.config import PluginConfig
-from racp_agent.service_config import ServiceConfig
-from racp_agent.settings import AgentSettings
 from racp_gateway.oauth import OAuthResourceConfig
 from racp_protocol.artifacts import TransferComplete, TransferCreate
 from racp_protocol.console import ConsoleEvent, ConsoleLogin, ConsoleSession, DoctorView
@@ -19,13 +16,21 @@ from racp_protocol.streams import StreamAckInput, StreamOpenInput
 
 
 def documents() -> dict[str, str]:
+    root = Path(__file__).resolve().parents[1] / "docs/protocol"
+    # Rust owns these local configuration contracts; preserve their published schemas.
+    local_configs = {
+        name: json.loads((root / name).read_text(encoding="utf-8"))
+        for name in (
+            "agent-service-config-v1.schema.json",
+            "agent-settings-v1.schema.json",
+            "plugin-installations-v1.schema.json",
+        )
+    }
     values = {
+        **local_configs,
         "agent-protocol-v1.schema.json": MESSAGE_ADAPTER.json_schema(),
-        "agent-service-config-v1.schema.json": ServiceConfig.model_json_schema(),
-        "agent-settings-v1.schema.json": AgentSettings.model_json_schema(),
         "oauth-resource-config-v1.schema.json": OAuthResourceConfig.model_json_schema(),
         "plugin-manifest-v1.schema.json": PluginManifest.model_json_schema(),
-        "plugin-installations-v1.schema.json": PluginConfig.model_json_schema(),
         "plugin-stdio-v1.schema.json": PLUGIN_MESSAGE.json_schema(),
         "operation-v1.schema.json": OperationInput.model_json_schema(),
         "artifact-transfer-create-v1.schema.json": TransferCreate.model_json_schema(),

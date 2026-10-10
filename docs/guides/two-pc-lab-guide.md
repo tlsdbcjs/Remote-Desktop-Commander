@@ -128,11 +128,11 @@ Gateway를 준비한 **141 호스트의 PowerShell에서** [Create-Connection-Fi
 
 ### 3.1 독립 결과를 기록하는 화면 입력 fixture
 
-121의 허용 폴더에 [시험 창 script](../../scripts/desktop_acceptance_fixture.py)를 복사한다. Client에 내장된 Agent Python 또는 별도 검사용 Python으로 실행한다. 실제 런타임 경로는 설치 후보에서 확인한다.
+121의 허용 폴더에 [시험 창 script](../../scripts/desktop_acceptance_fixture.py)를 복사한다. Rust Client에는 Python이 포함되지 않는다. 시험 창은 별도의 검사용 Python 환경에서만 실행한다.
 
 ```powershell
-# 실행은 121에서 수행; Python 경로는 실제 내장 런타임으로 치환
-& '<Agent-Python-경로>' desktop_acceptance_fixture.py `
+# 테스트 재개 후 121의 별도 검사용 Python 환경에서 수행
+& '<검사용-Python-경로>' desktop_acceptance_fixture.py `
     --run-id RUN-YYYYMMDD-HHMM-121 --output '<허용-폴더>\owned-results.json' --timeout 900
 ```
 

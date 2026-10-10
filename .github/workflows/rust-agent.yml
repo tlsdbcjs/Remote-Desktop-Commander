@@ -66,8 +66,11 @@ jobs:
           version: "0.12.11"
       - run: uv python install 3.12.11
       - run: uv sync --all-packages --frozen
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.0"
       - name: Stage pinned native Chromium for provider acceptance tests
-        run: uv run --frozen python -m playwright install chromium
+        run: npx --yes --package=playwright@1.63.0 playwright install chromium
       - name: Windows process memory acceptance
         run: cargo test -p racp-runtime --test memory --locked
       - run: cargo test --workspace --locked

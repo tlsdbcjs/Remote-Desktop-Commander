@@ -7,9 +7,10 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.12-3776AB.svg?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
-[![Electron](https://img.shields.io/badge/electron-44.5-47848F.svg?style=flat-square&logo=electron&logoColor=white)](apps/client)
+[![Rust](https://img.shields.io/badge/Rust-1.90-orange.svg?style=flat-square&logo=rust)](Cargo.toml)
+[![Tauri](https://img.shields.io/badge/Tauri-2-blue.svg?style=flat-square)](apps/client/src-tauri)
 [![Protocol](https://img.shields.io/badge/protocol-MCP%20%7C%20WSS-purple.svg?style=flat-square)](docs/protocol)
-[![Platform](https://img.shields.io/badge/platform-Windows%20(Verified)%20%7C%20Linux%20%7C%20macOS-222222.svg?style=flat-square)](docs/quality/compatibility.md)
+[![Platform](https://img.shields.io/badge/platform-Windows%20(Build)%20%7C%20Linux%20%7C%20macOS-222222.svg?style=flat-square)](docs/quality/compatibility.md)
 
 
 <p align="center">
@@ -32,7 +33,7 @@
 기존 원격 제어 도구와 달리, 인바운드 포트 개방 없이 <strong>역방향 보안 웹소켓(Outbound-only WSS)</strong>을 통해 연결되며, <strong>디렉터리 스코프 격리(Scoped Workspaces)</strong>와 <strong>사전 정책 승인(Approval Gate)</strong>, <strong>전수 감사 추적(Audit Trail)</strong>을 통해 제로 트러스트(Zero-Trust) 수준의 통제력을 제공합니다.
 
 > [!NOTE]
-> 본 프로젝트는 현재 **v0.1.x** 개발 및 검증 단계입니다. Windows 환경 중심의 엔드투엔드(E2E) 인수 시험이 통과되었으며, 운영 환경 배포 전 단계입니다.
+> 본 프로젝트는 현재 **v0.1.x** 개발 및 검증 단계입니다. v0.1.21 클라이언트는 Rust/Tauri로 전환했습니다. Windows 네이티브 패키징은 성공했으며 현재 사용자 요청으로 실행 테스트와 인수 시험은 보류합니다.
 
 ---
 
@@ -58,7 +59,7 @@ RACP는 **클라이언트-게이트웨이-에이전트** 분리 구조를 채택
 flowchart LR
     subgraph ControlPlane["제어 영역 (Clients & AI)"]
         AI["AI Host / Claude / Cursor<br/>(MCP Client)"]
-        GUI["RACP Client<br/>(Electron App)"]
+        GUI["RACP Client<br/>(Tauri / Rust App)"]
         WEB["RACP Console<br/>(React Web)"]
         CLI["RACP CLI<br/>(Terminal)"]
     end
@@ -96,16 +97,17 @@ flowchart LR
 
 ## 컴포넌트 구성
 
-본 저장소는 `uv` (Python) 및 `pnpm` (Node.js) 기반의 모노레포로 구성되어 있습니다.
+본 저장소는 `cargo` (Rust), `uv` (서버 Python) 및 `pnpm` (React/빌드) 기반의 모노레포로 구성되어 있습니다.
 
 ```
 Remote-Desktop-Commander/
 ├── apps/
 │   ├── gateway/         # 중앙 오케스트레이션 및 정책 게이트웨이 (FastAPI, MCP Server)
-│   ├── agent/           # 대상 PC 백그라운드 런타임 및 OS 제어 엔진 (Python, Win32)
-│   ├── client/          # 크로스 플랫폼 데스크톱 UI (Electron 44, React 19, TypeScript)
+│   ├── agent-rust/      # 대상 PC 네이티브 Agent/Broker/Guardian (Rust, Win32)
+│   ├── client/          # 크로스 플랫폼 데스크톱 UI (Tauri, Rust, React 19, TypeScript)
 │   ├── console/         # 디바이스 관리 및 실시간 승인 웹 콘솔 (React 19, TanStack Query)
 │   └── cli/             # 관리자용 통합 커맨드라인 인터페이스 (racp)
+├── crates/              # Rust protocol, protected state, providers, runtime
 ├── packages/
 │   ├── domain/          # 도메인 모델, 엔터티, 불변 규칙 정의
 │   ├── protocol/        # WebSocket 프레임, JSON-RPC, MCP 규약 스키마
@@ -120,10 +122,10 @@ Remote-Desktop-Commander/
 ## 빠른 시작
 
 ### 시스템 요구사항
-- **Python**: 3.12.x
+- **Python**: Gateway/CLI 개발에 3.12.x (대상 PC의 클라이언트에는 불필요)
 - **패키지 매니저**: [uv](https://docs.astral.sh/uv/) (v0.12 이상 권장)
-- **Node.js**: v22.x 이상 및 [pnpm](https://pnpm.io/) (데스크톱/웹 클라이언트 빌드 시)
-- **운영체제**: Windows 10/11 (검증 완료), Linux / macOS (설계 지원)
+- **빌드**: Rust 1.90.0, Node 22.23.0 및 pnpm 11.19.0 (배포 클라이언트 실행에는 불필요)
+- **운영체제**: Windows 10/11 x64 (네이티브 개발 빌드), Linux / macOS (설계 지원)
 
 ---
 
@@ -162,16 +164,18 @@ uv run racp-gateway --enable-trusted-personal
 
 #### 방법 A. GUI 데스크톱 클라이언트 활용 (.racp 파일 방식)
 1. 게이트웨이 Console에서 <strong>장치 등록</strong>을 진행하고 `.racp` 연결 설정 파일을 발급받습니다.
-2. 대상 PC에서 `RACP Client.exe`를 실행하고 `.racp` 파일을 선택합니다.
+2. 대상 PC에서 `racp-client.exe`를 실행하고 `.racp` 파일을 선택합니다.
 3. 원격 접근을 허용할 로컬 폴더(Workspaces)를 지정하고 연결을 시작합니다.
 
-#### 방법 B. CLI를 통한 직접 연결
+#### 방법 B. 네이티브 CLI 연결
+
+Rust Agent의 bridge는 표준 입력 JSON으로 등록과 설정을 처리합니다. 토큰은 프로세스 인수나 셸 히스토리에 저장하지 않습니다.
+
 ```powershell
-uv run --package racp-agent racp-connect `
-  --gateway https://gateway.example:8765 `
-  --workspace E:\Projects\TargetWorkspace
+.\racp-agent.exe bridge --state-dir 'C:\RACP\agent-state'
 ```
-*프롬프트가 표시되면 Console에서 발급받은 1회용 등록 토큰을 입력합니다.*
+
+실행 후 등록 JSON을 한 줄로 입력합니다. 필드와 기동/종료 명령은 [Rust Agent 가이드](docs/guides/rust-agent-guide.md)를 따릅니다.
 
 ---
 
@@ -239,10 +243,10 @@ RACP는 시스템 손상 및 비인가 접근을 차단하기 위해 3단계 실
 
 | 영역 | 상태 | 검증 내용 |
 |---|:---:|---|
-| **Windows 10/11 x64** | **Verified** | 340+ 자동화 테스트 통과, ConPTY 스트림, Electron E2E, Win32 데스크톱 제어 |
+| **Windows 10/11 x64** | **Build** | Rust Agent 및 Tauri 설치/포터블/ZIP 패키징 성공; 현재 실행 테스트 보류 |
 | **Outbound WSS / TLS** | **Verified** | mTLS 상호 인증, 일회용 토큰 기반 자동 등록, 연결 재수립 검증 |
 | **MCP Integration** | **Verified** | Claude 및 외부 MCP 클라이언트 명령 중계 프로토콜 적합성 통과 |
-| **Linux (Ubuntu)** | *In Progress* | 컨테이너 런타임 및 CLI 작동 확인, 데스크톱 GUI 네이티브 검증 진행 중 |
+| **Linux (Ubuntu)** | *Deferred* | 서버/CLI Python 유지; Rust 데스크톱 네이티브 빌드 보류 |
 | **macOS** | *Planned* | 아키텍처 설계 완료, 네이티브 번들링 및 공증(Notarization) 파이프라인 대기 |
 
 ---

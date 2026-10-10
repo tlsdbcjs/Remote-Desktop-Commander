@@ -1,8 +1,8 @@
 # RACP 다중 작업 폴더 격리 가이드 (Named Workspaces Guide)
 
 > **문서 ID**: `DOC-GDE-WORKSPACES`  
-> **상태**: Active · **기준 버전**: v0.1.8  
-> **최종 개정일**: 2026-10-07 · **분류**: User & Operations Guide
+> **상태**: Active · **기준 버전**: v0.1.21  
+> **최종 개정일**: 2026-10-10 · **분류**: User & Operations Guide
 
 ---
 
@@ -62,21 +62,21 @@ flowchart TD
 
 ## 3. 워크스페이스 등록 및 설정 방법
 
-### 3.1 CLI 온보딩 시 복수 워크스페이스 지정
-기기 초기 등록 시 `--allow-workspace ID=PATH` 옵션을 반복하여 추가 폴더를 인가합니다:
+### 3.1 Rust bridge에서 복수 워크스페이스 지정
 
-```powershell
-uv run racp-connect `
-    --gateway https://gateway.example:8765 `
-    --workspace E:\Projects `
-    --allow-workspace docs=D:\Documents `
-    --allow-workspace data=E:\Datasets `
-    --profile standard
+`enroll` 요청의 `workspace`에 기본 절대 경로를, `allowed_workspaces`에 추가 폴더를 지정한다. 등록·설정 변경 요청의 전체 필드는 [bridge 계약](../../crates/racp-contract/schemas/bridge.json)과 [Rust Agent 실행 가이드](rust-agent-guide.md)를 따른다.
+
+```json
+{
+  "workspace": "E:\\Projects",
+  "allowed_workspaces": [
+    {"id": "docs", "path": "D:\\Documents"},
+    {"id": "data", "path": "E:\\Datasets"}
+  ]
+}
 ```
 
-- 기본 워크스페이스(`default`): `E:\Projects`
-- 추가 워크스페이스 1 (`docs`): `D:\Documents`
-- 추가 워크스페이스 2 (`data`): `E:\Datasets`
+위 예시는 workspace 필드 부분만 보여준다. 등록 token은 Rust bridge 프로세스의 표준 입력으로 전달한다.
 
 ### 3.2 데스크톱 클라이언트 GUI에서 설정
 데스크톱 앱의 **PC 설정 → 등록 정보 편집** 화면에서 `+ 허용 폴더 추가` 버튼을 클릭하여 직관적으로 폴더를 추가/제거할 수 있습니다.

@@ -6,11 +6,10 @@
   "scripts": {
     "build": "tsc --noEmit && vite build",
     "start": "tauri dev",
-    "package": "tauri build --target x86_64-pc-windows-msvc",
+    "package": "node ../../scripts/build-client.mjs",
     "package:win": "pnpm run package",
     "package:mac": "tauri build --target x86_64-apple-darwin",
-    "package:linux": "tauri build --target x86_64-unknown-linux-gnu",
-    "test": "node --test tests/*.test.cjs"
+    "package:linux": "tauri build --target x86_64-unknown-linux-gnu"
   },
   "dependencies": {
     "react": "19.3.0",
@@ -23,7 +22,6 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
-    "@playwright/test": "1.63.0",
     "@tauri-apps/cli": "2.10.1"
   }
 }

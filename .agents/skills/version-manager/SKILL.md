@@ -9,8 +9,8 @@ description: >-
 # RACP Version Manager Skill
 
 > **Document ID**: `DOC-SKILL-VERSION`\
-> **Status**: Active · **Target Version**: v0.1.10\
-> **Last Updated**: 2026-10-07 · **Classification**: Version Operations
+> **Status**: Active · **Target Version**: v0.1.21\
+> **Last Updated**: 2026-10-10 · **Classification**: Version Operations
 
 This skill provides step-by-step procedures for managing semantic versioning in the RACP project.
 
@@ -74,7 +74,7 @@ python scripts/version.py bump --dry-run
 Running `scripts/version.py` automatically updates:
 1. `packages/domain/src/racp_domain/version.py` (`VERSION`, `__version__`)
 2. `pyproject.toml` (root workspace)
-3. `apps/agent/pyproject.toml`
+3. `Cargo.toml` (Rust workspace)
 4. `apps/cli/pyproject.toml`
 5. `apps/gateway/pyproject.toml`
 6. `packages/domain/pyproject.toml`
@@ -85,6 +85,8 @@ Running `scripts/version.py` automatically updates:
 11. `apps/client/package.json`
 12. `apps/console/package.json`
 13. `apps/client/src/main.tsx` (`CLIENT_VERSION`)
+14. `apps/client/src-tauri/Cargo.toml`
+15. `apps/client/src-tauri/tauri.conf.json`
 
 ---
 

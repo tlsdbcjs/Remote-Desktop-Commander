@@ -11,6 +11,20 @@ on:
 env:
   PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.tools/playwright
 jobs:
+  server-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.11"
+      - run: uv python install 3.12.11
+      - run: uv lock --check
+      - run: uv sync --all-packages --frozen
+      - name: Compile retained Python server and CLI sources (tests deferred)
+        run: uv run --frozen python -m compileall -q apps/gateway apps/cli packages scripts
+      - run: uv run --frozen mypy
+      - run: uv run --frozen python scripts/build.py
   python:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_tests }}
     strategy:
@@ -24,7 +38,10 @@ jobs:
           version: "0.12.11"
       - run: uv python install 3.12.11
       - run: uv sync --all-packages --frozen
-      - run: uv run python -m playwright install --with-deps chromium
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.0"
+      - run: npx --yes --package=playwright@1.63.0 playwright install --with-deps chromium
       - run: cargo build -p racp-agent --locked
       - run: cargo build -p racp-runtime --examples --locked
       - run: uv run --frozen python scripts/check.py
@@ -53,6 +70,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: uv run python scripts/console_build.py
       - run: pnpm --dir apps/console exec playwright install --with-deps chromium
+      - run: cargo build -p racp-agent --locked
       - run: uv run python scripts/console_e2e.py --node $(which node)
       - uses: actions/upload-artifact@v4
         if: always()

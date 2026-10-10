@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import json
 import os
 import shutil
 import socket
@@ -43,42 +44,55 @@ async def run(node: Path, grep: str | None = None) -> int:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
         url = f"http://127.0.0.1:{port}"
-        credentials = root / "agent.bin"
-        SecretStore(credentials).save({**enrolled, "gateway": url})
+        state = root / "agent"
+        settings = {
+            "version": 1,
+            "gateway": url,
+            "device_id": enrolled["device_id"],
+            "workspace": str(workspace),
+            "data_dir": str(state / "data"),
+            "allowed_workspaces": [{"id": "docs", "path": str(documents)}],
+            "profile": "trusted_personal",
+            "desktop_enabled": os.name == "nt",
+        }
+        SecretStore(state / "credential.bin").save(
+            {
+                "gateway": url,
+                "device_id": enrolled["device_id"],
+                "credential": enrolled["credential"],
+                "agent_settings": json.dumps(settings),
+            }
+        )
         app = create_app(root / "gateway", trusted_personal=True)
         agent_log = resources.enter_context((root / "agent.log").open("wb"))
-        desktop_args: list[str] = []
+        executable = Path(os.environ.get(
+            "RACP_TEST_AGENT",
+            str(Path("target/debug") / ("racp-agent.exe" if os.name == "nt" else "racp-agent")),
+        )).resolve()
+        if not executable.is_file():
+            raise RuntimeError("Build the native Rust Agent before resuming Console acceptance")
+        session_id = 0
         if os.name == "nt":
-            from racp_agent.broker.identity import process_identity
+            import ctypes
+            from ctypes import wintypes
 
-            session_id = process_identity(os.getpid()).session
-            if session_id > 0:
-                desktop_args = ["--desktop-session-id", str(session_id)]
+            session = wintypes.DWORD()
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            query = kernel.ProcessIdToSessionId
+            query.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+            query.restype = wintypes.BOOL
+            if not query(os.getpid(), ctypes.byref(session)):
+                raise OSError("Unable to query the current Windows session")
+            session_id = session.value
 
         def start_agent(browser_cache: Path | None = None) -> subprocess.Popen[bytes]:
-            environment = dict(os.environ)
             if browser_cache is not None:
-                environment["PLAYWRIGHT_BROWSERS_PATH"] = str(browser_cache)
+                raise RuntimeError("Native missing-runtime acceptance is deferred")
             return subprocess.Popen(
-                [
-                    sys.executable,
-                    "-m",
-                    "racp_agent.main",
-                    "--credentials",
-                    str(credentials),
-                    "--data-dir",
-                    str(root / "agent"),
-                    "--workspace",
-                    str(workspace),
-                    "--allow-workspace",
-                    "docs=" + str(documents),
-                    "--profile",
-                    "trusted_personal",
-                    *desktop_args,
-                ],
+                [str(executable), "run", "--state-dir", str(state)],
                 stdout=agent_log,
                 stderr=subprocess.STDOUT,
-                env=environment,
+                env=dict(os.environ),
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
 
@@ -197,7 +211,7 @@ async def run(node: Path, grep: str | None = None) -> int:
                     "RACP_TEST_PYTHON": sys.executable,
                     "RACP_TEST_WORKSPACE": str(workspace.resolve()),
                     "RACP_TEST_SECOND_WORKSPACE": str(documents.resolve()),
-                    "RACP_DESKTOP_SESSION_ID": desktop_args[-1] if desktop_args else "",
+                    "RACP_DESKTOP_SESSION_ID": str(session_id) if session_id else "",
                     "PLAYWRIGHT_BROWSERS_PATH": str(browser_path),
                     "PLAYWRIGHT_HTML_OPEN": "never",
                 }
