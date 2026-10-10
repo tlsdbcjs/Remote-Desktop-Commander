@@ -56,13 +56,15 @@
 ### 2.5 데스크톱 클라이언트 & 패키징 (Desktop Client & Onboarding)
 | 번호 | 제목 | 상태 | 핵심 결정 요약 |
 | :--- | :--- | :---: | :--- |
-| [ADR-0023](ADR-0023-cross-platform-desktop-client.md) | 공통 데스크톱 클라이언트와 OS별 Agent 패키지 | **Accepted** | Electron 44 기반 크로스 플랫폼 GUI, 번들형 Python/Chromium 런타임 |
+| [ADR-0023](ADR-0023-cross-platform-desktop-client.md) | 공통 데스크톱 클라이언트와 OS별 Agent 패키지 | **Superseded** | ADR-0030으로 대체된 Electron/Python 배포 결정 |
 | [ADR-0024](ADR-0024-windows-user-logon-client.md) | 사용자가 선택한 Windows 로그인 후 Agent 연결 | **Accepted** | HKCU 시작프로그램 등록, 사용자 로그인 시 무인 백그라운드 재접속 |
 | [ADR-0025](ADR-0025-agent-dashboard-and-tray.md) | Agent 현황·최근 활동과 트레이 수명 | **Accepted** | 시스템 트레이 최소화, 최근 40개 활동 감사 스트림, 안전한 완전 종료 |
 | [ADR-0026](ADR-0026-windows-installer-maintenance.md) | Windows 설치·제거의 Agent 정리와 상태 백업 | **Accepted** | NSIS 설치 프로그램, 버전 업그레이드 전 프로세스 정리, SHA-256 상태 백업 |
 | [ADR-0027](ADR-0027-one-time-setup-and-safe-diagnostics.md) | 최초 등록과 저장된 설정의 안전한 진단 | **Accepted** | 온보딩 오류 코드별 안내, 설정 손상 시 재등록 폼 방지 및 안전 진단 |
 | [ADR-0028](ADR-0028-connection-file-onboarding.md) | Gateway 연결 파일로 최초 PC 등록 | **Accepted** | 단일 `.racp` 연결 파일 드롭만으로 주소, 1회용 토큰, 사설 CA를 일괄 적용 |
 | [ADR-0029](ADR-0029-local-settings-repair.md) | 보호된 PC 등록의 설정 수정과 복구 | **Accepted** | 등록된 Gateway 주소, 폴더 목록, 프로필 직접 수정 및 무결성 검증 복구 |
+
+| [ADR-0030](ADR-0030-rust-tauri-client-and-native-agent.md) | Rust Agent와 Tauri 클라이언트 | **Accepted** | 기존 보호된 상태·프로토콜 유지, Python/Electron client 제거, native Windows 패키징 |
 
 ---
 

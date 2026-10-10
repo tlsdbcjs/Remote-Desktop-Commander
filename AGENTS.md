@@ -103,7 +103,12 @@ When `scripts/version.py` runs, it atomically updates all target files:
    - `apps/client/package.json`
    - `apps/console/package.json`
 
-3. **Code & UI Version Display**:
+3. **Rust & Tauri Version Configuration**:
+   - `Cargo.toml`
+   - `apps/client/src-tauri/Cargo.toml`
+   - `apps/client/src-tauri/tauri.conf.json`
+
+4. **Code & UI Version Display**:
    - `packages/domain/src/racp_domain/version.py` (`VERSION`, `__version__`)
    - `apps/client/src/main.tsx` (`const CLIENT_VERSION = "..."` rendered in header)
 
@@ -127,7 +132,7 @@ When `scripts/version.py` runs, it atomically updates all target files:
 - **Client Application**:
   - Displayed prominently in the top header as `<span className="version-badge">v0.1.8</span>`.
 - **Dynamic Wheels & Build Scripts**:
-  - `scripts/build.py` and `scripts/build-client.mjs` reference `racp_domain.version.VERSION` dynamically.
+  - `scripts/build.py` imports `racp_domain.version.VERSION`; `scripts/build-client.mjs` reads the workspace version from the maintained version files.
 
 ---
 

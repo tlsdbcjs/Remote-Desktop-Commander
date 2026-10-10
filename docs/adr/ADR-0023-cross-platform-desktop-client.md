@@ -1,6 +1,9 @@
 # ADR-0023: 공통 데스크톱 클라이언트와 OS별 Agent 패키지
 
-2026-10-05 · 채택 · 사용자 추가 요구: Windows·macOS·Linux 배포
+2026-10-05 · Superseded by [ADR-0030](ADR-0030-rust-tauri-client-and-native-agent.md) · 사용자 추가 요구: Windows·macOS·Linux 배포
+
+> [!NOTE]
+> 아래 내용은 이전 Electron/Python 배포 결정의 역사적 기록이다. v0.1.21의 구현·빌드는 ADR-0030을 따른다.
 
 Electron/React는 PC 등록, 로컬 폴더 선택, 연결 상태와 Agent 시작/종료를 제공한다.
 원격 파일·명령·터미널 실행은 기존 Python Agent와 Gateway의 RACP 계약을 유지한다.
