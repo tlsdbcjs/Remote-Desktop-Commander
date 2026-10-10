@@ -6,7 +6,14 @@ use std::{
     mem::size_of,
     os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
 };
-use windows_sys::Win32::{Foundation::*, Security::*, System::Threading::*};
+use windows_sys::Win32::{
+    Foundation::*,
+    Security::*,
+    System::{
+        SystemServices::{SE_GROUP_ENABLED, SE_GROUP_USE_FOR_DENY_ONLY},
+        Threading::*,
+    },
+};
 
 pub struct PinnedPeer {
     process: OwnedHandle,
@@ -137,8 +144,8 @@ impl PinnedPeer {
         for index in 0..count {
             let group = groups
                 .read::<SID_AND_ATTRIBUTES>(offset + index * size_of::<SID_AND_ATTRIBUTES>())?;
-            if group.Attributes & SE_GROUP_ENABLED == 0
-                || group.Attributes & SE_GROUP_USE_FOR_DENY_ONLY != 0
+            if group.Attributes & SE_GROUP_ENABLED as u32 == 0
+                || group.Attributes & SE_GROUP_USE_FOR_DENY_ONLY as u32 != 0
             {
                 continue;
             }
@@ -176,4 +183,31 @@ impl PinnedPeer {
             Err(RacpError::new("PROCESS_NOT_FOUND"))
         }
     }
+}
+
+/// Synchronous query only. No await or GUI work is permitted while impersonating.
+pub(super) fn client_scope(pipe: HANDLE) -> Result<(String, u32), RacpError> {
+    use windows_sys::Win32::System::Pipes::ImpersonateNamedPipeClient;
+    if unsafe { ImpersonateNamedPipeClient(pipe) } == 0 {
+        return Err(RacpError::new("PERMISSION_DENIED"));
+    }
+    struct Revert;
+    impl Drop for Revert {
+        fn drop(&mut self) {
+            if unsafe { RevertToSelf() } == 0 {
+                // Continuing this thread with client authority would cross the GUI boundary.
+                std::process::abort();
+            }
+        }
+    }
+    let _revert = Revert;
+    let mut token = std::ptr::null_mut();
+    if unsafe { OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut token) } == 0 {
+        return Err(RacpError::new("PERMISSION_DENIED"));
+    }
+    let token = unsafe { OwnedHandle::from_raw_handle(token) };
+    let user = TokenBuffer::query(token.as_raw_handle(), TokenUser)?;
+    let sid = user.sid(user.read::<TOKEN_USER>(0)?.User.Sid)?;
+    let session = TokenBuffer::query(token.as_raw_handle(), TokenSessionId)?.read::<u32>(0)?;
+    Ok((sid, session))
 }
