@@ -143,6 +143,44 @@ class WindowsDesktop:
     def release_lease(self) -> None:
         self.input_lease.release()
 
+    def clipboard(self, operation: str, payload: dict[str, Any]) -> dict[str, Any]:
+        from racp_agent.broker.clipboard import (
+            ClipboardBusy,
+            ClipboardChanged,
+            InvalidClipboardData,
+            WindowsClipboard,
+        )
+
+        def guard() -> None:
+            state = self._status()
+            if not state["available"]:
+                raise RACPError(
+                    state["error_code"], state["reason"], layer="broker",
+                    execution_state="not_started",
+                )
+
+        try:
+            with WindowsClipboard() as clipboard:
+                if operation == "clipboard.state":
+                    return clipboard.state()
+                if operation == "clipboard.read":
+                    return clipboard.read(payload["max_bytes"])
+                return clipboard.write(payload["text"], payload["expected_sequence"], guard=guard)
+        except ClipboardChanged:
+            raise RACPError(
+                "PRECONDITION_FAILED", "Clipboard changed; read its current sequence first",
+                layer="broker", reason="CLIPBOARD_CHANGED", execution_state="not_started",
+            ) from None
+        except ClipboardBusy:
+            raise RACPError(
+                "RESOURCE_BUSY", "Clipboard is in use or access is denied", layer="broker",
+                execution_state="not_started",
+            ) from None
+        except InvalidClipboardData:
+            raise RACPError(
+                "CAPABILITY_UNAVAILABLE", "Clipboard Unicode text is unreadable", layer="broker"
+            ) from None
+
     def guard_info(self) -> dict[str, Any]:
         return {"guardian": self.guard.config.model_dump() if self.guard is not None else None}
 

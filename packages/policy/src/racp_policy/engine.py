@@ -1,8 +1,12 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+from racp_protocol.clipboard import CLIPBOARD_READS
 from racp_protocol.desktop import DESKTOP_MODELS, DESKTOP_READS
+from racp_protocol.native_operations import NATIVE_MODELS
+from racp_protocol.os_observation import OS_OBSERVATION_READS
 from racp_protocol.provider_models import SENSITIVE_PROCESS_READS
+from racp_protocol.proxy import PROXY_MODELS
 from racp_protocol.reversing import RE_MODELS, RE_READS
 
 
@@ -31,11 +35,14 @@ def profile_rules(profile: str) -> tuple[Rule, ...]:
     reads = frozenset(
         {
             *DESKTOP_READS,
+            *CLIPBOARD_READS,
+            *OS_OBSERVATION_READS,
             *RE_READS,
             "filesystem.read",
             "filesystem.stat",
             "filesystem.list",
             "filesystem.search",
+            "filesystem.search_content",
             "filesystem.hash",
             "process.list",
             "process.inspect",
@@ -50,10 +57,16 @@ def profile_rules(profile: str) -> tuple[Rule, ...]:
     )
     mutations = frozenset(
         {
+            *NATIVE_MODELS,
+            *PROXY_MODELS,
             *[name for name in DESKTOP_MODELS if name not in DESKTOP_READS],
             *[name for name in RE_MODELS if name not in RE_READS],
             "shell.exec",
+            "network.capture",
+            "process.dump",
+            "clipboard.write",
             "filesystem.write",
+            "filesystem.patch",
             "filesystem.mkdir",
             "filesystem.copy",
             "filesystem.move",

@@ -6,6 +6,12 @@ import { useListPage } from "./paging";
 import { Artifacts, Audit } from "./Resources";
 import { TerminalPush } from "./TerminalPush";
 import { EnrollPC } from "./EnrollPC";
+import { ManagementBackups } from "./management/Backups";
+import { ManagementLogs } from "./management/Logs";
+import { ManagementOverview } from "./management/Overview";
+import { ManagementSettings } from "./management/Settings";
+import { ManagementUpdates } from "./management/Updates";
+import { ManagementUsers } from "./management/Users";
 import {
   api,
   ApiError,
@@ -29,6 +35,10 @@ const views = [
   "Sessions",
   "Artifacts",
   "Audit",
+  "Logs",
+  "Backups",
+  "Users",
+  "Updates",
   "Doctor",
   "Settings",
 ] as const;
@@ -41,6 +51,10 @@ const labels: Record<View, string> = {
   Sessions: "세션",
   Artifacts: "파일",
   Audit: "감사 기록",
+  Logs: "운영 로그",
+  Backups: "백업",
+  Users: "관리 사용자",
+  Updates: "업데이트",
   Doctor: "진단",
   Settings: "설정",
 };
@@ -548,6 +562,7 @@ export function App() {
               <h2>최근 작업</h2>
               {jobTable()}
             </section>
+            <ManagementOverview session={session} failure={failure} />
           </>
         )}
         {view === "Devices" && (
@@ -837,6 +852,14 @@ export function App() {
         )}
         {view === "Artifacts" && <Artifacts session={session} />}
         {view === "Audit" && <Audit session={session} />}
+        {view === "Logs" && <ManagementLogs session={session} />}
+        {view === "Backups" && (
+          <ManagementBackups session={session} failure={failure} />
+        )}
+        {view === "Users" && <ManagementUsers session={session} />}
+        {view === "Updates" && (
+          <ManagementUpdates session={session} failure={failure} />
+        )}
         {view === "Doctor" && (
           <section className="panel">
             <h2>진단</h2>
@@ -848,38 +871,41 @@ export function App() {
           </section>
         )}
         {view === "Settings" && (
-          <section className="panel">
-            <h2>Owner session</h2>
-            <dl>
-              <dt>Owner</dt>
-              <dd>{session.owner_id}</dd>
-              <dt>절대 만료</dt>
-              <dd>{new Date(session.expires_at).toLocaleString()}</dd>
-              <dt>유휴 만료</dt>
-              <dd>마지막 사용자 활동 후 30분</dd>
-            </dl>
-            <p>owner secret은 브라우저 저장소에 보관하지 않습니다.</p>
-            <h3>새 장비 등록</h3>
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                const name = new FormData(event.currentTarget).get("name");
-                mutation.mutate(
-                  { path: "/enrollment-tokens", body: { name } },
-                  {
-                    onSuccess: (value) =>
-                      setNotice(
-                        `1회 등록 token (10분 유효): ${String(value.token)}`,
-                      ),
-                  },
-                );
-              }}
-            >
-              <label htmlFor="device-name">장비 이름</label>
-              <input id="device-name" name="name" required maxLength={128} />
-              <button disabled={mutation.isPending}>등록 token 발급</button>
-            </form>
-          </section>
+          <>
+            <ManagementSettings session={session} failure={failure} />
+            <section className="panel">
+              <h2>Owner session</h2>
+              <dl>
+                <dt>Owner</dt>
+                <dd>{session.owner_id}</dd>
+                <dt>절대 만료</dt>
+                <dd>{new Date(session.expires_at).toLocaleString()}</dd>
+                <dt>유휴 만료</dt>
+                <dd>마지막 사용자 활동 후 30분</dd>
+              </dl>
+              <p>owner secret은 브라우저 저장소에 보관하지 않습니다.</p>
+              <h3>새 장비 등록</h3>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const name = new FormData(event.currentTarget).get("name");
+                  mutation.mutate(
+                    { path: "/enrollment-tokens", body: { name } },
+                    {
+                      onSuccess: (value) =>
+                        setNotice(
+                          `1회 등록 token (10분 유효): ${String(value.token)}`,
+                        ),
+                    },
+                  );
+                }}
+              >
+                <label htmlFor="device-name">장비 이름</label>
+                <input id="device-name" name="name" required maxLength={128} />
+                <button disabled={mutation.isPending}>등록 token 발급</button>
+              </form>
+            </section>
+          </>
         )}
         {operationId && (
           <section className="panel" aria-labelledby="operation-title">

@@ -158,6 +158,8 @@ impl Agent {
         let id = request["operation_id"].as_str().unwrap().to_string();
         let op = request["operation"].as_str().unwrap().to_string();
         let work=async{
+            let permissions=self.settings.permissions.clone().unwrap_or_else(||racp_core::legacy_permissions(self.settings.desktop_enabled));
+            racp_core::authorize(&permissions,&request,self.providers.owns_process(&request))?;
             self.outputs.reserve(&id,&op,&request["payload"])?;
             let profile=request["context"]["execution_profile_id"].as_str().unwrap_or("read_only");
             if !allowed(&op,&self.settings.profile) || !allowed(&op,profile) || (profile=="trusted_personal"&&self.settings.profile!="trusted_personal"&&registry()[&op]["side_effect"]==true){return Err(RacpError::new("PERMISSION_DENIED"));}

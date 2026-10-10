@@ -146,6 +146,944 @@
     "default_job_timeout_ms": 3600000,
     "max_job_timeout_ms": 86400000
   },
+  "proxy.prepare": {
+    "name": "proxy.prepare",
+    "mcp_name": "proxy_prepare",
+    "capability": "proxy",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pid": {
+          "maximum": 4294967295,
+          "minimum": 1,
+          "title": "Pid",
+          "type": "integer"
+        },
+        "create_time": {
+          "exclusiveMinimum": 0,
+          "title": "Create Time",
+          "type": "number"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "agent_listener",
+            "agent_connector"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "local_port": {
+          "anyOf": [
+            {
+              "maximum": 65535,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Local Port"
+        },
+        "max_bytes": {
+          "default": 8388608,
+          "maximum": 67108864,
+          "minimum": 16384,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "lease_seconds": {
+          "default": 120,
+          "maximum": 3600,
+          "minimum": 10,
+          "title": "Lease Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pid",
+        "create_time",
+        "agent_boot_id",
+        "direction"
+      ],
+      "title": "ProxyPrepare"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "owned_native_session",
+    "max_timeout_ms": 30000,
+    "resource_lock_key": "handle_id",
+    "permission_scope": "native.broad_os_access",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "NATIVE-01",
+      "LIFE-01",
+      "POLICY-01"
+    ],
+    "default_timeout_ms": 10000,
+    "max_sync_timeout_ms": 30000,
+    "default_job_timeout_ms": 30000,
+    "max_job_timeout_ms": 30000
+  },
+  "proxy.close": {
+    "name": "proxy.close",
+    "mcp_name": "proxy_close",
+    "capability": "proxy",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "handle_id"
+      ],
+      "title": "NativeTarget"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "owned_native_session",
+    "max_timeout_ms": 30000,
+    "resource_lock_key": "handle_id",
+    "permission_scope": "native.broad_os_access",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "NATIVE-01",
+      "LIFE-01",
+      "POLICY-01"
+    ],
+    "default_timeout_ms": 10000,
+    "max_sync_timeout_ms": 30000,
+    "default_job_timeout_ms": 30000,
+    "max_job_timeout_ms": 30000
+  },
+  "native.prepare": {
+    "name": "native.prepare",
+    "mcp_name": "native_prepare",
+    "capability": "native",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pid": {
+          "maximum": 4294967295,
+          "minimum": 1,
+          "title": "Pid",
+          "type": "integer"
+        },
+        "create_time": {
+          "exclusiveMinimum": 0,
+          "title": "Create Time",
+          "type": "number"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "max_bytes": {
+          "default": 8388608,
+          "maximum": 67108864,
+          "minimum": 16384,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "lease_seconds": {
+          "default": 120,
+          "maximum": 3600,
+          "minimum": 10,
+          "title": "Lease Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pid",
+        "create_time",
+        "agent_boot_id"
+      ],
+      "title": "NativePrepare"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "owned_native_session",
+    "max_timeout_ms": 30000,
+    "resource_lock_key": "handle_id",
+    "permission_scope": "native.broad_os_access",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "NATIVE-01",
+      "LIFE-01",
+      "POLICY-01"
+    ],
+    "default_timeout_ms": 10000,
+    "max_sync_timeout_ms": 30000,
+    "default_job_timeout_ms": 30000,
+    "max_job_timeout_ms": 30000
+  },
+  "native.start": {
+    "name": "native.start",
+    "mcp_name": "native_start",
+    "capability": "native",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "handle_id"
+      ],
+      "title": "NativeTarget"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "owned_native_session",
+    "max_timeout_ms": 30000,
+    "resource_lock_key": "handle_id",
+    "permission_scope": "native.broad_os_access",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "NATIVE-01",
+      "LIFE-01",
+      "POLICY-01"
+    ],
+    "default_timeout_ms": 10000,
+    "max_sync_timeout_ms": 30000,
+    "default_job_timeout_ms": 30000,
+    "max_job_timeout_ms": 30000
+  },
+  "native.close": {
+    "name": "native.close",
+    "mcp_name": "native_close",
+    "capability": "native",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "handle_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Handle Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "handle_id"
+      ],
+      "title": "NativeTarget"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "owned_native_session",
+    "max_timeout_ms": 30000,
+    "resource_lock_key": "handle_id",
+    "permission_scope": "native.broad_os_access",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "NATIVE-01",
+      "LIFE-01",
+      "POLICY-01"
+    ],
+    "default_timeout_ms": 10000,
+    "max_sync_timeout_ms": 30000,
+    "default_job_timeout_ms": 30000,
+    "max_job_timeout_ms": 30000
+  },
+  "clipboard.state": {
+    "name": "clipboard.state",
+    "mcp_name": "clipboard_state",
+    "capability": "clipboard",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "maximum": 4294967295,
+          "minimum": 1,
+          "title": "Session Id",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "title": "DesktopSession"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "session_broker_interrupt",
+    "max_timeout_ms": 30000,
+    "resource_lock_key": "session_id",
+    "permission_scope": "clipboard.text",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "CLIPBOARD-01",
+      "RPC-01",
+      "POLICY-01"
+    ],
+    "default_timeout_ms": 5000,
+    "max_sync_timeout_ms": 30000,
+    "default_job_timeout_ms": 30000,
+    "max_job_timeout_ms": 30000
+  },
+  "clipboard.read": {
+    "name": "clipboard.read",
+    "mcp_name": "clipboard_read",
+    "capability": "clipboard",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "maximum": 4294967295,
+          "minimum": 1,
+          "title": "Session Id",
+          "type": "integer"
+        },
+        "max_bytes": {
+          "default": 4096,
+          "maximum": 8192,
+          "minimum": 1,
+          "title": "Max Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "title": "ClipboardRead"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "session_broker_interrupt",
+    "max_timeout_ms": 30000,
+    "resource_lock_key": "session_id",
+    "permission_scope": "clipboard.text",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "CLIPBOARD-01",
+      "RPC-01",
+      "POLICY-01"
+    ],
+    "default_timeout_ms": 5000,
+    "max_sync_timeout_ms": 30000,
+    "default_job_timeout_ms": 30000,
+    "max_job_timeout_ms": 30000
+  },
+  "clipboard.write": {
+    "name": "clipboard.write",
+    "mcp_name": "clipboard_write",
+    "capability": "clipboard",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "maximum": 4294967295,
+          "minimum": 1,
+          "title": "Session Id",
+          "type": "integer"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "maxLength": 8192,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        },
+        "clear": {
+          "default": false,
+          "title": "Clear",
+          "type": "boolean"
+        },
+        "expected_sequence": {
+          "maximum": 4294967295,
+          "minimum": 0,
+          "title": "Expected Sequence",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "session_id",
+        "expected_sequence"
+      ],
+      "title": "ClipboardWrite"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "session_broker_interrupt",
+    "max_timeout_ms": 30000,
+    "resource_lock_key": "session_id",
+    "permission_scope": "clipboard.text",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "CLIPBOARD-01",
+      "RPC-01",
+      "POLICY-01"
+    ],
+    "default_timeout_ms": 5000,
+    "max_sync_timeout_ms": 30000,
+    "default_job_timeout_ms": 30000,
+    "max_job_timeout_ms": 30000
+  },
+  "system.info": {
+    "name": "system.info",
+    "mcp_name": "system_info",
+    "capability": "system",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "title": "SystemObservation"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 86400000,
+    "resource_lock_key": "pid_create_time_boot_id",
+    "permission_scope": "system.read",
+    "minimum_os": [
+      "Windows",
+      "Linux"
+    ],
+    "verification_ids": [
+      "PROC-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 3600000,
+    "max_job_timeout_ms": 86400000
+  },
+  "system.resources": {
+    "name": "system.resources",
+    "mcp_name": "system_resources",
+    "capability": "system",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "title": "SystemObservation"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 86400000,
+    "resource_lock_key": "pid_create_time_boot_id",
+    "permission_scope": "system.read",
+    "minimum_os": [
+      "Windows",
+      "Linux"
+    ],
+    "verification_ids": [
+      "PROC-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 3600000,
+    "max_job_timeout_ms": 86400000
+  },
+  "system.locale": {
+    "name": "system.locale",
+    "mcp_name": "system_locale",
+    "capability": "system",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "title": "SystemObservation"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 86400000,
+    "resource_lock_key": "pid_create_time_boot_id",
+    "permission_scope": "system.read",
+    "minimum_os": [
+      "Windows",
+      "Linux"
+    ],
+    "verification_ids": [
+      "PROC-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 3600000,
+    "max_job_timeout_ms": 86400000
+  },
+  "system.environment": {
+    "name": "system.environment",
+    "mcp_name": "system_environment",
+    "capability": "system",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "keys": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Keys",
+          "type": "array"
+        }
+      },
+      "title": "EnvironmentQuery"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 86400000,
+    "resource_lock_key": "pid_create_time_boot_id",
+    "permission_scope": "system.read",
+    "minimum_os": [
+      "Windows",
+      "Linux"
+    ],
+    "verification_ids": [
+      "PROC-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 3600000,
+    "max_job_timeout_ms": 86400000
+  },
+  "network.interfaces": {
+    "name": "network.interfaces",
+    "mcp_name": "network_interfaces",
+    "capability": "network",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 100,
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "title": "ObservationList"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 86400000,
+    "resource_lock_key": "pid_create_time_boot_id",
+    "permission_scope": "network.read",
+    "minimum_os": [
+      "Windows",
+      "Linux"
+    ],
+    "verification_ids": [
+      "PROC-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 3600000,
+    "max_job_timeout_ms": 86400000
+  },
+  "network.connections": {
+    "name": "network.connections",
+    "mcp_name": "network_connections",
+    "capability": "network",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 100,
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "pid": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pid"
+        }
+      },
+      "title": "ConnectionsQuery"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 86400000,
+    "resource_lock_key": "pid_create_time_boot_id",
+    "permission_scope": "network.read",
+    "minimum_os": [
+      "Windows",
+      "Linux"
+    ],
+    "verification_ids": [
+      "PROC-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 3600000,
+    "max_job_timeout_ms": 86400000
+  },
+  "storage.volumes": {
+    "name": "storage.volumes",
+    "mcp_name": "storage_volumes",
+    "capability": "storage",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 100,
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "title": "ObservationList"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 86400000,
+    "resource_lock_key": "pid_create_time_boot_id",
+    "permission_scope": "storage.read",
+    "minimum_os": [
+      "Windows",
+      "Linux"
+    ],
+    "verification_ids": [
+      "PROC-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 3600000,
+    "max_job_timeout_ms": 86400000
+  },
+  "services.list": {
+    "name": "services.list",
+    "mcp_name": "services_list",
+    "capability": "services",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 100,
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "offset": {
+          "default": 0,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        }
+      },
+      "title": "InventoryPage"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 86400000,
+    "resource_lock_key": "os_account",
+    "permission_scope": "services.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "OS-INVENTORY-01",
+      "RPC-01",
+      "POLICY-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 3600000,
+    "max_job_timeout_ms": 86400000
+  },
+  "services.get": {
+    "name": "services.get",
+    "mcp_name": "services_get",
+    "capability": "services",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "pattern": "^[^/\\\\\\x00-\\x1f]+$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ServiceQuery"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 86400000,
+    "resource_lock_key": "os_account",
+    "permission_scope": "services.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "OS-INVENTORY-01",
+      "RPC-01",
+      "POLICY-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 3600000,
+    "max_job_timeout_ms": 86400000
+  },
+  "software.inventory": {
+    "name": "software.inventory",
+    "mcp_name": "software_inventory",
+    "capability": "software",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 100,
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "offset": {
+          "default": 0,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        }
+      },
+      "title": "InventoryPage"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 86400000,
+    "resource_lock_key": "os_account",
+    "permission_scope": "software.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "OS-INVENTORY-01",
+      "RPC-01",
+      "POLICY-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 3600000,
+    "max_job_timeout_ms": 86400000
+  },
   "browser.open": {
     "name": "browser.open",
     "mcp_name": "browser_open",
@@ -4298,6 +5236,80 @@
     "default_job_timeout_ms": 3600000,
     "max_job_timeout_ms": 86400000
   },
+  "network.capture": {
+    "name": "network.capture",
+    "mcp_name": "network_capture",
+    "capability": "network",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "local_ip": {
+          "maxLength": 15,
+          "title": "Local Ip",
+          "type": "string"
+        },
+        "peer_ip": {
+          "maxLength": 15,
+          "title": "Peer Ip",
+          "type": "string"
+        },
+        "local_port": {
+          "maximum": 65535,
+          "minimum": 1,
+          "title": "Local Port",
+          "type": "integer"
+        },
+        "duration_ms": {
+          "default": 3000,
+          "maximum": 30000,
+          "minimum": 100,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "max_bytes": {
+          "default": 16777216,
+          "maximum": 16777216,
+          "minimum": 68,
+          "title": "Max Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "local_ip",
+        "peer_ip",
+        "local_port"
+      ],
+      "title": "NetworkCapture"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "owned_capture_process",
+    "max_timeout_ms": 60000,
+    "resource_lock_key": "local_ip/local_port",
+    "permission_scope": "network.capture",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "CAPTURE-01",
+      "LIFE-01",
+      "RPC-01",
+      "POLICY-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 60000,
+    "default_job_timeout_ms": 60000,
+    "max_job_timeout_ms": 60000
+  },
   "filesystem.read": {
     "name": "filesystem.read",
     "mcp_name": "fs_read",
@@ -4428,7 +5440,8 @@
           "enum": [
             "preserve",
             "lf",
-            "crlf"
+            "crlf",
+            "verbatim"
           ],
           "title": "Newline",
           "type": "string"
@@ -4985,6 +5998,257 @@
     "max_timeout_ms": 86400000,
     "resource_lock_key": "workspace",
     "permission_scope": "filesystem.read",
+    "minimum_os": [
+      "Windows",
+      "Linux"
+    ],
+    "verification_ids": [
+      "FS-01",
+      "RPC-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 3600000,
+    "max_job_timeout_ms": 86400000
+  },
+  "filesystem.search_content": {
+    "name": "filesystem.search_content",
+    "mcp_name": "fs_search_content",
+    "capability": "filesystem",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "pattern": {
+          "maxLength": 256,
+          "minLength": 1,
+          "pattern": "^[^\\r\\n\\x00]+$",
+          "title": "Pattern",
+          "type": "string"
+        },
+        "encoding": {
+          "default": "utf-8",
+          "enum": [
+            "utf-8",
+            "utf-8-sig",
+            "utf-16-le",
+            "utf-16-be",
+            "latin-1"
+          ],
+          "title": "Encoding",
+          "type": "string"
+        },
+        "case_sensitive": {
+          "default": true,
+          "title": "Case Sensitive",
+          "type": "boolean"
+        },
+        "max_depth": {
+          "default": 10,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Max Depth",
+          "type": "integer"
+        },
+        "max_results": {
+          "default": 100,
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Max Results",
+          "type": "integer"
+        },
+        "max_files": {
+          "default": 1000,
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Max Files",
+          "type": "integer"
+        },
+        "max_file_bytes": {
+          "default": 65536,
+          "maximum": 1048576,
+          "minimum": 1,
+          "title": "Max File Bytes",
+          "type": "integer"
+        },
+        "max_scan_bytes": {
+          "default": 8388608,
+          "maximum": 33554432,
+          "minimum": 1,
+          "title": "Max Scan Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "pattern"
+      ],
+      "title": "FileContentSearch"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "cooperative_worker",
+    "max_timeout_ms": 86400000,
+    "resource_lock_key": "workspace",
+    "permission_scope": "filesystem.read",
+    "minimum_os": [
+      "Windows",
+      "Linux"
+    ],
+    "verification_ids": [
+      "FS-01",
+      "RPC-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 3600000,
+    "max_job_timeout_ms": 86400000
+  },
+  "filesystem.patch": {
+    "name": "filesystem.patch",
+    "mcp_name": "fs_patch",
+    "capability": "filesystem",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "$defs": {
+        "FilePatchTarget": {
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            },
+            "expected_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Expected Sha256",
+              "type": "string"
+            },
+            "expected_revision": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Expected Revision"
+            },
+            "edits": {
+              "items": {
+                "$ref": "#/$defs/TextEdit"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "title": "Edits",
+              "type": "array"
+            },
+            "encoding": {
+              "default": "utf-8",
+              "enum": [
+                "utf-8",
+                "utf-8-sig",
+                "utf-16-le",
+                "utf-16-be",
+                "latin-1"
+              ],
+              "title": "Encoding",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "expected_sha256",
+            "edits"
+          ],
+          "title": "FilePatchTarget",
+          "type": "object"
+        },
+        "TextEdit": {
+          "additionalProperties": false,
+          "properties": {
+            "old_text": {
+              "maxLength": 16384,
+              "minLength": 1,
+              "title": "Old Text",
+              "type": "string"
+            },
+            "new_text": {
+              "maxLength": 16384,
+              "title": "New Text",
+              "type": "string"
+            },
+            "expected_count": {
+              "default": 1,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Expected Count",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "old_text",
+            "new_text"
+          ],
+          "title": "TextEdit",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "items": {
+            "$ref": "#/$defs/FilePatchTarget"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Files",
+          "type": "array"
+        },
+        "dry_run": {
+          "default": false,
+          "title": "Dry Run",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "files"
+      ],
+      "title": "FilePatchBatch"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "cooperative_worker",
+    "max_timeout_ms": 86400000,
+    "resource_lock_key": "workspace",
+    "permission_scope": "filesystem.mutate",
     "minimum_os": [
       "Windows",
       "Linux"
@@ -5612,6 +6876,82 @@
     "max_sync_timeout_ms": 120000,
     "default_job_timeout_ms": 3600000,
     "max_job_timeout_ms": 86400000
+  },
+  "process.dump": {
+    "name": "process.dump",
+    "mcp_name": "process_dump",
+    "capability": "process",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pid": {
+          "maximum": 4294967295,
+          "minimum": 1,
+          "title": "Pid",
+          "type": "integer"
+        },
+        "create_time": {
+          "exclusiveMinimum": 0,
+          "title": "Create Time",
+          "type": "number"
+        },
+        "agent_boot_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Agent Boot Id",
+          "type": "string"
+        },
+        "mode": {
+          "default": "mini",
+          "enum": [
+            "mini",
+            "full"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "max_bytes": {
+          "default": 67108864,
+          "maximum": 268435456,
+          "minimum": 4096,
+          "title": "Max Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pid",
+        "create_time",
+        "agent_boot_id"
+      ],
+      "title": "ProcessDump"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "owned_dump_process",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "pid_create_time_boot_id",
+    "permission_scope": "process.memory.dump",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "DUMP-01",
+      "LIFE-01",
+      "RPC-01",
+      "POLICY-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
   },
   "terminal.open": {
     "name": "terminal.open",

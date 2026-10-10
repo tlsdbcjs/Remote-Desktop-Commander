@@ -21,3 +21,17 @@ pub use provider::Desktop;
 pub mod native_identity;
 #[cfg(windows)]
 pub mod pipe;
+
+#[cfg(windows)]
+mod hooks;
+
+#[cfg(windows)]
+mod guardian;
+#[cfg(windows)]
+pub use guardian::run_guardian;
+
+#[cfg(windows)]
+mod input;
+
+#[cfg(windows)]
+mod automation;

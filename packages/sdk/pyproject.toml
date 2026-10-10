@@ -1,6 +1,6 @@
 [project]
 name = "racp-sdk"
-version = "0.1.11"
+version = "0.1.21"
 requires-python = ">=3.12,<3.13"
 dependencies = ["racp-domain", "racp-protocol", "httpx>=0.28,<1", "websockets>=14,<17", "psutil>=6,<8", "pywin32>=308; sys_platform == 'win32'"]
 

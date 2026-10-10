@@ -170,6 +170,8 @@ else {
                     workspace: data?.workspace,
                     profile: data?.profile ?? "read_only",
                     allowed_workspaces: data?.allowed_workspaces ?? [],
+                    desktop_enabled: data?.desktop_enabled ?? false,
+                    permissions: data?.permissions,
                 });
             } finally {
                 selectedConnection = null;

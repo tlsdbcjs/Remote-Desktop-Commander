@@ -421,6 +421,17 @@ impl Processes {
     }
 }
 impl Provider for Processes {
+    fn owns_process(&self, r: &Value) -> bool {
+        let pid = r["payload"]["pid"].as_u64().unwrap_or(0) as u32;
+        let birth = r["payload"]["create_time"].as_f64().unwrap_or(0.0);
+        self.managed.lock().is_ok_and(|m| {
+            m.values().any(|p| {
+                p.identity(pid, birth)
+                    && p.handle["owner"] == r["context"]["principal_id"]
+                    && p.handle["device_id"] == r["device_id"]
+            })
+        })
+    }
     fn capabilities(&self) -> Vec<Value> {
         #[allow(unused_mut)]
         let mut operations = vec![

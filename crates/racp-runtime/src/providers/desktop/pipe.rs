@@ -77,6 +77,9 @@ impl Pipe {
         Ok((overlap, event))
     }
     fn read(&self) -> Result<Value, RacpError> {
+        if Instant::now() >= self.deadline {
+            return Err(RacpError::new("TIMEOUT"));
+        }
         let mut raw = vec![0u8; MAX_PIPE_MESSAGE + 1];
         let (mut overlap, _event) = Self::overlap()?;
         let success = unsafe {
@@ -99,6 +102,9 @@ impl Pipe {
         decode_pipe_message(&raw[..size])
     }
     fn write(&self, value: &Value) -> Result<(), RacpError> {
+        if Instant::now() >= self.deadline {
+            return Err(RacpError::new("TIMEOUT"));
+        }
         let raw = encode_pipe_message(value)?;
         let (mut overlap, _event) = Self::overlap()?;
         let success = unsafe {
@@ -189,8 +195,18 @@ impl PipeServer {
                 ERROR_PIPE_CONNECTED => (),
                 ERROR_IO_PENDING => match self.pipe.complete(&mut overlap, true) {
                     Ok(_) => (),
-                    Err(e) if e.code.0 == "TIMEOUT" => return Ok(false),
-                    Err(e) => return Err(e),
+                    Err(e) if e.code.0 == "TIMEOUT" => {
+                        unsafe {
+                            DisconnectNamedPipe(self.pipe.handle.as_raw_handle());
+                        }
+                        return Ok(false);
+                    }
+                    Err(e) => {
+                        unsafe {
+                            DisconnectNamedPipe(self.pipe.handle.as_raw_handle());
+                        }
+                        return Err(e);
+                    }
                 },
                 _ => return Err(RacpError::new("EXECUTION_UNKNOWN")),
             }

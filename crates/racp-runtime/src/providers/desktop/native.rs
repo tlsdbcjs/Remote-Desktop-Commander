@@ -14,6 +14,9 @@ use windows_sys::Win32::{
 pub(super) struct NativeDesktop {
     identity: PeerIdentity,
     salt: String,
+    pub watch: super::hooks::NativeWatch,
+    pub(super) marker: usize,
+    guardian: PinnedPeer,
 }
 fn text(raw: &[u16]) -> String {
     String::from_utf16_lossy(&raw[..raw.iter().position(|v| *v == 0).unwrap_or(raw.len())])
@@ -39,7 +42,7 @@ fn object_name(handle: HANDLE) -> Result<String, RacpError> {
 }
 use std::mem::size_of_val;
 impl NativeDesktop {
-    pub fn new(session: u32) -> Result<Self, RacpError> {
+    pub fn new(session: u32, marker: usize, guardian: PinnedPeer) -> Result<Self, RacpError> {
         let identity = PinnedPeer::open(std::process::id())?.identity().clone();
         if session == 0 || identity.session != session {
             return Err(RacpError::new("SESSION_UNAVAILABLE"));
@@ -52,9 +55,14 @@ impl NativeDesktop {
         Ok(Self {
             identity,
             salt: new_id("desktop"),
+            watch: super::hooks::NativeWatch::new(marker, false)?,
+            marker,
+            guardian,
         })
     }
     pub fn availability(&self) -> Result<(), RacpError> {
+        self.guardian.alive()?;
+        self.watch.counters()?;
         if object_name(unsafe { GetProcessWindowStation() })? != "WinSta0" {
             return Err(RacpError::new("SESSION_UNAVAILABLE"));
         }
@@ -170,7 +178,7 @@ impl NativeDesktop {
     }
     pub fn status(&self) -> Value {
         let code = self.availability().err().map(|e| e.code.0);
-        json!({"session_id":self.identity.session,"broker_pid":self.identity.pid,"broker_created":self.identity.created,"user_sid":self.identity.sid,"user_name":whoami::username(),"integrity":self.identity.integrity,"available":code.is_none(),"error_code":code,"input_guardian_available":false,"input_hook_healthy":false,"ui_automation_available":false,"user_input_detection_complete":false})
+        json!({"session_id":self.identity.session,"broker_pid":self.identity.pid,"broker_created":self.identity.created,"user_sid":self.identity.sid,"user_name":whoami::username(),"integrity":self.identity.integrity,"available":code.is_none(),"error_code":code,"input_guardian_available":true,"input_hook_healthy":self.watch.counters().is_ok(),"ui_automation_available":false,"user_input_detection_complete":self.watch.counters().is_ok()})
     }
     pub fn layout(&self) -> Result<Value, RacpError> {
         self.availability()?;
@@ -237,7 +245,7 @@ impl NativeDesktop {
             json!({"session_id":self.identity.session,"layout_revision":revision,"monitors":state.monitors,"virtual_origin":{"x":unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) },"y":unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) }},"width":unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) },"height":unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) }}),
         )
     }
-    fn window(&self, window: HWND) -> Result<Value, RacpError> {
+    pub(super) fn window(&self, window: HWND) -> Result<Value, RacpError> {
         if unsafe { IsWindow(window) } == 0 || unsafe { IsWindowVisible(window) } == 0 {
             return Err(RacpError::new("STALE_OBSERVATION"));
         }
@@ -263,10 +271,11 @@ impl NativeDesktop {
         }
         peer.alive()?;
         let id = digest(format!(
-            "{}:{}:{pid}:{}",
+            "{}:{}:{pid}:{}:{}",
             self.salt,
             window as usize,
-            peer.identity().created
+            peer.identity().created,
+            self.watch.generation(window as usize)
         ));
         Ok(
             json!({"window_id":format!("window_{}",&id[..32]),"pid":pid,"create_time":peer.identity().created,"bounds":[bounds.left,bounds.top,bounds.right,bounds.bottom],"integrity":peer.identity().integrity,"title":text(&title),"class_name":text(&class),"dpi":unsafe { GetDpiForWindow(window) }}),
@@ -307,8 +316,8 @@ impl NativeDesktop {
                 available: true,
                 unavailable_code: "SESSION_UNAVAILABLE",
                 foreground,
-                input_tick: 0,
-                foreground_tick: 0,
+                input_tick: self.watch.counters()?.0,
+                foreground_tick: self.watch.counters()?.1,
                 layout_revision: layout["layout_revision"].as_str().unwrap().into(),
                 windows: state.values,
             },

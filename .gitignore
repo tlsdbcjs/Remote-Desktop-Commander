@@ -1,4 +1,5 @@
 .venv/
+.venv-acceptance/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -12,6 +13,7 @@ apps/client/build/**/__pycache__/
 *.egg-info/
 .env
 .racp/
+/connection-files/
 data/
 *.db*
 /%SystemDrive%/

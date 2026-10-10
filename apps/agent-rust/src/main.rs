@@ -19,13 +19,17 @@ async fn main() {
         .map(|a| PathBuf::from(&a[1]));
     let result = async {
         #[cfg(windows)]
-        if action == "broker" {
+        if action == "broker" || action == "guardian" {
             let path = args
                 .windows(2)
                 .find(|a| a[0] == "--pair-config")
                 .map(|a| PathBuf::from(&a[1]))
                 .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
-            racp_runtime::providers::desktop::run_broker(&path)?;
+            if action == "guardian" {
+                racp_runtime::providers::desktop::run_guardian(&path)?;
+            } else {
+                racp_runtime::providers::desktop::run_broker(&path)?;
+            }
             return Ok(Value::Null);
         }
         let state = state.ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;

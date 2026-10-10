@@ -91,7 +91,9 @@ def open_agent(credential_store: Path, args: argparse.Namespace | None = None) -
             lifetime.enter_context(InstanceLock(device_lock))
             lifetime.enter_context(InstanceLock(data_dir.absolute() / "agent.lock"))
         desktop_sessions = tuple(options.desktop_session_id)
-        if (options.enable_desktop or (settings and settings.desktop_enabled)) and os.name == "nt":
+        if (
+            options.enable_desktop or (settings and settings.session_broker_enabled)
+        ) and os.name == "nt":
             from racp_agent.broker.identity import process_identity
 
             own_session = process_identity(os.getpid()).session
@@ -104,6 +106,7 @@ def open_agent(credential_store: Path, args: argparse.Namespace | None = None) -
             workspace,
             data_dir,
             profile=options.profile or (settings.profile if settings else "read_only"),
+            permissions=settings.permissions if settings else None,
             browser_allowed_origins=tuple(options.browser_allow_origin),
             browser_cdp=options.enable_browser_cdp,
             desktop_sessions=desktop_sessions,

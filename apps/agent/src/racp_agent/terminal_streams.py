@@ -52,12 +52,15 @@ class TerminalStreams:
         send: Callable[[Connected], Awaitable[None]],
         profile: str,
         lease: Callable[[], float],
+        authorize: Callable[[StreamSubscribe], None] | None = None,
     ) -> None:
         self.provider, self.send, self.profile, self.lease = provider, send, profile, lease
         self.subscriptions: dict[str, Subscription] = {}
+        self.authorize = authorize or (lambda request: None)
 
     async def subscribe(self, request: StreamSubscribe) -> None:
         try:
+            self.authorize(request)
             if request.stream_id in self.subscriptions:
                 raise RACPError("CONFLICT", "stream ID is already active")
             if len(self.subscriptions) >= 16:
@@ -79,6 +82,7 @@ class TerminalStreams:
                 request.context.principal_id,
                 request.agent_boot_id,
                 20000,
+                request.context.workspace_id,
             )
             session = self.provider.identity({"handle_id": request.handle_id}, context)
             if session.state == "EXPIRED" or time.monotonic() >= session.expires:
@@ -156,6 +160,7 @@ class TerminalStreams:
         request, session = subscription.request, subscription.session
         identity = subscription.identity()
         try:
+            self.authorize(request)
             await self.send(
                 StreamOpened(
                     **identity,
@@ -165,6 +170,7 @@ class TerminalStreams:
                 )
             )
             while True:
+                self.authorize(request)
                 subscription.credit.clear()
                 session.changed.clear()
                 if time.monotonic() >= self.lease():

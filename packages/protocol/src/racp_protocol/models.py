@@ -266,6 +266,7 @@ class OutputDescriptor(StrictModel):
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     media_type: Literal[
         "application/octet-stream",
+        "application/vnd.tcpdump.pcap",
         "application/json",
         "application/vnd.racp.output-stream",
         "image/png",
@@ -410,6 +411,52 @@ class StreamEnd(StreamIdentity):
     process_exit: int | None = None
 
 
+class NativeSubscribe(StreamIdentity):
+    type: Literal["native_subscribe"] = "native_subscribe"
+    principal_id: Identifier
+    workspace_id: WorkspaceId
+
+
+class NativeOpened(StreamIdentity):
+    type: Literal["native_opened"] = "native_opened"
+    scope: dict[str, Any]
+
+    @model_validator(mode="after")
+    def bound_scope(self) -> "NativeOpened":
+        from racp_protocol.native_duplex import DuplexScope
+
+        scope = DuplexScope.model_validate(self.scope)
+        if (scope.session_id, scope.device_id, scope.agent_boot_id, scope.connection_epoch) != (
+            self.handle_id, self.device_id, self.agent_boot_id, self.connection_epoch
+        ):
+            raise ValueError("native scope and envelope differ")
+        return self
+
+
+class NativePacket(StreamIdentity):
+    type: Literal["native_packet"] = "native_packet"
+    frame: dict[str, Any]
+
+    @model_validator(mode="after")
+    def bounded_frame(self) -> "NativePacket":
+        from racp_protocol.native_duplex import parse_duplex_frame
+
+        parse_duplex_frame(self.frame)
+        return self
+
+
+class NativeUnsubscribe(StreamIdentity):
+    type: Literal["native_unsubscribe"] = "native_unsubscribe"
+
+
+NativeStopReason = Literal["closed", "error", "revoked", "disconnected", "expired", "overflow"]
+
+
+class NativeStopped(StreamIdentity):
+    type: Literal["native_stopped"] = "native_stopped"
+    reason: NativeStopReason
+
+
 Message = Annotated[
     Hello
     | Welcome
@@ -429,7 +476,12 @@ Message = Annotated[
     | StreamAck
     | StreamUnsubscribe
     | StreamGap
-    | StreamEnd,
+    | StreamEnd
+    | NativeSubscribe
+    | NativeOpened
+    | NativePacket
+    | NativeUnsubscribe
+    | NativeStopped,
     Field(discriminator="type"),
 ]
 MESSAGE_ADAPTER: TypeAdapter[Message] = TypeAdapter(Message)

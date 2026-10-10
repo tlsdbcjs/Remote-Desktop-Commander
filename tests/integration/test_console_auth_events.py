@@ -243,6 +243,25 @@ async def test_cookie_terminal_stream_requires_origin_and_revocation_closes_quie
             await socket.send(json.dumps({"type": "stream_open", "cursor": "0"}))
             opened = json.loads(await asyncio.wait_for(socket.recv(), 3))
             assert opened["type"] == "stream_opened"
+            # ConPTY emits startup control sequences even for a sleeping child.
+            # Consume frames delivered while authenticated before testing quiet revocation.
+            for _ in range(20):
+                try:
+                    initial = json.loads(await asyncio.wait_for(socket.recv(), 0.2))
+                except TimeoutError:
+                    break
+                assert initial["type"] == "stream_data", initial
+                await socket.send(
+                    json.dumps(
+                        {
+                            "type": "stream_ack",
+                            "stream_id": opened["stream_id"],
+                            "byte_offset": initial["next_cursor"],
+                        }
+                    )
+                )
+            else:
+                pytest.fail("Owned sleeping terminal never became quiet")
             await browser.delete(
                 "/api/v1/console/session", headers={"X-CSRF-Token": session["csrf_token"]}
             )

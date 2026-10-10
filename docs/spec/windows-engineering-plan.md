@@ -1,22 +1,31 @@
 # RACP Windows 작업 및 테스트 계획서 (Windows Engineering Plan)
 
-> **Document ID**: `DOC-SPEC-WIN-v1.0`  
-> **Status**: Active · **Target Version**: v0.1.9  
-> **Last Updated**: 2026-10-07 · **Classification**: Architecture Specification / Engineering & Verification Plan  
-> **문서 개정**: 1.1 · 최초 작성 2026-10-06 · 문서 경로 정리 이후 재발행  
+> **Document ID**: `DOC-SPEC-WIN-v1.0`\
+> **Status**: Active · **Target Version**: v0.1.19\
+> **Last Updated**: 2026-10-10 · **Classification**: Architecture Specification / Engineering & Verification Plan\
+> **문서 개정**: 1.5 · 최초 작성 2026-10-06 · 문서 경로 정리 이후 재발행\
 > **참조 문서**: [RACP 개발정의서 v1.1](racp-specification-v1.1.md) · [Windows 릴리스 인수 게이트](../quality/windows-release-gates.md) · [구현 현황](../quality/implementation-status.md)
 
 ---
 
 ## 개요
 
-Windows 원격 PC 제어를 완성하기 위한 구현·개선 작업 12개, 상세 시험 54개, 화면·세션 조합 8개와 실제 A→B 인수 시나리오 3개를 정의한다. 각 항목에 선행 조건, 실행 절차, 합격 기준, 증거와 정리 방법을 연결한다. 핵심 인수, Windows 배포 검증, 전체 제품 완료를 별도로 판정한다.
+> [!IMPORTANT]
+> 2026-10-10의 Client 전체 Rust 전환 요청에 따라 구현 순서는 [Rust Client 전환 계획](rust-client-migration-plan.md)을 따른다. 이 문서의 실제 OS/원격/MCP/정리 인수 요구는 Rust에서도 이어받으며 Python/Electron 경로를 유지하기 위한 추가 구현은 진행하지 않는다. 원격 기준선·실패/성공의 현재 상태는 [구현 현황](../quality/implementation-status.md)을 확인한다.
+
+Windows 원격 PC 제어를 완성하기 위한 구현·개선 작업 12개, 상세 시험 54개, 화면·세션 조합 8개와 실제 A→B 인수 시나리오 4개를 정의한다. 각 항목에 선행 조건, 실행 절차, 합격 기준, 증거와 정리 방법을 연결한다. 핵심 인수, Windows 배포 검증, 전체 제품 완료를 별도로 판정한다.
 
 > [!NOTE]
 > 이전 `docs/RACP-Windows-작업및테스트계획서-v1.0.md`의 내용은 문서 분류 정리 후 이 공식 경로에서 유지한다. 앞으로 계획서는 **`docs/spec/windows-engineering-plan.md`**를 기준으로 열고 수정한다. [문서 포털](../README.md)과 [명세서 목록](README.md)에서 바로 찾을 수 있다.
 
 > [!IMPORTANT]
-> 첫 핵심 과제는 **실제 Codex→141 PC의 마우스·키보드 입력 완주**다. 로컬 GUI 성공이나 화면 캡처 성공만으로 실제 원격 입력을 통과 처리하지 않는다. 이 문서의 재발행은 테스트 실행이나 제품 버전 변경을 의미하지 않는다.
+> 첫 핵심 과제는 **실제 Codex→121 PC의 마우스·키보드 입력 완주**다. 로컬 GUI 성공이나 화면 캡처 성공만으로 실제 원격 입력을 통과 처리하지 않는다. 이 문서의 재발행은 테스트 실행이나 제품 버전 변경을 의미하지 않는다.
+
+> [!IMPORTANT]
+> 2026-10-08 사용자 범위 정정: 요청은 RACP를 활용한 원격 작업과 Codex의 기존 리버싱 MCP를 이용한 정적·동적 분석 시험이다. **Gateway MCP의 Codex 직접 등록, OAuth 제공자 구성, B live debugger 설치·통합을 필수 선행 조건으로 추가하지 않는다.** Codex가 기존 RACP owner API/CLI로 B에 작업을 요청하고 자료를 회수해 기존 IDA/WinDbg MCP로 분석하는 경로도 요청 범위의 실제 원격 시험이다. 본문에 남은 직접 MCP/OAuth 미검증 표시는 그 선택 경로에만 적용하며 전체 시험의 차단 조건으로 사용하지 않는다.
+
+> [!NOTE]
+> 2026-10-08의 추가 방향은 [Agent 세부 권한 및 원격 OS 기능 아키텍처](agent-permissions-and-capabilities.md)에 설계했다. Client 설정과 Agent enforcement를 세분화하고 기존 host MCP를 활용하는 방향이며, 향후 Gateway→Client 정책 배포는 이번 구현 범위에 포함하지 않는다.
 
 ## 목차
 
@@ -28,6 +37,7 @@ Windows 원격 PC 제어를 완성하기 위한 구현·개선 작업 12개, 상
 - [6. 상태 판정과 호스트 차단 처리](#section-06)
 - [7. 상세 시험 항목](#section-07)
 - [8. 실제 A→B 묶음 인수 시나리오](#section-08)
+  - [E2E-D: 기존 Codex 리버싱 MCP와 원격 정적·동적 분석](#racp-native-re-acceptance)
 - [9. 기존 자동 검사와 실행 안내](#section-09)
 - [10. 증거·결함·정리 관리](#section-10)
 - [11. 요구사항 추적과 종료 기준](#section-11)
@@ -50,7 +60,7 @@ Windows 원격 PC 제어를 완성하기 위한 구현·개선 작업 12개, 상
 | 수준 | 의미 | 필수 조건 |
 |---|---|---|
 | 구현 완료 | 기능이 코드와 배포 후보에 존재 | 명세·정책·오류 처리·단위/통합 검사·패키지 포함 확인 |
-| Windows 핵심 인수 완료 | A→B 실제 작업을 끝까지 수행 | 실제 Codex→141의 파일/실행/터미널/화면 입력, 취소·재연결, Client 수명 확인 |
+| Windows 핵심 인수 완료 | A→B 실제 작업을 끝까지 수행 | 실제 Codex→121의 파일/실행/터미널/화면 입력, 취소·재연결, Client 수명 확인 |
 | Windows 배포 검증 완료 | 반복 설치·장애 복구·운영 가능 | clean PC 설치, upgrade/rollback/restore, display/session 조합, 부하·soak, Windows 필수 gate |
 | 전체 제품 완료 | 개발정의서의 선언한 제품 범위 충족 | 참조 OS·지원 AI 앱·선택 확장·운영 gate까지 명시적으로 판정 |
 
@@ -64,13 +74,13 @@ Windows 원격 PC 제어를 완성하기 위한 구현·개선 작업 12개, 상
 
 | 항목 | 현재 기준선 | 시험 시작 시 재확인할 값 |
 |---|---|---|
-| A | 192.168.29.140, Codex·Gateway·작업 도구 | Windows 버전/build, CPU/RAM, 현재 사용자, 바이너리 hash |
-| B | 192.168.29.141, Windows Agent | 실제 hostname, 현재 사용자·로그인 session, Client EXE 버전/hash |
-| Device | `dev_9adcb9a37d424f089fe5f153534a6f9f` | ONLINE, boot ID, connection epoch, capability |
-| Gateway | `https://192.168.29.140:8765` | listener PID/생성 시각, TLS 인증서 유효기간·신뢰, readiness |
+| A | 192.168.29.141, Codex·Gateway·작업 도구 | Windows 버전/build, CPU/RAM, 현재 사용자, 바이너리 hash |
+| B | 192.168.29.121, Windows Client·Agent 대상 | 실제 hostname, 현재 사용자·로그인 session, Client EXE 버전/hash |
+| Device | 121 등록 후 확인; 과거 141 Device ID를 재사용하지 않음 | ONLINE, boot ID, connection epoch, capability |
+| Gateway | `https://192.168.29.141:8765` | listener PID/생성 시각, TLS 인증서 유효기간·신뢰, readiness |
 | Codex MCP | `https://127.0.0.1:18765/mcp` | OAuth 초기화·scope, 도구 목록과 실제 호출 |
-| B 허용 폴더 | `E:\01_RE-Lab\01_Project` | 현재 저장한 workspace ID/path, 실제 존재·권한 |
-| Client/코드 | 현재 코드 기준 v0.1.9, 과거 배포·검증 기준은 별도 기록 | 실제 B의 EXE·ASAR·내장 Agent 버전/hash와 시험 후보 일치; v0.1.9 설치를 추정하지 않음 |
+| B 허용 폴더 | 121에서 선택할 폴더·workspace ID 미확인 | 현재 저장한 workspace ID/path, 실제 존재·권한 |
+| Client/코드 | 현재 후보 source v0.1.16; 121의 내장 Agent v0.1.10은 별도 owner API로 확인 | 새 후보 설치 후 EXE·ASAR·내장 Agent 버전/hash 일치 재확인; 현재 121 결과를 v0.1.16 배포 후보 인수로 이관하지 않음 |
 | 실행 권한 | `standard` | 작업별 owner 승인, read-only/trusted 시험은 별도 fixture |
 
 ```mermaid
@@ -84,11 +94,18 @@ flowchart LR
 
 Agent→Gateway 연결 방향과 인증서 검증을 유지한다. 서로 다른 PC에 있는 GUI끼리 직접 통신하는 구조로 변경하지 않는다. 인증 비밀, Windows 로그인 비밀번호, 등록 토큰을 이 계획서·증거·명령행에 적지 않는다.
 
+> [!IMPORTANT]
+> 2026-10-07 사용자 정정: 현재 PC `192.168.29.141`이 호스트 A이며 새 원격 대상 B는 `192.168.29.121`이다. 과거 140→141 증거는 역사 기록으로 보존한다. 121의 Client·Agent 설치, Device/boot/epoch, 허용 폴더와 display/session은 새로 확인한다. 현재 세션에 RACP MCP 도구가 없으므로 실제 Codex 입력 시험은 연결 준비 전까지 `BLOCKED_ENV`다.
+
 ### 2.2 검증 현황의 참조와 갱신
 
 기존 자동 검사 수치, 실제 두 PC 시험, 메모리 읽기의 후속 성공과 호스트 차단 기록은 모두 [구현 현황의 계획서 기준선 기록](../quality/implementation-status.md#windows-plan-baseline)에 보관한다. 이 계획서는 시험 방법·합격 기준을 정의하고, 실행 결과는 그 단일 현황 문서에 누적한다.
 
 W01에서 후보 source/lock/package hash와 과거 증거의 적용 범위를 확인한다. 코드 버전 변경, 도구 목록 노출, capability 보고, 실제 실행 성공을 각각 구분한다. 과거 성공을 현재 후보의 자동 PASS로 사용하지 않는다.
+
+2026-10-07 실행 재개: 121의 `VM-WIN10-64-VPN`이 새 Device로 ONLINE이며, 사용자 설정 후 epoch 2·session 1의 화면 Broker가 enabled/healthy로 보고됐다. 내장 Agent의 SSOT/설치 metadata는 v0.1.10이고 기존 Hello의 `0.1.0` 고정 보고 결함은 v0.1.13에서 수정한다. 실제 owner API 파일·실행·Job 취소·ConPTY·Artifact 검사와 GUI fixture 종료 증거, 초기 등록 화면 제어 선택 개선의 검사는 [현황](../quality/implementation-status.md#windows-plan-resume-0113)에 기록한다. 현재 Gateway 인증은 owner bearer이며 이 대화의 실제 RACP MCP 도구·OAuth 경로는 준비되지 않았다.
+
+2026-10-07 후속 진단에서 시험 창의 x64 native procedure 주소 보존 결함을 수정했다. 121 owner API의 click/type/key/scroll/drag/UIA 및 own timeout/window/folder 정리는 모두 실제 자체 결과와 일치했다. source v0.1.16의 fixture를 설치 Agent v0.1.10에서 실행한 [인수 증거](../quality/implementation-status.md#windows-fixture-input-0116)이며, 실제 Codex RACP MCP/OAuth 인수와 배포 gate는 미완료다. 제품 빌드는 사용자 지시에 따라 보류한다.
 
 <a id="section-03"></a>
 
@@ -101,7 +118,7 @@ W01에서 후보 source/lock/package hash와 과거 증거의 적용 범위를 �
 - Agent/Gateway/session/네트워크 장애 후 복구, 중복 실행 방지, 승인·권한 경계.
 - Windows EXE/ZIP 설치·교체·제거, 복원·rollback, 성능·장시간 실행.
 
-macOS/Linux 배포, 추가 AI 앱, 전용 디버거·Frida 같은 확장은 후순위다. 이미 존재하는 확장 provider의 회귀 검사는 유지하되, 새 확장 구현을 Windows 핵심 인수의 선행 조건으로 두지 않는다. SCM 서비스·다른 사용자 Broker는 현재 사용자 Client 검증과 별도 gate로 관리한다. 이를 검증하지 않은 후보에 해당 지원을 선언하지 않는다.
+2026-10-07 사용자 후속 요청에 따라 **RACP와 Codex에 연결된 기존 리버싱 MCP를 이용한 원격 정적·동적 분석**을 핵심 인수에 포함한다. 파일·프로세스·메모리·Artifact 기능과 기존 IDA/WinDbg MCP의 실제 조합을 먼저 검사하고, 추가 provider 또는 새 MCP adapter가 필요한지는 시험 결과로 판단한다. macOS/Linux 배포, 추가 AI 앱, Frida 같은 새 확장은 후순위다. SCM 서비스·다른 사용자 Broker는 현재 사용자 Client 검증과 별도 gate로 관리한다. 이를 검증하지 않은 후보에 해당 지원을 선언하지 않는다.
 
 ### 3.2 우선순위 정의
 
@@ -121,7 +138,7 @@ macOS/Linux 배포, 추가 AI 앱, 전용 디버거·Frida 같은 확장은 후�
 |---|---|---|---|---|
 | W01 | P0 / 기준선·증거 정리 | 후보 source/lock/EXE/ASAR/Agent hash, 환경, 기존 결과 집계, 최신 메모리 성공 반영 | 같은 실행을 추적할 run ID와 출처 확보, 문서 불일치 해소 | 없음 |
 | W02 | P0 / 실제 desktop 입력 시험 기반 | B 전용 시험 창: TextBox/Button/스크롤/드래그, 고유 marker, 결과 파일, 정상 종료 | PID/create_time/boot/session/window가 일치하고 자체 결과로 입력 성공 판정 가능 | W01 |
-| W03 | P0 / 실제 Codex 입력 완주 | 개별 MCP 관측→lease→활성화→입력→검증→lease 해제 | 실제 141 click/type/key/scroll/drag/UIA 증거와 정리 완료 | W02 |
+| W03 | P0 / 실제 Codex 입력 완주 | 개별 MCP 관측→lease→활성화→입력→검증→lease 해제 | 실제 121 click/type/key/scroll/drag/UIA 증거와 정리 완료 | W02 |
 | W04 | P0 / 작업·승인·오류 사용성 | 기존 표시 확인, 필요한 경우 승인 대기/단절/입력 불가 이유·최근 결과·마지막 관측 시각 보완 | UI가 실제 상태와 일치, 비밀 비출력, 원인별 조치 안내 | W01; W03 발견 결함 |
 | W05 | P0 / 실제 묶음 작업·파일 회수 | 파일/프로세스/Job/ConPTY/browser/Artifact를 하나의 작업으로 연결 | B 결과 hash와 A 회수 자료 일치, 취소·close·반복 요청 검증 | W01 |
 | W06 | P1 / 일반 메모리 관측 확대 | 자체 fixture의 크기·주소·identity·권한·Artifact·취소 시험 | 큰 결과 hash 일치, 잘못된 대상 거부, 부분 자료/프로세스 누수 없음 | W01, W05 |
@@ -223,7 +240,7 @@ GUI 결과는 screenshot만으로 판정하지 않는다. TextBox 값, 클릭 �
 
 | 시험 ID | 절차 | 합격 기준 | 증거 / 요구 ID |
 |---|---|---|---|
-| T-DESK-01 | 141 session/monitor/window/foreground 조회, 자체 창 inspect·전체/창 capture | B의 실제 session·창·화면과 일치, 이미지 크기·Artifact/hash 검증 | metadata·PNG·hash / DESK-01, HOST-01 |
+| T-DESK-01 | 121 session/monitor/window/foreground 조회, 자체 창 inspect·전체/창 capture | B의 실제 session·창·화면과 일치, 이미지 크기·Artifact/hash 검증 | metadata·PNG·hash / DESK-01, HOST-01 |
 | T-DESK-02 | 자체 창 Button 중앙을 1회 click, 이어서 double/right click 각각 시험 | 각 요청의 자체 counter/event가 기대값, 다른 창 이벤트 0 | 요청·좌표·counter·전후 PNG / DESK-01 |
 | T-DESK-03 | TextBox에 한글·영문·숫자·기호·여러 줄 입력, Tab/Enter/Backspace/방향키 | 정확한 Unicode 값·포커스·키 동작, 누락/중복 0 | 자체 텍스트/포커스 결과 / DESK-01/02 |
 | T-DESK-04 | Ctrl+A/C/V 등 자체 창 내 shortcut, modifier release 확인 | 기대 선택/복사/붙여넣기, 종료 후 Ctrl/Alt/Shift/버튼 눌림 없음 | 자체 결과·입력 ledger / DESK-02 |
@@ -233,7 +250,7 @@ GUI 결과는 screenshot만으로 판정하지 않는다. TextBox 값, 클릭 �
 | T-DESK-08 | 두 시험 controller가 동일 session의 lease 경쟁, lease 만료·해제·재취득 | 동시 입력 금지, 정상 해제 후 재취득, lease로 읽기 상태를 위조하지 않음 | lease owner/시각·결과 / DESK-02 |
 | T-DESK-09 | hold/drag 도중 시험 Broker·Agent 종료 또는 요청 cancel/revoke | Guardian이 소유 입력 해제, 잔류 task/process 없음, 반복 부작용 없음 | ledger·정리·자체 입력 상태 / DESK-02, LIFE-01 |
 
-기본 조합은 실제 141의 3840×2160 / 150%다. 아래 추가 조합은 각 행을 별도 시험 결과로 저장한다.
+기본 조합은 121의 실제 해상도·배율을 등록 후 확인한다. 과거 141의 3840×2160 / 150%를 새 대상의 값으로 사용하지 않는다. 아래 추가 조합은 각 행을 별도 시험 결과로 저장한다.
 
 | 조합 ID | 환경 | 검사 |
 |---|---|---|
@@ -346,7 +363,7 @@ DPAPI secret은 다른 Windows 사용자/환경에 파일 복사만 해서 복�
 4. foreground 변경과 stale observation에서 거부되는지 확인한다.
 5. lease를 해제하고 창을 정상 종료한 뒤 process/window 부재를 확인한다.
 
-**합격:** 실제 입력에 대한 자체 결과가 일치하고 다른 창 입력 0, 눌린 modifier/버튼과 소유 resource 잔류 0이다. 실제 141 input이 BLOCKED_HOST면 이 시나리오는 미완료다.
+**합격:** 실제 입력에 대한 자체 결과가 일치하고 다른 창 입력 0, 눌린 modifier/버튼과 소유 resource 잔류 0이다. 실제 121 input이 BLOCKED_HOST면 이 시나리오는 미완료다.
 
 ### E2E-C: 연결 장애 뒤 작업 계속
 
@@ -357,6 +374,22 @@ DPAPI secret은 다른 Windows 사용자/환경에 파일 복사만 해서 복�
 5. 생성 자료를 A에 회수하고 최종 resource inventory·counter를 확인한다.
 
 **합격:** 재접속 후 새 작업 성공, 기존 확정 부작용의 중복 0, UNKNOWN·stale Handle·gap을 계약대로 표시한다.
+
+<a id="racp-native-re-acceptance"></a>
+
+### E2E-D: 기존 Codex 리버싱 MCP와 원격 정적·동적 분석
+
+사용자가 지정한 B=121과 시험 소유의 정상 PE를 사용한다. 입력 SHA-256·실행 동의·실제 셸 관리자 권한을 기록하고, RE Lab 지침의 권한 조건을 충족한 뒤 동적 실행을 시작한다. 원격 debugger 설치·adapter 추가와 빌드는 별도 변경이며 이 시험 준비 과정에서 임의로 수행하지 않는다.
+
+| 인수 ID | 절차 | 합격 기준 |
+|---|---|---|
+| RE-MCP-STATIC | RACP로 B에 PE 저장 → hash → 인증 Artifact로 A에 회수 → 기존 IDA MCP에서 열기·함수 분석 | 원본/B/회수 SHA-256 일치, 실제 어셈블리·의사코드와 함수 RVA가 기대 동작을 설명 |
+| RE-MCP-DUMP | B의 own PE 실행 → PID/create_time/boot 확인 → marker 메모리 읽기 → 해당 process의 full-memory dump 회수 → 기존 WinDbg MCP 분석 | live marker와 dump marker·module hash/주소 대응 일치, stack·module 조회 증거, own process/folder 정리 |
+| RE-MCP-LIVE (선택 확장) | 실시간 attach가 별도로 요청된 경우 기존 WinDbg MCP가 접근할 수 있는 B의 native debugger endpoint 확인 → 인증·네트워크 경계 확인 → own process만 attach → break/step/continue/detach | 중단점에서 실제 B의 상태·레지스터·메모리 확인, 재개/분리와 endpoint·own process 정리 |
+
+**판정:** 정적 분석과 원격 실행·관측·dump 분석을 핵심 시험으로 판정한다. 별도 실시간 attach 결과를 dump 분석 PASS로 대체하지 않으며, 선택 live 경로가 준비되지 않았다는 이유로 이미 검증한 원격 정적·동적 분석을 차단하지 않는다. Codex의 owner API 호출과 Gateway MCP 직접 호출은 연결 방식으로 구분하며 전자도 실제 RACP 원격 시험 증거다. 실제 결과는 [구현 현황](../quality/implementation-status.md#racp-native-re-mcp-20261007)에 기록한다.
+
+2026-10-07 실제 B 관리자 셸 및 own PE 실행을 확인하고 full-memory dump를 RACP로 회수했다. 기존 Codex WinDbg MCP가 marker·함수 bytes·module/stack을 읽어 [RE-MCP-DUMP PASS](../quality/implementation-status.md#racp-windbg-dump-pass)를 확인했다. 분석 engine의 named-pipe는 A-local dump 경로이며 B의 live attach가 아니다. 실시간 B endpoint와 실제 RACP MCP/OAuth 인수는 별도 미완료로 유지한다.
 
 <a id="section-09"></a>
 
@@ -371,7 +404,7 @@ DPAPI secret은 다른 Windows 사용자/환경에 파일 복사만 해서 복�
 | Console | `uv run --frozen python scripts/console_build.py --node .tools/node-v22.23.0-win-x64/node.exe` | format/type/schema drift/build 로그 |
 | Console 실제 E2E | `uv run --frozen python scripts/console_e2e.py --node .tools/node-v22.23.0-win-x64/node.exe` | XML·브라우저 fixture evidence |
 | Client 실제 E2E | `uv run --frozen python scripts/client_e2e.py --node .tools/node-v22.23.0-win-x64/node.exe --backend <후보-내장-Agent-경로>` | 자체 fixture HTTPS/WSS·GUI 결과·정리 |
-| Windows 자체 창 | 환경변수 `RACP_TEST_GUI=1`로 `uv run --frozen pytest tests/integration/test_desktop_native_gui.py -q --junitxml=<run-dir>/native-gui.xml` | actual own-window 검사; 141 입력 결과와 구분 |
+| Windows 자체 창 | 환경변수 `RACP_TEST_GUI=1`로 `uv run --frozen pytest tests/integration/test_desktop_native_gui.py -q --junitxml=<run-dir>/native-gui.xml` | actual own-window 검사; 121 입력 결과와 구분 |
 | 일반 memory | `uv run --frozen pytest tests/unit/test_process_memory.py tests/integration/test_process_memory_mcp.py -q --junitxml=<run-dir>/memory.xml` | native buffer·MCP Artifact 검사 |
 | 원격 TLS | `uv run --frozen pytest tests/integration/test_remote_tls.py tests/integration/test_local_mcp_tls.py -q --junitxml=<run-dir>/tls.xml` | private CA HTTPS/WSS; actual Codex와 구분 |
 | core 두 PC | `scripts/two_pc_acceptance.py --lab-dir <lab> --device <현재-device> --output <run-dir>/core.json`을 frozen Python으로 실행 | owner API 시험이며 실제 Codex 시험으로 대체 불가 |
@@ -450,11 +483,12 @@ DPAPI secret은 다른 Windows 사용자/환경에 파일 복사만 해서 복�
 | STATE-01 / UI-01 | T-REC-01/02/03/04, T-UI-01/02/03/04, T-PKG-04 |
 | BROWSER-01 / DESK-01/02 | T-BROW-01/02, T-DESK-01～09, D-M01～08 |
 | REL-01 / PERF-01 / HOST-01 | T-PKG-01～06, T-BAK-01/02, T-PERF-01～04, E2E-A/B/C |
-| RE-01 / 선택 확장 | 기존 native 확장 회귀는 유지, 추가 통합·Linux 확장은 W12에서 별도 판정 |
+| RE-01 / 기존 Codex 리버싱 MCP | E2E-D의 RE-MCP-STATIC/DUMP/LIVE를 Windows 핵심 인수에서 각각 판정; 추가 통합·Linux 확장은 W12 |
 
 ### 11.2 Windows 핵심 인수 완료
 
-- W01–W05 및 핵심 W07의 실제 Codex→141 E2E-A/B/C가 PASS다.
+- W01–W05 및 핵심 W07의 실제 Codex→121 E2E-A/B/C가 PASS다.
+- E2E-D의 정적 분석 및 원격 실행·dump 분석 시험 결과와 실제 지원 범위가 확인됐다. live attach와 Gateway MCP 직접 등록/OAuth 구성은 별도 요청된 경우에만 추가 인수 조건으로 적용한다. 사용자가 요구한 경로의 FAIL/BLOCKED/NOT_RUN을 완료로 승격하지 않는다.
 - 파일·실행·터미널·화면 입력·자료 회수·취소·재연결을 사용자 관점으로 완주했다.
 - 오조작·중복 실행·입력/소유 process/port/Handle 누수와 S0/S1 결함이 없다.
 - actual desktop input을 로컬 GUI 성공이나 screenshot 성공으로 대신하지 않는다.
@@ -483,9 +517,10 @@ Linux의 Chromium sandbox/RE/TLS 실패·symlink 예외 계약 불일치는 환�
 - [ ] A/B 연결·Device/boot/epoch·workspace·TLS/OAuth·로그인 session 확인
 - [ ] 별도 테스트 venv/fixture와 run 디렉터리 준비
 - [ ] W02 자체 GUI/메모리/process/file fixture와 정리 방법 준비
-- [ ] W03 실제 Codex→141 desktop 입력 시험 시작
+- [ ] W03 실제 Codex→121 desktop 입력 시험 시작
 - [ ] W04 승인/상태/오류 표시의 실제 동작 확인 및 필요한 보완
 - [ ] W05 E2E-A와 W06 메모리/Artifact 경계 검증
+- [ ] E2E-D 기존 Codex 리버싱 MCP의 원격 정적·dump·live debugger 검증
 - [ ] W07 장애·display/session 조합 및 E2E-C 검증
 - [ ] W08 clean 설치·실제 로그인 시작·수동 upgrade/uninstall 검증
 - [ ] W09 rollback·backup/restore와 RPO/RTO 실측
@@ -500,6 +535,10 @@ Linux의 Chromium sandbox/RE/TLS 실패·symlink 예외 계약 불일치는 환�
 | 개정 | 일자 | 변경 내용 |
 |---|---|---|
 | 1.0 | 2026-10-06 | Windows 우선 작업 분해, 상세 시험, 두 PC 인수, 배포·복구·성능 기준 작성 |
+| 1.5 | 2026-10-08 | 사용자 정정 반영: owner API와 기존 리버싱 MCP 경로를 실제 원격 시험으로 인정하고, 직접 MCP/OAuth 및 live attach의 임의 필수화를 철회 |
+| 1.4 | 2026-10-07 | 사용자 요청에 따라 기존 Codex 리버싱 MCP의 원격 정적·dump·live 인수를 E2E-D 핵심 범위에 추가; 빌드 보류 상태 유지 |
+| 1.3 | 2026-10-07 | 실제 121 등록·화면 허용·설치 버전 확인, v0.1.13 후보의 초기 등록 opt-in 및 Hello 버전 결함 수정·검사 기록 연결 |
+| 1.2 | 2026-10-07 | 사용자 지정 토폴로지 141 호스트→121 대상 반영, 후보 v0.1.10 및 W02 독립 결과 fixture 추가; 과거 증거와 새 대상의 인수 분리 |
 | 1.1 | 2026-10-07 | 공식 경로에서 재발행, v0.1.9 코드 기준 명시, 목차·고정 anchor·포털 연결, 시험 결과를 현황 SSOT로 이관 |
 
 - [문서 포털](../README.md) · [명세서 목록](README.md)

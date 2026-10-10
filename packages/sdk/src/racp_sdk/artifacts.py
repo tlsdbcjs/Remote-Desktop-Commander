@@ -63,6 +63,7 @@ class ArtifactClient:
         media_type: str = "application/octet-stream",
         transfer_id: str | None = None,
         transfer_created: Callable[[str], None] | None = None,
+        authorization_gate: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
         progress = {"transfer_id": transfer_id} if transfer_id else {}
         try:
@@ -72,6 +73,7 @@ class ArtifactClient:
                 transfer_id=transfer_id,
                 progress=progress,
                 transfer_created=transfer_created,
+                authorization_gate=authorization_gate,
             )
         except RACPError as exc:
             if progress:
@@ -93,8 +95,12 @@ class ArtifactClient:
         transfer_id: str | None,
         progress: dict[str, str],
         transfer_created: Callable[[str], None] | None = None,
+        authorization_gate: Callable[[], None] | None = None,
     ) -> dict[str, Any]:
+        guard = authorization_gate or (lambda: None)
+        guard()
         size, sha256 = await asyncio.to_thread(file_digest, path)
+        guard()
         if size > MAX_ARTIFACT_BYTES:
             raise RACPError("RESOURCE_EXHAUSTED", "file exceeds 1 GiB Artifact limit")
         async with httpx.AsyncClient(
@@ -102,6 +108,7 @@ class ArtifactClient:
         ) as http:
             if transfer_id:
                 state = await self.authorize(http, transfer_id)
+                guard()
                 if (
                     state["direction"] != "upload"
                     or state["size_bytes"] != size
@@ -110,6 +117,7 @@ class ArtifactClient:
                 ):
                     raise RACPError("CONFLICT", "local file does not match the upload scope")
             else:
+                guard()
                 state = checked(
                     await http.post(
                         "/api/v1/artifact-transfers",
@@ -125,6 +133,7 @@ class ArtifactClient:
                         },
                     )
                 )
+                guard()
                 transfer_id = state["id"]
             assert transfer_id is not None
             progress["transfer_id"] = transfer_id
@@ -135,6 +144,7 @@ class ArtifactClient:
             with path.open("rb") as source:
                 offset = int(state["committed_bytes"])
                 while offset < size:
+                    guard()
                     if time.monotonic() > deadline:
                         raise RACPError(
                             "TIMEOUT", "upload deadline elapsed", transfer_id=transfer_id
@@ -152,6 +162,7 @@ class ArtifactClient:
                         )
                     for attempt in range(3):
                         try:
+                            guard()
                             response = await http.put(
                                 "/api/v1/artifact-transfers/" + transfer_id + "/content",
                                 content=chunk,
@@ -163,6 +174,7 @@ class ArtifactClient:
                                     "X-Chunk-SHA256": hashlib.sha256(chunk).hexdigest(),
                                 },
                             )
+                            guard()
                             if response.status_code == 410:
                                 state = await self.authorize(http, transfer_id)
                                 continue
@@ -196,11 +208,13 @@ class ArtifactClient:
                         )
             for attempt in range(3):
                 try:
+                    guard()
                     response = await http.post(
                         "/api/v1/artifact-transfers/" + transfer_id + "/complete",
                         headers={"Authorization": "Bearer " + state["credential"]},
                         json={"size_bytes": size, "sha256": sha256},
                     )
+                    guard()
                     if response.status_code == 410:
                         state = await self.authorize(http, transfer_id)
                         continue

@@ -7,6 +7,82 @@
     background: #0b1320;
     color-scheme: dark;
 }
+.permission-editor {
+    margin: 24px 0;
+}
+.permission-categories {
+    display: grid;
+    gap: 10px;
+}
+.permission-categories details,
+.permission-constraints {
+    border: 1px solid #293c51;
+    border-radius: 10px;
+    padding: 16px;
+    background: #131f30;
+}
+.permission-categories summary,
+.permission-constraints summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+.permission-categories summary small {
+    display: block;
+    margin: 6px 0 0 20px;
+    color: #9cadbf;
+    font-weight: normal;
+}
+.permission-category-switch,
+.permission-leaf label {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+.permission-editor input[type="checkbox"] {
+    width: auto;
+    flex: 0 0 auto;
+    margin: 4px 0 0;
+}
+.permission-leaf {
+    padding: 14px 0 14px 12px;
+    border-top: 1px solid #293c51;
+}
+.permission-leaf small {
+    display: block;
+    color: #9cadbf;
+    line-height: 1.6;
+}
+.permission-leaf code {
+    display: inline-block;
+    font-size: 11px;
+    margin-top: 8px;
+    border: 1px solid #3a5169;
+    border-radius: 12px;
+    padding: 3px 9px;
+}
+.permission-support {
+    margin-left: 27px;
+}
+.permission-constraints {
+    margin-top: 16px;
+}
+.permission-editor textarea {
+    display: block;
+    width: 100%;
+    min-height: 80px;
+    background: #0b1320;
+    color: #e5edf6;
+    border: 1px solid #3a5169;
+    border-radius: 6px;
+    padding: 10px;
+}
+.permission-warning {
+    background: #3a2d18;
+    border: 1px solid #916c35;
+    border-radius: 8px;
+    padding: 14px;
+    line-height: 1.7;
+}
 .login-option {
     display: flex;
     gap: 10px;
@@ -259,8 +335,17 @@ footer {
     font-size: 11px;
     text-align: center;
 }
-.desktop-setting { display: flex; align-items: center; gap: 12px; }
-.desktop-setting input { width: 18px; height: 18px; margin: 0; flex-shrink: 0; }
+.desktop-setting {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.desktop-setting input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    flex-shrink: 0;
+}
 p[role="alert"] {
     color: #ffbdbd;
     padding: 14px;

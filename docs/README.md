@@ -1,8 +1,8 @@
 # RACP 기술 문서 포털 (Documentation Portal)
 
 > **Document ID**: `DOC-HUB-INDEX`  
-> **Status**: Active · **Target Version**: v0.1.9  
-> **Last Updated**: 2026-10-07 · **Classification**: Documentation Portal & Index
+> **Status**: Active · **Target Version**: v0.1.20  
+> **Last Updated**: 2026-10-10 · **Classification**: Documentation Portal & Index
 
 ---
 
@@ -15,7 +15,13 @@
 ## 1. 개요 (Overview)
 
 > [!IMPORTANT]
+> **[Client 영역 전체 Rust 전환 작업 계획서](spec/rust-client-migration-plan.md)** — GUI·상주 Agent·OS 제어·Client 배포를 Rust로 재작성하고 구 Client를 제거하는 현재 실행 기준이다. Gateway는 Python을 유지한다.
+
+> [!IMPORTANT]
 > **[Windows 작업 및 테스트 계획서 바로 열기](spec/windows-engineering-plan.md)** — 공식 위치는 `docs/spec/windows-engineering-plan.md`다. 이전 한글 파일 경로 대신 이 링크를 사용한다.
+
+> [!NOTE]
+> **[Gateway 웹 관리 서버 작업 계획서](spec/gateway-web-management-plan.md)** — 브라우저에서 다중 Agent·로그·권한과 서버의 설치·백업·업데이트를 관리하기 위한 상세 계획이다.
 
 **Remote-Desktop-Commander (RACP - Remote Access and Control Protocol)**의 공식 기술 문서 포털입니다.  
 RACP는 원격 PC(Windows / Linux / macOS)를 AI 에이전트(Codex, ChatGPT 등) 및 데스크톱 관리자가 안전하게 원격 제어, 파일 관리, 프로세스 실행, 콘솔 스트리밍, 화면 관측 및 분석할 수 있도록 설계된 엔터프라이즈급 원격 제어 프로토콜 및 런타임 플랫폼입니다.
@@ -56,7 +62,11 @@ graph TD
 ### 2.1 [시스템 설계 명세 (docs/spec/)](spec/README.md)
 RACP 플랫폼의 핵심 설계 원칙, 프로토콜 계약, 상태 머신, 권한 모델 및 엔지니어링 계획을 수록합니다.
 - [RACP 종합 개발정의서 v1.1](spec/racp-specification-v1.1.md) (`DOC-SPEC-CORE-v1.1`): 시스템 마스터 설계서
-- [Windows 작업 및 테스트 계획서](spec/windows-engineering-plan.md) (`DOC-SPEC-WIN-v1.0`): 문서 개정 1.1 / 코드 기준 v0.1.9 · 작업·시험·실제 두 PC 인수·배포 완료 기준
+- [Agent 세부 권한 및 원격 OS 기능 아키텍처](spec/agent-permissions-and-capabilities.md) (`DOC-SPEC-AGENT-PERMISSIONS`): Client 설정·Agent 검사·18개 기능 분류, 향후 중앙 정책은 설계 경계만 정의
+- [Agent 세부 권한 구현 계획](spec/agent-permissions-implementation-plan.md) (`DOC-PLAN-AGENT-PERMISSIONS`): 대체된 Python/Electron 과거 계획 · 후속 실행은 Rust 전환 계획 참조
+- [Client 영역 전체 Rust 전환 작업 계획서](spec/rust-client-migration-plan.md) (`DOC-PLAN-RUST-CLIENT`): 현재 실행 기준 · Rust native UI/Agent·R00–R14·전체 기능 추적·플랫폼/성능 gate·레거시 제거
+- [Gateway 웹 관리 서버 작업 계획서](spec/gateway-web-management-plan.md) (`DOC-SPEC-GATEWAY-WEB-PLAN`): v0.1.15 기준선 · 설계·13개 작업·29개 시험군·3개 묶음 인수
+- [Windows 작업 및 테스트 계획서](spec/windows-engineering-plan.md) (`DOC-SPEC-WIN-v1.0`): 문서 개정 1.5 · 작업·시험·실제 두 PC 인수·배포 완료 기준
 - [Client·Agent Rust 전환 설계](spec/client-rust-migration.md) (`DOC-SPEC-CLIENT-RUST`, Active): 승인된 전환 범위, 기존 기능·데이터 호환성, Python 제거 및 완료 조건
 - [Client·Agent Rust 구현 계획](spec/client-rust-implementation-plan.md) (`DOC-PLAN-CLIENT-RUST`, Draft): 10개 task의 파일·인터페이스·검증 절차와 실행 방식 검토
 

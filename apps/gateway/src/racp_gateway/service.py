@@ -29,6 +29,7 @@ from racp_sdk.security import canonical_digest, digest
 from racp_gateway.browser_events import BrowserEvents
 from racp_gateway.handles import HandleCatalog
 from racp_gateway.jobs import JobCatalog
+from racp_gateway.native_carrier import NativeCarrierBroker
 from racp_gateway.scheduler import Scheduler
 from racp_gateway.store import GatewayStore
 from racp_gateway.terminal_streams import StreamBroker
@@ -74,6 +75,7 @@ class ControlPlane:
         self.jobs = JobCatalog(store)
         self.scheduler = Scheduler(self)
         self.streams = StreamBroker(self)
+        self.native = NativeCarrierBroker(self)
         self.artifacts: ArtifactCatalog | None = None
         self.trusted_personal = trusted_personal
         self.approvals_enabled = approvals_enabled
@@ -81,6 +83,7 @@ class ControlPlane:
         self.events: dict[str, asyncio.Event] = {}
         self.locks: dict[str, asyncio.Lock] = {}
         self.pending_tasks: set[asyncio.Task[Any]] = set()
+        self.maintenance_reason: str | None = None
 
     def public(self, record: dict[str, Any], owner: str) -> dict[str, Any]:
         if record["request"]["context"]["principal_id"] != owner:
@@ -103,6 +106,12 @@ class ControlPlane:
         return self.public(self.store.get(operation_id), owner)
 
     async def execute(self, input: OperationInput, owner: str) -> dict[str, Any]:
+        if self.maintenance_reason is not None:
+            raise RACPError(
+                "CAPABILITY_UNAVAILABLE",
+                "Gateway maintenance blocks new operation admission",
+                maintenance_reason=self.maintenance_reason,
+            )
         device = self.store.device(input.device_id, owner)
         if device["revoked"]:
             raise RACPError("DEVICE_REVOKED", "device was revoked")
@@ -268,6 +277,17 @@ class ControlPlane:
         if self.artifacts is not None and result.outputs:
             self.artifacts.observe_outputs([item.model_dump() for item in result.outputs], record)
         self.handles.result(result.result, result.device_id, connection.boot_id)
+        native_scope = (result.result or {}).get("native_scope", {})
+        if (
+            record["request"]["operation"] in {"native.prepare", "proxy.prepare"}
+            and result.state == "SUCCEEDED"
+            and result.result
+            and native_scope.get("agent_boot_id") == connection.boot_id
+            and native_scope.get("connection_epoch") == connection.epoch
+        ):
+            self.native.register(
+                result.result, connection, record["request"]["context"]["principal_id"]
+            )
         self.events.setdefault(result.operation_id, asyncio.Event()).set()
         self.events.pop(result.operation_id, None)
         self.locks.pop(result.operation_id, None)
@@ -454,6 +474,7 @@ class ControlPlane:
         self.store.revoke(device_id)
         if connection:
             self.streams.disconnected(device_id, connection, "DEVICE_REVOKED")
+            await self.native.disconnected(device_id, connection)
             await connection.socket.close(code=4003, reason="DEVICE_REVOKED")
 
     def audit_rows(self) -> list[dict[str, Any]]:

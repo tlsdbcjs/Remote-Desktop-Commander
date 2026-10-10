@@ -19,3 +19,8 @@ mod workspaces;
 pub use workspaces::{path_within, Directory, FileInfo, Workspaces};
 
 pub use outputs::browser_temporary_usage;
+
+mod permissions;
+pub use permissions::{
+    authorize, desktop_enabled, legacy_permissions, permission_allows_field, validate_permissions,
+};

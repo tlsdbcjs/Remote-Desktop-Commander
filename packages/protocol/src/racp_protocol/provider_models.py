@@ -25,7 +25,7 @@ class FileWrite(FilePath):
     mode: Literal["create", "replace", "append"] = "create"
     overwrite: bool = False
     encoding: str = "utf-8"
-    newline: Literal["preserve", "lf", "crlf"] = "preserve"
+    newline: Literal["preserve", "lf", "crlf", "verbatim"] = "preserve"
     expected_sha256: Sha256 | None = None
     expected_revision: str | None = Field(default=None, max_length=128)
     expected_offset: str | None = Field(default=None, pattern=r"^\d{1,20}$")
@@ -79,6 +79,49 @@ class FileSearch(FilePath):
     max_results: int = Field(default=1000, ge=1, le=1000)
 
 
+class FileContentSearch(FilePath):
+    pattern: str = Field(min_length=1, max_length=256, pattern=r"^[^\r\n\x00]+$")
+    encoding: Literal["utf-8", "utf-8-sig", "utf-16-le", "utf-16-be", "latin-1"] = "utf-8"
+    case_sensitive: bool = True
+    max_depth: int = Field(default=10, ge=0, le=20)
+    max_results: int = Field(default=100, ge=1, le=200)
+    max_files: int = Field(default=1000, ge=1, le=10000)
+    max_file_bytes: int = Field(default=65536, ge=1, le=1048576)
+    max_scan_bytes: int = Field(default=8388608, ge=1, le=33554432)
+
+
+class TextEdit(StrictModel):
+    old_text: str = Field(min_length=1, max_length=16384)
+    new_text: str = Field(max_length=16384)
+    expected_count: int = Field(default=1, ge=1, le=1000)
+
+
+class FilePatchTarget(FilePath):
+    expected_sha256: Sha256
+    expected_revision: str | None = Field(default=None, min_length=1, max_length=128)
+    edits: list[TextEdit] = Field(min_length=1, max_length=16)
+    encoding: Literal["utf-8", "utf-8-sig", "utf-16-le", "utf-16-be", "latin-1"] = "utf-8"
+
+
+class FilePatchBatch(StrictModel):
+    files: list[FilePatchTarget] = Field(min_length=1, max_length=16)
+    dry_run: bool = False
+
+    @model_validator(mode="after")
+    def bounded_edits(self) -> "FilePatchBatch":
+        edits = [edit for file in self.files for edit in file.edits]
+        if (
+            len(edits) > 128
+            or sum(
+                len(edit.old_text.encode("utf-8")) + len(edit.new_text.encode("utf-8"))
+                for edit in edits
+            )
+            > 65536
+        ):
+            raise ValueError("patch edit input exceeds its 64 KiB/128 edit budget")
+        return self
+
+
 class ProcessList(StrictModel):
     limit: int = Field(default=100, ge=1, le=500)
     cursor: str | None = Field(default=None, max_length=2048)
@@ -118,6 +161,12 @@ class ProcessMemoryRead(ProcessTarget):
         if int(self.address, 16) + self.size_bytes > 2**64:
             raise ValueError("memory address range overflows")
         return self
+
+
+class ProcessDump(ProcessTarget):
+    create_time: float = Field(gt=0, allow_inf_nan=False)
+    mode: Literal["mini", "full"] = "mini"
+    max_bytes: int = Field(default=64 * 1024**2, ge=4096, le=256 * 1024**2)
 
 
 class ProcessSpawn(ShellInput):

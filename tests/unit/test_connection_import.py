@@ -60,9 +60,11 @@ def test_connection_file_rejects_invalid_or_changed_input(tmp_path: Path, invali
     }.get(invalid, "CONNECTION_FILE_INVALID")
 
 
+@pytest.mark.parametrize("desktop_enabled", [False, True])
 async def test_import_persists_ca_without_persisting_offer_token_or_requiring_original_file(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    desktop_enabled: bool,
 ) -> None:
     ca, _, _ = certificates(tmp_path / "tls")
     path, fingerprint = offer(tmp_path / "connection.racp", ca_pem=ca.read_text())
@@ -82,10 +84,15 @@ async def test_import_persists_ca_without_persisting_offer_token_or_requiring_or
     )
     state = tmp_path / "state"
     request = desktop_control.ImportConnection(
-        action="enroll_connection", path=path, file_sha256=fingerprint, workspace=tmp_path
+        action="enroll_connection",
+        path=path,
+        file_sha256=fingerprint,
+        workspace=tmp_path,
+        desktop_enabled=desktop_enabled,
     )
     result = await desktop_control.execute(request, state)
     assert result["configured"] is True and result["profile"] == "read_only"
+    assert result["desktop_enabled"] is desktop_enabled
     assert calls == [{"token": value.token}]
     saved = SecretStore(state / "credential.bin").load()
     assert value.token not in json.dumps(saved)
@@ -98,7 +105,9 @@ async def test_import_persists_ca_without_persisting_offer_token_or_requiring_or
     assert (state / "credential.bin").read_bytes() == before
     path.unlink()
     ca.unlink()
-    assert desktop_control.information(state / "credential.bin")["configured"] is True
+    resumed = desktop_control.information(state / "credential.bin")
+    assert resumed["configured"] is True
+    assert resumed["desktop_enabled"] is desktop_enabled
 
 
 async def test_connection_file_issuer_requires_owner_and_exports_only_public_trust(

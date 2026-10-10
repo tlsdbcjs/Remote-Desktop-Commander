@@ -1,11 +1,14 @@
 """Protected foreground Agent settings saved together with its Device credential."""
 
+import json
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from pydantic import AnyHttpUrl, Field, field_validator, model_validator
+from pydantic import AnyHttpUrl, Field, ValidationInfo, field_validator, model_validator
+from racp_policy.engine import Decision
+from racp_policy.permissions import LocalPermissions, compile_permissions, legacy_permissions
 from racp_protocol.models import Identifier, StrictModel
 from racp_sdk.security import require_secure_url, tls_context
 
@@ -47,7 +50,7 @@ def gateway_origin(value: str) -> str:
 
 
 class StoredAgentSettings(StrictModel):
-    version: int = Field(default=1, ge=1, le=1)
+    version: Literal[2] = 2
     gateway: str = Field(max_length=2048)
     device_id: Identifier
     workspace: Path
@@ -56,6 +59,49 @@ class StoredAgentSettings(StrictModel):
     profile: Literal["read_only", "standard", "trusted_personal"] = "read_only"
     ca_file: Path | None = None
     desktop_enabled: bool = False
+    permissions: LocalPermissions
+
+    @property
+    def session_broker_enabled(self) -> bool:
+        if self.desktop_enabled:
+            return True
+        permissions = compile_permissions(self.permissions)
+        return any(
+            permissions.leaf(identity) == Decision.ALLOW
+            for identity in (
+                "clipboard.text.read",
+                "clipboard.text.write",
+            )
+        )
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_v1(cls, value: Any, info: ValidationInfo) -> Any:
+        if not isinstance(value, dict):
+            return value
+        version = value.get("version", 1)
+        if type(version) is not int:
+            raise ValueError("Agent settings version must be an integer")
+        if version == 1:
+            if "permissions" in value:
+                raise ValueError("Version 1 cannot carry version 2 permissions")
+            return {
+                **value,
+                "version": 2,
+                "permissions": legacy_permissions(
+                    desktop_enabled=value.get("desktop_enabled", False)
+                ),
+            }
+        if version == 2 and "permissions" not in value:
+            raise ValueError("Version 2 requires explicit local permissions")
+        if version == 2 and info.mode == "json":
+            return {
+                **value,
+                "permissions": LocalPermissions.model_validate_json(
+                    json.dumps(value["permissions"])
+                ),
+            }
+        return value
 
     @field_validator("gateway")
     @classmethod

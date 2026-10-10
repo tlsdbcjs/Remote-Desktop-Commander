@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 from racp_agent import desktop_control
 from racp_domain.models import RACPError
+from racp_sdk.security import SecretStore
 
 
 def test_desktop_bridge_rejects_execution_and_extra_arguments() -> None:
@@ -25,6 +26,40 @@ def test_desktop_info_of_unconfigured_pc_does_not_create_state(tmp_path: Path) -
     assert result["configured"] is False
     assert result["execution_identity"]
     assert not credentials.parent.exists()
+
+
+@pytest.mark.parametrize("desktop_enabled", [False, True])
+async def test_manual_enrollment_persists_desktop_permission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, desktop_enabled: bool
+) -> None:
+    original = httpx.Client
+    issued_credential = "issued-device-credential-fixture"
+
+    def reply(request: httpx.Request) -> httpx.Response:
+        assert json.loads(request.content) == {"token": "private-enrollment-secret"}
+        return httpx.Response(
+            200, json={"device_id": "dev_manual_fixture", "credential": issued_credential}
+        )
+
+    monkeypatch.setattr(
+        httpx, "Client", lambda **kwargs: original(transport=httpx.MockTransport(reply), **kwargs)
+    )
+    state = tmp_path / "state"
+    request = desktop_control.Enrollment(
+        action="enroll",
+        gateway="https://gateway.example",
+        workspace=tmp_path,
+        token="private-enrollment-secret",
+        desktop_enabled=desktop_enabled,
+    )
+    result = await desktop_control.execute(request, state)
+    assert result["configured"] and result["desktop_enabled"] is desktop_enabled
+    saved = SecretStore(state / "credential.bin").load()
+    assert saved["credential"] == issued_credential
+    assert request.token not in json.dumps(saved)
+    assert (
+        desktop_control.information(state / "credential.bin")["desktop_enabled"] is desktop_enabled
+    )
 
 
 @pytest.mark.parametrize(

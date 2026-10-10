@@ -18,6 +18,7 @@ struct Capture {
 }
 struct Broker {
     native: NativeDesktop,
+    automation: Option<super::automation::Automation>,
     authority: DesktopState,
     device: String,
     captures: BTreeMap<String, Capture>,
@@ -39,8 +40,26 @@ pub fn run_broker(config_path: &Path) -> Result<(), RacpError> {
         .clone();
     let controller = PinnedPeer::open(config.agent_pid)?;
     config.require_agent(controller.identity())?;
+    let guardian_pid = values
+        .get("guardian_pid")
+        .and_then(|s| s.parse::<u32>().ok())
+        .ok_or_else(|| RacpError::new("PERMISSION_DENIED"))?;
+    let guardian = PinnedPeer::open(guardian_pid)?;
+    config.require_broker(guardian.identity())?;
+    if values
+        .get("guardian_created")
+        .and_then(|s| s.parse::<f64>().ok())
+        != Some(guardian.identity().created)
+    {
+        return Err(RacpError::new("PERMISSION_DENIED"));
+    }
     let mut broker = Broker {
-        native: NativeDesktop::new(config.session_id)?,
+        native: NativeDesktop::new(
+            config.session_id,
+            super::hooks::marker(&config.secret),
+            guardian,
+        )?,
+        automation: super::automation::Automation::new().ok(),
         authority: DesktopState::new(config.session_id),
         device,
         captures: BTreeMap::new(),
@@ -87,9 +106,15 @@ impl Broker {
             .as_str()
             .ok_or_else(|| RacpError::new("INVALID_ARGUMENT"))?;
         if operation == "broker.status" {
-            return Ok(self.native.status());
+            let mut status = self.native.status();
+            status["ui_automation_available"] = json!(self.automation.is_some());
+            status["input_ready"] =
+                json!(status["available"] == true && status["input_hook_healthy"] == true);
+            return Ok(status);
         }
         if operation == "broker.stop" {
+            self.authority.abort();
+            self.native.release_inputs()?;
             self.stopped = true;
             return Ok(json!({"stopped":true}));
         }
@@ -149,6 +174,74 @@ impl Broker {
         let (snapshot, layout) = self.native.snapshot()?;
         let now = Instant::now();
         self.authority.tick(&snapshot, now);
+        if self.authority.needs_release() {
+            self.native.release_inputs()?;
+            self.authority.cleanup_confirmed();
+        }
+        let deadline = now
+            + Duration::from_millis(
+                request["context"]["timeout_ms"]
+                    .as_u64()
+                    .unwrap_or(1000)
+                    .min(30000),
+            );
+        if operation == "desktop.lease_acquire" {
+            let id = self.authority.acquire(
+                &scope,
+                payload["ttl_ms"].as_u64().unwrap_or(15000),
+                &snapshot,
+                now,
+            )?;
+            return Ok(
+                json!({"lease_id":id,"session_id":payload["session_id"],"ttl_ms":payload["ttl_ms"]}),
+            );
+        }
+        if operation == "desktop.lease_renew" {
+            let id = self.authority.renew(&scope, &payload, &snapshot, now)?;
+            return Ok(
+                json!({"lease_id":id,"session_id":payload["session_id"],"ttl_ms":payload["ttl_ms"]}),
+            );
+        }
+        if operation == "desktop.lease_release" {
+            self.authority.release(&scope, &payload, &snapshot, now)?;
+            self.native.release_inputs()?;
+            self.authority.cleanup_confirmed();
+            return Ok(json!({"released":true}));
+        }
+        if matches!(
+            operation,
+            "desktop.activate"
+                | "desktop.move"
+                | "desktop.click"
+                | "desktop.type"
+                | "desktop.key"
+                | "desktop.scroll"
+                | "desktop.drag"
+                | "desktop.invoke"
+                | "desktop.set_value"
+        ) {
+            let activated = operation == "desktop.activate";
+            self.authority
+                .guard(&scope, &payload, &snapshot, now, activated)?;
+            let dispatch = if matches!(operation, "desktop.invoke" | "desktop.set_value") {
+                self.automation
+                    .as_mut()
+                    .ok_or_else(|| RacpError::new("CAPABILITY_UNAVAILABLE"))?
+                    .mutate(&self.native, &scope, operation, &payload, deadline)
+            } else {
+                self.native
+                    .dispatch_input(operation, &payload, &snapshot, deadline)
+            };
+            if dispatch.is_err() {
+                self.authority.abort();
+                self.native.release_inputs()?;
+                self.authority.cleanup_confirmed();
+            }
+            let result = dispatch?;
+            let (after, _) = self.native.snapshot()?;
+            self.authority.dispatched(&after, activated)?;
+            return Ok(result);
+        }
         let observation = self.authority.observe(&scope, &snapshot, now)?;
         let mut result = layout;
         result["observation_id"] = json!(observation);
@@ -156,6 +249,24 @@ impl Broker {
         result["ttl_ms"] = json!(5000);
         match operation {
             "desktop.monitors" => (),
+            "desktop.inspect" => {
+                let value = self
+                    .automation
+                    .as_mut()
+                    .ok_or_else(|| RacpError::new("CAPABILITY_UNAVAILABLE"))?
+                    .inspect(
+                        &self.native,
+                        &scope,
+                        payload["window_id"].as_str().unwrap_or(""),
+                        result["observation_id"].as_str().unwrap(),
+                        payload["limit"].as_u64().unwrap_or(64) as usize,
+                        deadline,
+                    )?;
+                result
+                    .as_object_mut()
+                    .unwrap()
+                    .extend(value.as_object().unwrap().clone());
+            }
             "desktop.windows" => {
                 let limit = payload["limit"].as_u64().unwrap_or(64) as usize;
                 result["windows"] =

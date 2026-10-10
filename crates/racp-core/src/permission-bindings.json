@@ -1,0 +1,338 @@
+{
+  "system.info": [
+    "system.identity.read"
+  ],
+  "system.resources": [
+    "system.resources.read"
+  ],
+  "system.locale": [
+    "system.locale.read"
+  ],
+  "system.environment": [
+    "system.environment.read"
+  ],
+  "network.interfaces": [
+    "network.interfaces.read"
+  ],
+  "network.connections": [
+    "network.connections.read"
+  ],
+  "network.capture": [
+    "network.capture.ipv4",
+    "artifacts.export"
+  ],
+  "process.dump": [
+    "memory.dump.create",
+    "artifacts.export"
+  ],
+  "native.prepare": [
+    "network.tunnel.open",
+    "exec.argv",
+    "debugger.attach",
+    "memory.bytes.read",
+    "artifacts.export"
+  ],
+  "native.start": [
+    "network.tunnel.open",
+    "exec.argv",
+    "debugger.attach",
+    "memory.bytes.read",
+    "artifacts.export"
+  ],
+  "native.close": [
+    "network.tunnel.open",
+    "exec.argv"
+  ],
+  "proxy.prepare": [
+    "network.proxy.intercept",
+    "network.http.replay",
+    "network.tunnel.open",
+    "exec.argv",
+    "artifacts.export"
+  ],
+  "proxy.close": [
+    "network.tunnel.open",
+    "exec.argv"
+  ],
+  "clipboard.read": [
+    "clipboard.text.read"
+  ],
+  "clipboard.state": [
+    "clipboard.text.write"
+  ],
+  "clipboard.write": [
+    "clipboard.text.write"
+  ],
+  "storage.volumes": [
+    "storage.volumes.read"
+  ],
+  "services.list": [
+    "services.read"
+  ],
+  "services.get": [
+    "services.read"
+  ],
+  "software.inventory": [
+    "software.inventory.read"
+  ],
+  "shell.exec": [
+    "exec.argv"
+  ],
+  "browser.open": [
+    "browser.create"
+  ],
+  "browser.attach": [
+    "browser.attach.external"
+  ],
+  "browser.cdp_targets": [
+    "browser.attach.external"
+  ],
+  "browser.pages": [
+    "browser.pages.read"
+  ],
+  "browser.new_page": [
+    "browser.create"
+  ],
+  "browser.close": [
+    "browser.close"
+  ],
+  "browser.keepalive": [
+    "browser.create"
+  ],
+  "browser.close_page": [
+    "browser.close"
+  ],
+  "browser.navigate": [
+    "browser.navigate"
+  ],
+  "browser.snapshot": [
+    "browser.pages.read"
+  ],
+  "browser.frames": [
+    "browser.pages.read"
+  ],
+  "browser.screenshot": [
+    "browser.capture",
+    "artifacts.export"
+  ],
+  "browser.click": [
+    "browser.input"
+  ],
+  "browser.type": [
+    "browser.input"
+  ],
+  "browser.key": [
+    "browser.input"
+  ],
+  "browser.evaluate": [
+    "browser.evaluate"
+  ],
+  "browser.download": [
+    "browser.files.download",
+    "artifacts.export"
+  ],
+  "browser.upload": [
+    "browser.files.upload",
+    "artifacts.import"
+  ],
+  "desktop.sessions": [
+    "system.sessions.read"
+  ],
+  "desktop.monitors": [
+    "desktop.monitors.read"
+  ],
+  "desktop.foreground": [
+    "desktop.windows.read"
+  ],
+  "desktop.windows": [
+    "desktop.windows.read"
+  ],
+  "desktop.inspect": [
+    "desktop.windows.read",
+    "desktop.uia.read"
+  ],
+  "desktop.screenshot": [
+    "desktop.capture.screen",
+    "artifacts.export"
+  ],
+  "desktop.lease_acquire": [
+    "desktop.windows.read"
+  ],
+  "desktop.lease_renew": [
+    "desktop.windows.read"
+  ],
+  "desktop.lease_release": [
+    "desktop.windows.read"
+  ],
+  "desktop.activate": [
+    "desktop.windows.read",
+    "desktop.mouse.move"
+  ],
+  "desktop.move": [
+    "desktop.mouse.move"
+  ],
+  "desktop.click": [
+    "desktop.mouse.click"
+  ],
+  "desktop.type": [
+    "desktop.keyboard.text"
+  ],
+  "desktop.key": [
+    "desktop.keyboard.keys"
+  ],
+  "desktop.scroll": [
+    "desktop.mouse.scroll"
+  ],
+  "desktop.drag": [
+    "desktop.mouse.drag"
+  ],
+  "desktop.invoke": [
+    "desktop.uia.invoke"
+  ],
+  "desktop.set_value": [
+    "desktop.uia.set_value"
+  ],
+  "re.backends": [
+    "system.identity.read"
+  ],
+  "re.open": [
+    "analysis.binary.export",
+    "files.read.binary"
+  ],
+  "re.query": [
+    "analysis.binary.export"
+  ],
+  "re.command": [
+    "analysis.binary.export",
+    "files.edit"
+  ],
+  "re.close": [
+    "analysis.binary.export"
+  ],
+  "re.keepalive": [
+    "analysis.binary.export"
+  ],
+  "debugger.backends": [
+    "system.identity.read"
+  ],
+  "debugger.launch": [
+    "debugger.attach",
+    "exec.argv",
+    "process.spawn"
+  ],
+  "debugger.attach": [
+    "debugger.attach"
+  ],
+  "debugger.command": [
+    "debugger.breakpoint"
+  ],
+  "debugger.info": [
+    "debugger.observe"
+  ],
+  "debugger.registers": [
+    "debugger.observe"
+  ],
+  "debugger.read_memory": [
+    "debugger.observe",
+    "memory.bytes.read"
+  ],
+  "debugger.backtrace": [
+    "debugger.observe"
+  ],
+  "debugger.wait": [
+    "debugger.observe"
+  ],
+  "debugger.close": [
+    "debugger.detach"
+  ],
+  "debugger.keepalive": [
+    "debugger.attach"
+  ],
+  "filesystem.read": [
+    "files.read.text"
+  ],
+  "filesystem.write": [
+    "files.create"
+  ],
+  "filesystem.stat": [
+    "files.metadata.read"
+  ],
+  "filesystem.list": [
+    "files.list"
+  ],
+  "filesystem.mkdir": [
+    "files.directory.create"
+  ],
+  "filesystem.copy": [
+    "files.copy",
+    "files.read.binary",
+    "files.create"
+  ],
+  "filesystem.move": [
+    "files.move",
+    "files.create"
+  ],
+  "filesystem.delete": [
+    "files.delete"
+  ],
+  "filesystem.search": [
+    "files.search.names"
+  ],
+  "filesystem.search_content": [
+    "files.search.content",
+    "files.read.text"
+  ],
+  "filesystem.patch": [
+    "files.patch",
+    "files.edit",
+    "files.read.text"
+  ],
+  "filesystem.hash": [
+    "files.hash"
+  ],
+  "process.list": [
+    "process.list"
+  ],
+  "process.inspect": [
+    "process.inspect"
+  ],
+  "process.spawn": [
+    "process.spawn",
+    "exec.argv"
+  ],
+  "process.terminate": [
+    "process.stop.external"
+  ],
+  "process.wait": [
+    "process.wait"
+  ],
+  "process.tree": [
+    "process.tree"
+  ],
+  "process.memory_regions": [
+    "memory.regions.read"
+  ],
+  "process.memory_read": [
+    "memory.bytes.read"
+  ],
+  "terminal.open": [
+    "terminal.open",
+    "exec.argv"
+  ],
+  "terminal.read": [
+    "terminal.output.read"
+  ],
+  "terminal.write": [
+    "terminal.input.write",
+    "exec.argv"
+  ],
+  "terminal.resize": [
+    "terminal.resize"
+  ],
+  "terminal.close": [
+    "terminal.close"
+  ],
+  "terminal.keepalive": [
+    "terminal.open"
+  ]
+}

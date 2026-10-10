@@ -11,6 +11,8 @@ from racp_sdk.security import digest, token
 if TYPE_CHECKING:
     from racp_gateway.events import EventFeed
 
+from racp_gateway.migrations import CURRENT_GATEWAY_SCHEMA, migrate_gateway
+
 
 class GatewayStore(Journal):
     event_feed: "EventFeed | None" = None
@@ -42,6 +44,7 @@ class GatewayStore(Journal):
                 if self.db.execute("SELECT 1 FROM owner").fetchone():
                     raise RACPError("CONFLICT", "owner is already initialized")
                 self.db.execute("INSERT INTO owner VALUES ('owner_local', ?)", (owner_digest,))
+        migrate_gateway(self.db, CURRENT_GATEWAY_SCHEMA)
         self.db.execute("UPDATE devices SET info=json_set(info,'$.status','OFFLINE')")
 
     def owner(self, bearer: str) -> str:

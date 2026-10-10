@@ -1,8 +1,8 @@
 [project]
 name = "racp-gateway"
-version = "0.1.11"
+version = "0.1.21"
 requires-python = ">=3.12,<3.13"
-dependencies = ["racp-domain", "racp-protocol", "racp-policy", "racp-observability", "racp-sdk", "fastapi>=0.115,<1", "uvicorn[standard]>=0.34,<1", "mcp==2.0.0", "psutil>=6,<8", "PyJWT[crypto]==2.15.1"]
+dependencies = ["racp-domain", "racp-protocol", "racp-policy", "racp-observability", "racp-sdk", "fastapi>=0.115,<1", "uvicorn[standard]>=0.34,<1", "mcp==2.0.0", "psutil>=6,<8", "PyJWT[crypto]==2.15.1", "packaging>=26,<27"]
 
 [project.scripts]
 racp-gateway = "racp_gateway.main:main"

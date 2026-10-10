@@ -85,6 +85,7 @@
       "default": "application/octet-stream",
       "enum": [
         "application/octet-stream",
+        "application/vnd.tcpdump.pcap",
         "application/json",
         "application/vnd.racp.output-stream",
         "image/png",

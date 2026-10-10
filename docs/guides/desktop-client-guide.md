@@ -1,7 +1,7 @@
 # RACP 데스크톱 클라이언트 운용 가이드 (Desktop Client Guide)
 
 > **Document ID**: `DOC-GDE-DESKTOP`\
-> **Status**: Active · **Target Version**: v0.1.10\
+> **Status**: Active · **Target Version**: v0.1.13\
 > **Last Updated**: 2026-10-07 · **Classification**: User & Operations Guide
 
 ---
@@ -77,7 +77,10 @@ flowchart LR
 2. **클라이언트 실행**: `RACP Client.exe`를 실행하고 첫 화면에서 **[연결 파일 선택]**을 클릭하여 전달받은 `.racp` 파일을 로드합니다.
 3. **허용 폴더 인가**: Agent가 접근을 허용할 기본 작업 폴더(Default Workspace) 및 추가 허용 폴더(최대 15개)를 선택합니다.
 4. **실행 프로필 선택**: `read_only`, `standard`, `trusted_personal` 중 권한 프로필을 지정합니다.
-5. **등록 및 시작**: **[PC 등록]**을 클릭하면 Gateway에 1회용 등록 토큰을 제출하고 DPAPI 암호화 자격 증명을 로컬에 저장합니다. 이후 **[Agent 시작]**을 클릭합니다.
+5. **Windows 화면 제어 선택**: 화면 캡처와 마우스·키보드 제어가 필요하면 **[이 PC의 Windows 화면 캡처·마우스·키보드 조작 허용]**을 체크합니다. 기본값은 해제이며 연결 파일 등록과 직접 입력 등록에 같은 선택 항목이 있습니다.
+6. **등록 및 시작**: **[PC 등록]**을 클릭하면 Gateway에 1회용 등록 토큰을 제출하고 화면 제어 선택값과 DPAPI 암호화 자격 증명을 로컬에 저장합니다. 이후 **[Agent 시작]**을 클릭하면 현재 Windows 로그인 화면에 적용됩니다. 선택한 실행 권한과 승인 정책도 적용됩니다.
+
+등록 후에는 Agent를 중지하고 **[PC 설정] → [등록 정보 편집]**에서 같은 체크박스로 변경할 수 있습니다. **[설정 저장] → [Agent 시작]** 순서로 적용하며 기존 Device 등록은 유지됩니다.
 
 > [!TIP]
 > - 연결 파일에 포함된 일회용 토큰은 10분간만 유효하며, 1회 등록 성공 후 무효화됩니다.

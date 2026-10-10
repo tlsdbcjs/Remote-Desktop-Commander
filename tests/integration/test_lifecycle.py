@@ -30,17 +30,29 @@ async def wait_file(path: Path) -> None:
 async def test_life_01_timeout_kills_children_and_grandchildren(live: dict[str, Any]) -> None:
     grandchild = "import time; time.sleep(90)"
     child = (
-        "import subprocess,sys,time; from pathlib import Path; "
+        "import os,subprocess,sys,time; from pathlib import Path; "
         f"p=subprocess.Popen([sys.executable,'-c',{grandchild!r}]); "
-        "Path('grandchild.pid').write_text(str(p.pid)); time.sleep(90)"
+        "Path('grandchild.tmp').write_text(str(p.pid)); "
+        "os.replace('grandchild.tmp','grandchild.pid'); time.sleep(90)"
     )
     parent = (
-        "import subprocess,sys,time; from pathlib import Path; "
+        "import os,subprocess,sys,time; from pathlib import Path; "
         f"p=subprocess.Popen([sys.executable,'-c',{child!r}]); "
-        "Path('child.pid').write_text(str(p.pid)); time.sleep(90)"
+        "Path('child.tmp').write_text(str(p.pid)); "
+        "os.replace('child.tmp','child.pid'); time.sleep(90)"
     )
-    request = shell_request(live, [sys.executable, "-c", parent], timeout_ms=2000)
-    response = await live["client"].post("/api/v1/operations", json=request)
+    request = shell_request(live, [sys.executable, "-c", parent], timeout_ms=10000)
+    pending = asyncio.create_task(live["client"].post("/api/v1/operations", json=request))
+    try:
+        for name in ("child.pid", "grandchild.pid"):
+            await wait_file(live["workspace"] / name)
+            pid = int((live["workspace"] / name).read_text())
+            assert psutil.pid_exists(pid), "Fixture process must exist before the deadline"
+        response = await pending
+    finally:
+        if not pending.done():
+            pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
     result = response.json()
     assert result["state"] == "TIMED_OUT", result
     assert result["result"]["cleanup_status"] == "complete"
@@ -103,7 +115,7 @@ async def test_auth_03_revoke_blocks_new_work_and_cleans_owned_process(
 ) -> None:
     code = (
         "import os,time; from pathlib import Path; "
-        "Path('pid').write_text(str(os.getpid())); time.sleep(90)"
+        "Path('pid.tmp').write_text(str(os.getpid())); os.replace('pid.tmp','pid'); time.sleep(90)"
     )
     response = await live["client"].post(
         "/api/v1/operations",

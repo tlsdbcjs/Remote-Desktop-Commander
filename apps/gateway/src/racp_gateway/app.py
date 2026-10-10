@@ -16,6 +16,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field, ValidationError
 from racp_domain.jobs import JobState
 from racp_domain.models import TERMINAL_STATES, RACPError
+from racp_domain.version import VERSION
 from racp_protocol.artifacts import TransferComplete, TransferCreate
 from racp_protocol.console import (
     ApprovalView,
@@ -35,6 +36,9 @@ from racp_protocol.models import (
     Heartbeat,
     Hello,
     JobUpdate,
+    NativeOpened,
+    NativePacket,
+    NativeStopped,
     OperationInput,
     OutcomeExpired,
     Reconcile,
@@ -53,7 +57,9 @@ from racp_gateway.artifacts import ArtifactManager
 from racp_gateway.console_auth import COOKIE, ConsoleAuth
 from racp_gateway.events import EventFeed, EventResponse
 from racp_gateway.lists import ConsoleLists
+from racp_gateway.management.router import create_management_router
 from racp_gateway.mcp import create_mcp
+from racp_gateway.native_socket import native_socket
 from racp_gateway.network import checked_origin
 from racp_gateway.oauth import OAuthResourceConfig, OAuthTokenVerifier
 from racp_gateway.service import Connection, ControlPlane
@@ -112,6 +118,7 @@ def create_app(
     oauth_config: OAuthResourceConfig | None = None,
     client_ca_pem: str | None = None,
     local_mcp_port: int | None = None,
+    gateway_config_path: Path | None = None,
 ) -> FastAPI:
     if public_origin is not None:
         public_origin = checked_origin(public_origin)
@@ -188,13 +195,25 @@ def create_app(
                 await connection.socket.close(code=1001)
             store.close()
 
-    app = FastAPI(title="RACP Gateway", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="RACP Gateway", version=VERSION, lifespan=lifespan)
     app.state.control = control
     app.state.artifacts = artifacts
     app.state.console_auth = console_auth
     app.state.events = events
     app.state.lists = lists
     app.state.oauth = oauth
+    app.state.store = store
+    app.include_router(
+        create_management_router(
+            store,
+            console_auth,
+            events,
+            control,
+            data_dir=data_dir,
+            config_path=gateway_config_path,
+            oauth_configured=oauth is not None,
+        )
+    )
 
     def socket_origin_matches(socket: WebSocket) -> bool:
         try:
@@ -951,6 +970,8 @@ def create_app(
                     control.job_update(incoming, connection)
                 elif isinstance(incoming, (StreamOpened, StreamData, StreamGap, StreamEnd)):
                     control.streams.feed(incoming, connection)
+                elif isinstance(incoming, (NativeOpened,NativePacket,NativeStopped)):
+                    await control.native.feed(incoming,connection)
                 else:
                     raise RACPError("INVALID_ARGUMENT", "message not allowed in current state")
         except (WebSocketDisconnect, TimeoutError, ValueError, RACPError, OSError):
@@ -961,6 +982,7 @@ def create_app(
         finally:
             if connection:
                 control.streams.disconnected(device_id, connection)
+                await control.native.disconnected(device_id,connection)
                 await connection.writer.close()
             if connection and control.connections.get(device_id) is connection:
                 del control.connections[device_id]
@@ -1013,6 +1035,33 @@ def create_app(
             )
             return
         await terminal_socket(socket, device_id, handle_id, principal, control, recheck)
+
+    @app.websocket("/api/v1/devices/{device_id}/natives/{handle_id}/stream")
+    async def native_output(socket: WebSocket, device_id: str, handle_id: str) -> None:
+        try:
+            if socket.query_params:
+                raise RACPError(
+                    "PERMISSION_DENIED", "Native credentials cannot use query parameters"
+                )
+            expected = str(socket.url.replace(
+                scheme="https" if socket.url.scheme=="wss" else "http",path="",query=""
+            )).rstrip("/")
+            if socket.headers.get("origin") not in {None,expected}:
+                raise RACPError("PERMISSION_DENIED", "Native stream origin denied")
+            principal = store.owner(bearer(socket))
+
+            def recheck() -> None:
+                store.owner(bearer(socket))
+                if store.device(device_id,principal)["revoked"]:
+                    raise RACPError("DEVICE_REVOKED", "Native device revoked")
+
+            recheck()
+        except RACPError as exc:
+            await socket.send_denial_response(JSONResponse(
+                {"error":asdict(exc.error)},status_code=HTTP_ERRORS.get(exc.error.code,403)
+            ))
+            return
+        await native_socket(socket,device_id,handle_id,principal,control.native,recheck)
 
     app.mount("/mcp", mcp_app)
     console_build = console_dir or Path(__file__).with_name("static") / "console"

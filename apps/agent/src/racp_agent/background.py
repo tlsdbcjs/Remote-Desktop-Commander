@@ -2,7 +2,6 @@
 
 import argparse
 import asyncio
-import getpass
 import hmac
 import io
 import json
@@ -20,6 +19,7 @@ from pydantic import Field
 from racp_protocol.models import StrictModel
 from racp_sdk.security import SecretStore, canonical_digest, digest, token
 
+from racp_agent.execution_identity import execution_identity
 from racp_agent.instance_lock import InstanceLock, InstanceRunningError
 from racp_agent.main import open_agent
 from racp_agent.main import parser as agent_parser
@@ -136,7 +136,7 @@ def snapshot(agent: Agent, record: BackgroundRecord, *, stopping: bool) -> dict[
         "instance_id": record.instance_id,
         "device_id": agent.device_id,
         "agent_boot_id": agent.boot_id,
-        "execution_identity": getpass.getuser(),
+        "execution_identity": execution_identity(),
         "profile": agent.profile,
         "connected": connected,
         "connection_epoch": agent.epoch,

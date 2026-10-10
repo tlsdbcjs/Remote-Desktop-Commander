@@ -20,6 +20,8 @@ use std::{
 use tokio_util::sync::CancellationToken;
 
 struct Child {
+    guardian: std::process::Child,
+    _guardian_protection: ProtectedProcess,
     process: OwnedProcess,
     _protection: ProtectedProcess,
     peer: PeerIdentity,
@@ -106,6 +108,48 @@ impl Desktop {
             ]),
             false,
         )?;
+        use std::os::windows::process::CommandExt;
+        use std::process::{Command, Stdio};
+        let mut guardian = Command::new(std::env::current_exe()?)
+            .args(["guardian", "--pair-config"])
+            .arg(&path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(0x01000000 | 0x08000000)
+            .spawn()
+            .map_err(|_| RacpError::new("SESSION_UNAVAILABLE"))?;
+        let guardian_protection = ProtectedProcess::register(guardian.id())?;
+        let guardian_peer = PinnedPeer::open(guardian.id())?;
+        config.require_broker(guardian_peer.identity())?;
+        let ready_deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            if guardian.try_wait()?.is_some() || Instant::now() >= ready_deadline {
+                let _ = std::fs::remove_file(&path);
+                return Err(RacpError::new("SESSION_UNAVAILABLE"));
+            }
+            if let Ok(bytes) =
+                racp_core::read_bounded(&path.with_file_name("guardian-status.json"), 4096, true)
+            {
+                if let Ok(status) = serde_json::from_slice::<Value>(&bytes) {
+                    if status["pid"] == guardian.id()
+                        && status["create_time"] == guardian_peer.identity().created
+                        && status["healthy"] == true
+                        && status["outside_all_jobs"] == true
+                    {
+                        break;
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let mut values = SecretStore::new(path.clone()).load()?;
+        values.insert("guardian_pid".into(), guardian.id().to_string());
+        values.insert(
+            "guardian_created".into(),
+            guardian_peer.identity().created.to_string(),
+        );
+        SecretStore::new(path.clone()).save(&values, true)?;
         let guards = Workspaces::new(&root, &[])?;
         let spawn = OwnedProcess::spawn(CommandSpec {
             argv: vec![
@@ -128,6 +172,8 @@ impl Desktop {
         let peer = PinnedPeer::open(process.pid())?.identity().clone();
         config.require_broker(&peer)?;
         Ok(Child {
+            guardian,
+            _guardian_protection: guardian_protection,
             process,
             _protection: protection,
             peer,
@@ -340,6 +386,17 @@ impl Desktop {
             if !child.process.tree_empty()? {
                 return Err(RacpError::new("CLEANUP_FAILED"));
             }
+            racp_core::atomic_write(&child.path.with_file_name("guardian-stop"), b"", false)?;
+            let deadline = Instant::now() + Duration::from_secs(3);
+            loop {
+                if child.guardian.try_wait()?.is_some() {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    return Err(RacpError::new("CLEANUP_FAILED"));
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
             let _ = std::fs::remove_file(&child.path);
             *guard = None;
         }
@@ -354,7 +411,7 @@ impl Provider for Desktop {
             .map(|s| s.clone())
             .unwrap_or_else(|_| json!({"available":false}));
         vec![
-            json!({"name":"desktop","version":"1.0.0","supported":true,"enabled":self.enabled,"healthy":status["broker_running"]==true,"unavailable_reason":status["error_code"],"operations":["desktop.sessions","desktop.monitors","desktop.windows","desktop.foreground","desktop.screenshot"],"attributes":{"backend":"rust-windows-local-session-broker","sessions":[status],"input_guardian_available":false,"capture":"visible_rectangle","service_cross_session_launch":false}}),
+            json!({"name":"desktop","version":"1.0.0","supported":true,"enabled":self.enabled,"healthy":status["broker_running"]==true,"unavailable_reason":status["error_code"],"operations":["desktop.sessions","desktop.monitors","desktop.windows","desktop.foreground","desktop.screenshot","desktop.inspect","desktop.lease_acquire","desktop.lease_renew","desktop.lease_release","desktop.activate","desktop.move","desktop.click","desktop.type","desktop.key","desktop.scroll","desktop.drag","desktop.invoke","desktop.set_value"],"attributes":{"backend":"rust-windows-local-session-broker","sessions":[status],"input_guardian_available":true,"capture":"visible_rectangle","service_cross_session_launch":false}}),
         ]
     }
     fn execute(

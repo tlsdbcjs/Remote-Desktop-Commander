@@ -29,8 +29,11 @@ jobs:
         run: ./scripts/build_rust_agent.ps1 -BuildId "${{ github.run_id }}-${{ github.run_attempt }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: racp-agent-0.1.11-win-x64-${{ github.sha }}
-          path: dist/rust-agent/**
+          name: racp-agent-win-x64-${{ github.sha }}
+          path: |
+            dist/rust-agent/**/*.zip
+            dist/rust-agent/**/SHA256SUMS
+            dist/rust-agent/**/build-manifest.json
           if-no-files-found: error
           retention-days: 14
   windows-rust:

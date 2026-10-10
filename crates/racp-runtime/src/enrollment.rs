@@ -56,8 +56,9 @@ pub async fn enroll(request: Value, state: &Path) -> Result<Value, RacpError> {
     }
     racp_core::validate_local_path(state)?;
     let mut settings: AgentSettings = serde_json::from_value(
-        json!({"version":1,"gateway":gateway,"device_id":"dev_pending","workspace":request["workspace"],"data_dir":state.join("data"),"profile":request["profile"],"ca_file":request["ca_file"],"allowed_workspaces":request["allowed_workspaces"],"desktop_enabled":false}),
+        json!({"version":2,"gateway":gateway,"device_id":"dev_pending","workspace":request["workspace"],"data_dir":state.join("data"),"profile":request["profile"],"ca_file":request["ca_file"],"allowed_workspaces":request["allowed_workspaces"],"desktop_enabled":request["desktop_enabled"].as_bool().unwrap_or(false),"permissions":request.get("permissions").filter(|v|!v.is_null()).cloned().unwrap_or_else(||racp_core::legacy_permissions(request["desktop_enabled"]==true))}),
     )?;
+    settings.desktop_enabled = racp_core::desktop_enabled(settings.permissions.as_ref().unwrap());
     // All local validations precede consumption of the one-use server token.
     settings.validate(true)?;
     let http = http_client(settings.ca_file.as_deref())?;
@@ -119,5 +120,5 @@ pub async fn enroll_connection(request: Value, state: &Path) -> Result<Value, Ra
     } else {
         None
     };
-    enroll(json!({"action":"enroll","gateway":value.gateway,"token":value.token,"workspace":request["workspace"],"profile":request["profile"],"allowed_workspaces":request["allowed_workspaces"],"ca_file":ca}),state).await
+    enroll(json!({"action":"enroll","gateway":value.gateway,"token":value.token,"workspace":request["workspace"],"profile":request["profile"],"allowed_workspaces":request["allowed_workspaces"],"ca_file":ca,"desktop_enabled":request["desktop_enabled"],"permissions":request["permissions"]}),state).await
 }

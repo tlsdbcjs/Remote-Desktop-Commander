@@ -1,5 +1,4 @@
 import asyncio
-import getpass
 import json
 import os
 import platform
@@ -13,9 +12,12 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 import psutil
 from racp_domain.models import TERMINAL_STATES, ExecutionContext, RACPError
+from racp_domain.version import VERSION
 from racp_observability.logging import log_event
 from racp_policy.engine import Decision, evaluate, profile_rules
+from racp_policy.permissions import LocalPermissions, compile_permissions, legacy_permissions
 from racp_protocol.artifacts import ARTIFACT_INPUT_OPERATIONS
+from racp_protocol.clipboard import CLIPBOARD_MODELS
 from racp_protocol.models import (
     Ack,
     BrowserState,
@@ -26,6 +28,11 @@ from racp_protocol.models import (
     Heartbeat,
     Hello,
     JobUpdate,
+    NativeOpened,
+    NativePacket,
+    NativeStopped,
+    NativeSubscribe,
+    NativeUnsubscribe,
     OutcomeExpired,
     Reconcile,
     Request,
@@ -35,7 +42,10 @@ from racp_protocol.models import (
     decode_message,
     new_id,
 )
+from racp_protocol.native_operations import NATIVE_MODELS
+from racp_protocol.os_observation import OS_OBSERVATION_MODELS, WINDOWS_INVENTORY_READS
 from racp_protocol.provider_models import SENSITIVE_PROCESS_READS
+from racp_protocol.proxy import PROXY_MODELS
 from racp_protocol.registry import REGISTRY, validate_payload
 from racp_protocol.streams import StreamAck, StreamSubscribe, StreamUnsubscribe
 from racp_sdk.artifacts import ArtifactClient, file_digest
@@ -51,13 +61,26 @@ from racp_sdk.security import (
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
+from racp_agent.authorization import (
+    WorkspaceBindings,
+    authorize,
+    contains_attachment,
+    redact_arguments,
+)
 from racp_agent.browser_events import BrowserOutbox
+from racp_agent.execution_identity import execution_identity
+from racp_agent.native_runtime import ManagedNativeRuntime
 from racp_agent.outputs import OutputSpool
 from racp_agent.plugins.config import PluginConfig
 from racp_agent.providers.browser import BrowserProvider
 from racp_agent.providers.desktop import DesktopProvider
 from racp_agent.providers.filesystem import FilesystemProvider
+from racp_agent.providers.native_debugger import NativeDebuggerProvider
+from racp_agent.providers.network_capture import NetworkCaptureProvider
+from racp_agent.providers.os_observation import OSObservationProvider
 from racp_agent.providers.process import ProcessProvider
+from racp_agent.providers.process_dump import ProcessDumpProvider
+from racp_agent.providers.proxy import ProxyProvider
 from racp_agent.providers.reversing import ReversingProvider
 from racp_agent.providers.shell import ShellProvider
 from racp_agent.providers.terminal import TerminalProvider
@@ -75,6 +98,7 @@ class Agent:
         data_dir: Path,
         *,
         profile: str = "read_only",
+        permissions: LocalPermissions | None = None,
         browser_allowed_origins: tuple[str, ...] = (),
         browser_cdp: bool = False,
         desktop_sessions: tuple[int, ...] = (),
@@ -83,6 +107,7 @@ class Agent:
         plugins: PluginConfig | None = None,
         ca_file: Path | None = None,
         allowed_workspaces: tuple[WorkspaceSpec, ...] = (),
+        native_runtime: ManagedNativeRuntime | None = None,
     ) -> None:
         require_secure_url(gateway)
         self.gateway = gateway.rstrip("/")
@@ -90,10 +115,22 @@ class Agent:
         self.credential, self.device_id = credential, device_id
         self.boot_id = new_id("boot")
         self.profile = profile
+        self.permissions = compile_permissions(
+            permissions
+            if permissions is not None
+            else legacy_permissions(desktop_enabled=bool(desktop_sessions or desktop_login_users))
+        )
         self.journal = Journal(data_dir / "execution.db")
         self.journal.recover_agent()
+        self.workspace_bindings = WorkspaceBindings(self.journal.db)
         self.provider = ShellProvider(workspace, data_dir / "spool", allowed_workspaces)
         self.filesystem = FilesystemProvider(workspace, data_dir / "spool", allowed_workspaces)
+        self.os_observation = OSObservationProvider(workspace)
+        self.network_capture = NetworkCaptureProvider(data_dir / "spool")
+        self.process_dump = ProcessDumpProvider(data_dir / "spool")
+        self.native = NativeDebuggerProvider(data_dir / "native", native_runtime, self.send,
+            lambda: self.epoch, lambda: self.lease_expires)
+        self.proxy = ProxyProvider(self.send,lambda:self.epoch,lambda:self.lease_expires)
         self.processes = ProcessProvider(self.provider)
         self.terminals = TerminalProvider(self.provider)
         self.desktop = DesktopProvider(
@@ -112,13 +149,23 @@ class Agent:
             allowed_workspaces,
         )
         self.processes.extra_protected_pids = lambda: (
-            self.desktop.protected_pids() | self.reversing.protected_pids()
+            self.desktop.protected_pids()
+            | self.reversing.protected_pids()
+            | self.network_capture.protected_pids()
+            | self.process_dump.protected_pids()
+            | self.native.protected_pids()
         )
+        self.native.extra_protected_pids = self.processes.extra_protected_pids
+        self.proxy.protected = lambda: {os.getpid(),*self.processes.extra_protected_pids()}
+        self.process_dump.extra_protected_pids = self.processes.extra_protected_pids
         self.reversing.protected = lambda: {
             os.getpid(),
             *[p.pid for p in psutil.Process().parents()],
             *self.desktop.protected_pids(),
             *self.reversing.protected_pids(),
+            *self.network_capture.protected_pids(),
+            *self.process_dump.protected_pids(),
+            *self.native.protected_pids(),
         }
         self.browsers = BrowserProvider(
             data_dir / "spool", allowed_origins=browser_allowed_origins, cdp_enabled=browser_cdp
@@ -148,10 +195,166 @@ class Agent:
             not self.stopping.is_set() and self.lease_expires > time.monotonic()
         )
 
+    def effective_workspace(self, request: Request) -> str:
+        workspace_id = request.context.workspace_id
+        if request.operation.startswith("proxy.") and request.payload.get("handle_id"):
+            proxy_session = self.proxy.sessions.get(request.payload["handle_id"])
+            if proxy_session:
+                if proxy_session.scope.principal_id != request.context.principal_id:
+                    raise RACPError("PERMISSION_DENIED","Proxy belongs to another owner")
+                workspace_id = proxy_session.context.workspace_id
+        if request.operation.startswith("native.") and request.payload.get("handle_id"):
+            native_session = self.native.sessions.get(request.payload["handle_id"])
+            if native_session is not None:
+                if native_session.scope.principal_id != request.context.principal_id:
+                    raise RACPError("PERMISSION_DENIED", "Native session belongs to another owner")
+                workspace_id = native_session.context.workspace_id
+        if request.operation.startswith("terminal.") and request.payload.get("handle_id"):
+            session = self.terminals.sessions.get(request.payload["handle_id"])
+            if session is not None:
+                if session.context.principal_id != request.context.principal_id:
+                    raise RACPError(
+                        "PERMISSION_DENIED", "Terminal belongs to another principal", layer="agent"
+                    )
+                workspace_id = session.context.workspace_id
+        return workspace_id
+
+    def workspace_fingerprint(self, workspace_id: str) -> str:
+        guard = self.filesystem.guard.get(workspace_id)
+        with guard.directory(guard.root) as parent:
+            info = os.fstat(parent.fd) if parent.fd is not None else guard.root.stat()
+            return canonical_digest(
+                {
+                    "path": os.path.normcase(str(guard.root)),
+                    "device": info.st_dev,
+                    "inode": info.st_ino,
+                    "birth_ns": getattr(info, "st_birthtime_ns", None),
+                }
+            )
+
+    def bind_workspace(self, request: Request) -> None:
+        workspace_id = self.effective_workspace(request)
+        ids = {workspace_id, request.payload.get("destination_workspace_id") or workspace_id}
+        self.workspace_bindings.bind(
+            request, workspace_id, {id: self.workspace_fingerprint(id) for id in ids}
+        )
+
+    def delivery_workspace(self, request: Request) -> str:
+        binding = self.workspace_bindings.resolve(request)
+        try:
+            if any(
+                self.workspace_fingerprint(id) != fingerprint for id, fingerprint in binding.roots
+            ):
+                raise RACPError(
+                    "PERMISSION_DENIED", "Retained output workspace root changed", layer="agent"
+                )
+        except (OSError, RACPError):
+            raise RACPError(
+                "PERMISSION_DENIED",
+                "Retained output scope is no longer approved",
+                layer="agent",
+                reason="OUTPUT_SCOPE_CHANGED",
+            ) from None
+        return binding.workspace_id
+
+    def authorize(
+        self, request: Request, *, completed: bool = False, workspace_id: str | None = None
+    ) -> None:
+        if any(
+            evaluate(request.operation, profile_rules(profile)) == Decision.DENY
+            for profile in (self.profile, request.context.execution_profile_id)
+        ) or (
+            request.context.execution_profile_id == "trusted_personal"
+            and self.profile != "trusted_personal"
+            and REGISTRY[request.operation].side_effect
+        ):
+            raise RACPError(
+                "PERMISSION_DENIED",
+                "Agent local profile blocks this operation",
+                layer="agent",
+                execution_state="completed" if completed else "not_started",
+            )
+        workspace_id = workspace_id or self.effective_workspace(request)
+        owned = request.operation == "process.terminate" and any(
+            item.principal_id == request.context.principal_id
+            and item.boot_id == self.boot_id
+            and item.pid == request.payload.get("pid")
+            and item.create_time == request.payload.get("create_time")
+            for item in self.processes.managed.values()
+        )
+        authorize(
+            self.permissions, request, owned=owned, completed=completed, workspace_id=workspace_id
+        )
+
+    def authorize_export(self, operation_id: str, path: Path) -> None:
+        request = Request.model_validate(self.journal.get(operation_id)["request"])
+        self.authorize(request, completed=True, workspace_id=self.delivery_workspace(request))
+        if self.permissions.leaf("artifacts.export") != Decision.ALLOW:
+            raise RACPError(
+                "PERMISSION_DENIED",
+                "Client blocks Artifact export",
+                layer="agent",
+                execution_state="completed",
+            )
+        if path.stat().st_size > self.permissions.constraints.max_output_bytes:
+            raise RACPError(
+                "PERMISSION_DENIED",
+                "Artifact exceeds Client output ceiling",
+                layer="agent",
+                execution_state="completed",
+            )
+
+    def authorize_stream(self, request: StreamSubscribe) -> None:
+        session = self.terminals.sessions.get(request.handle_id)
+        workspace_id = (
+            session.context.workspace_id if session is not None else request.context.workspace_id
+        )
+        decision = self.permissions.decision(
+            "terminal.read",
+            {"max_bytes": request.max_bytes},
+            workspace_id=workspace_id,
+        )
+        if decision != Decision.ALLOW:
+            raise RACPError("PERMISSION_DENIED", "Client blocks terminal stream", layer="agent")
+
     async def send(self, message: Any) -> None:
         if self.writer is None:
             raise ConnectionError("agent is disconnected")
-        await self.writer.send(message)
+
+        def prepare() -> str:
+            if isinstance(message, (NativeOpened, NativePacket)):
+                if message.handle_id in self.proxy.sessions:
+                    self.proxy.guard_message(message)
+                else:
+                    self.native.guard_message(message)
+            if isinstance(message, Result):
+                return self.result_message(self.journal.get(message.operation_id)).model_dump_json()
+            if isinstance(message, Reconcile) and message.records:
+                records: list[Result] = []
+                expired = list(message.expired)
+                for original in message.records:
+                    current = self.result_message(self.journal.get(original.operation_id))
+                    if isinstance(current, Result):
+                        records.append(current)
+                    else:
+                        expired.append(current)
+                return message.model_copy(
+                    update={"records": records, "expired": expired}
+                ).model_dump_json()
+            if message.type in {"stream_data", "stream_opened", "stream_gap"}:
+                subscription = (
+                    self.streams.subscriptions.get(message.stream_id) if self.streams else None
+                )
+                if subscription is None or subscription.request.handle_id != message.handle_id:
+                    raise RACPError(
+                        "PERMISSION_DENIED",
+                        "Terminal subscription is no longer authorized",
+                        layer="agent",
+                    )
+                self.authorize_stream(subscription.request)
+            return str(message.model_dump_json())
+
+        await self.writer.send(message, prepare=prepare)
 
     def browser_event(self, session: Any, kind: str, state: str) -> None:
         handles = [
@@ -266,6 +469,56 @@ class Agent:
                 operation_id=record["id"],
                 trace_id=request["trace_id"],
             )
+        result, error = record["result"], record["error"]
+        outputs = self.outputs.descriptors(record["id"])
+        try:
+            parsed = Request.model_validate(request)
+            protected = (
+                result is not None
+                or bool(outputs)
+                or contains_attachment(error)
+                or bool((error or {}).get("details", {}).get("partial_result"))
+            )
+            self.authorize(
+                parsed,
+                completed=True,
+                workspace_id=self.delivery_workspace(parsed) if protected else None,
+            )
+            if (
+                request["operation"].startswith("process.")
+                and self.permissions.leaf("process.arguments.read") != Decision.ALLOW
+            ):
+                result, error = redact_arguments(result), redact_arguments(error)
+            if (outputs or contains_attachment(result) or contains_attachment(error)) and (
+                self.permissions.leaf("artifacts.export") != Decision.ALLOW
+            ):
+                raise RACPError(
+                    "PERMISSION_DENIED", "Client blocks retained Artifact delivery", layer="agent"
+                )
+            if any(
+                item.size_bytes > self.permissions.constraints.max_output_bytes for item in outputs
+            ) or (
+                len(json.dumps({"result": result, "error": error}, ensure_ascii=False).encode())
+                > self.permissions.constraints.max_output_bytes
+            ):
+                raise RACPError(
+                    "PERMISSION_DENIED", "Retained output exceeds Client ceiling", layer="agent"
+                )
+        except RACPError as exc:
+            # Keep both the journal and the original execution state immutable.
+            # Delivery denial is explicit; it must never resend the old bytes.
+            denied = asdict(exc.error)
+            denied["execution_state"] = (
+                "completed"
+                if record["state"] == "SUCCEEDED"
+                else ((error or {}).get("execution_state", "unknown"))
+            )
+            denied["details"].update(
+                recorded_state=record["state"],
+                output_authorization="withheld",
+                permission_revision=self.permissions.revision,
+            )
+            result, error, outputs = None, denied, []
         return Result(
             device_id=self.device_id,
             agent_boot_id=self.boot_id,
@@ -274,12 +527,13 @@ class Agent:
             operation_id=record["id"],
             trace_id=request["trace_id"],
             state=record["state"],
-            result=record["result"],
-            error=record["error"],
-            outputs=self.outputs.descriptors(record["id"]),
+            result=result,
+            error=error,
+            outputs=outputs,
         )
 
     async def _upload(self, path: Path, operation_id: str, media_type: str) -> str:
+        self.authorize_export(operation_id, path)
         row = self.journal.db.execute(
             "SELECT id FROM output_spool WHERE operation_id=? AND filename=? "
             "AND artifact_id IS NULL",
@@ -297,6 +551,7 @@ class Agent:
         try:
             result = await client.upload(
                 path,
+                authorization_gate=lambda: self.authorize_export(operation_id, path),
                 media_type=media_type,
                 transfer_id=output["transfer_id"] if output else None,
                 transfer_created=(
@@ -348,6 +603,8 @@ class Agent:
             request.context.workspace_id,
         )
         try:
+            self.authorize(request)
+            self.bind_workspace(request)
             self.filesystem.guard.get(context.workspace_id)
             self.outputs.reserve(request.operation_id, request.operation, request.payload)
             if (
@@ -418,20 +675,62 @@ class Agent:
                     "TIMEOUT", "execution budget elapsed before provider", layer="agent"
                 )
             context = replace(context, timeout_ms=remaining)
-            if request.operation.startswith("filesystem."):
-                outcome = await self.filesystem.execute(request.operation, payload, context)
+            self.authorize(request)
+            if request.operation in {*NATIVE_MODELS,*PROXY_MODELS}:
+                native_revision = self.permissions.revision
+
+                def native_gate() -> None:
+                    if self.permissions.revision != native_revision:
+                        raise RACPError(
+                            "PERMISSION_DENIED", "Native permission revision retired", layer="agent"
+                        )
+                    self.authorize(request)
+
+                transport = self.proxy if request.operation in PROXY_MODELS else self.native
+                outcome = await transport.execute(request.operation,payload,context,
+                    native_revision,native_gate)
+            elif request.operation == "network.capture":
+                outcome = await self.network_capture.execute(
+                    payload, context, lambda: self.authorize(request)
+                )
+            elif request.operation == "process.dump":
+                outcome = await self.process_dump.execute(
+                    payload, context, lambda: self.authorize(request)
+                )
+            elif request.operation in OS_OBSERVATION_MODELS:
+                outcome = await self.os_observation.execute(request.operation, payload, context)
+            elif request.operation.startswith("filesystem."):
+                captured_revision = self.permissions.revision
+
+                def file_gate() -> None:
+                    if self.permissions.revision != captured_revision:
+                        raise RACPError(
+                            "PERMISSION_DENIED", "File operation permission revision retired",
+                            layer="agent",
+                        )
+                    self.authorize(request, workspace_id=context.workspace_id)
+
+                outcome = await self.filesystem.execute(
+                    request.operation, payload, context, gate=file_gate
+                )
             elif request.operation.startswith("terminal."):
                 outcome = await self.terminals.execute(request.operation, payload, context)
             elif request.operation.startswith("process."):
                 outcome = await self.processes.execute(request.operation, request.payload, context)
             elif request.operation.startswith("browser."):
                 outcome = await self.browsers.execute(request.operation, payload, context)
-            elif request.operation.startswith("desktop."):
+            elif request.operation.startswith("desktop.") or request.operation in CLIPBOARD_MODELS:
                 outcome = await self.desktop.execute(request.operation, payload, context)
             elif request.operation.startswith(("re.", "debugger.")):
                 outcome = await self.reversing.execute(request.operation, payload, context)
             else:
                 outcome = await self.provider.execute(request.operation, request.payload, context)
+            self.authorize(request, completed=True)
+            if (
+                request.operation.startswith("process.")
+                and self.permissions.leaf("process.arguments.read") != Decision.ALLOW
+            ):
+                outcome = redact_arguments(outcome)
             if (
                 outcome["state"] == "CANCELLED"
                 and self.cancel_reasons.get(request.operation_id) == "deadline"
@@ -448,6 +747,15 @@ class Agent:
                     ).error
                 )
             result = outcome.get("result")
+            if result and len(json.dumps(result, ensure_ascii=False).encode()) > (
+                self.permissions.constraints.max_output_bytes
+            ):
+                raise RACPError(
+                    "PERMISSION_DENIED",
+                    "Result exceeds Client output ceiling",
+                    layer="agent",
+                    execution_state="completed",
+                )
             if (
                 result
                 and not result.get("spool_path")
@@ -471,6 +779,7 @@ class Agent:
                         "artifact_media_type", "application/vnd.racp.output-stream"
                     )
                     output = await self.prepare_output(path, request.operation_id, media_type)
+                    self.authorize_export(request.operation_id, path)
                     result["output_id"] = output["id"]
                     upload = asyncio.create_task(
                         self._upload(path, request.operation_id, media_type)
@@ -508,6 +817,7 @@ class Agent:
                 preview_path = Path(preview.pop("spool_path"))
                 media_type = preview.pop("artifact_media_type", "image/png")
                 output = await self.prepare_output(preview_path, request.operation_id, media_type)
+                self.authorize_export(request.operation_id, preview_path)
                 preview["output_id"] = output["id"]
                 preview_upload = asyncio.create_task(
                     self._upload(preview_path, request.operation_id, media_type)
@@ -520,6 +830,7 @@ class Agent:
                     preview_upload.cancel()
                     await asyncio.gather(preview_upload, return_exceptions=True)
                     preview["artifact_upload_status"] = "pending"
+            self.authorize(request, completed=True)
             self.journal.transition(
                 request.operation_id, outcome["state"], result=result, error=outcome.get("error")
             )
@@ -589,6 +900,16 @@ class Agent:
                 ),
             )
         finally:
+            if request.operation == "network.capture":
+                self.network_capture.release(
+                    request.operation_id,
+                    preserve=bool(self.outputs.descriptors(request.operation_id)),
+                )
+            if request.operation == "process.dump":
+                self.process_dump.release(
+                    request.operation_id,
+                    preserve=bool(self.outputs.descriptors(request.operation_id)),
+                )
             self.outputs.release(request.operation_id)
             self.deadlines.pop(request.operation_id, None)
             self.cancel_reasons.pop(request.operation_id, None)
@@ -612,7 +933,9 @@ class Agent:
 
     async def dispatch(self, request: Request) -> None:
         received_deadline = time.monotonic() + request.remaining_timeout_ms / 1000
-        validate_payload(request.operation, request.payload)
+        request = request.model_copy(
+            update={"payload": validate_payload(request.operation, request.payload)}
+        )
         normalized: dict[str, Any] = {
             "operation": request.operation,
             "payload": request.payload,
@@ -748,7 +1071,8 @@ class Agent:
                     agent_boot_id=self.boot_id,
                     connection_epoch=self.epoch,
                     handles=self.inventory(),
-                    capabilities=[self.desktop.capability(), *self.reversing.capabilities()],
+                    capabilities=[self.desktop.capability(), self.desktop.clipboard_capability(),
+                                  *self.reversing.capabilities()],
                 )
             )
 
@@ -791,6 +1115,8 @@ class Agent:
         handles = [self.terminals.handle(item) for item in list(self.terminals.sessions.values())]
         handles.extend(self.browsers.inventory())
         handles.extend(handle.model_dump() for handle in self.reversing.inventory())
+        handles.extend(handle.model_dump() for handle in self.native.handles())
+        handles.extend(handle.model_dump() for handle in self.proxy.handles())
         handles.extend(
             item.handle(self.device_id, self.processes.instance_id)
             for item in list(self.processes.managed.values())
@@ -798,14 +1124,16 @@ class Agent:
         handles.sort(key=lambda handle: handle["state"] not in {"ACTIVE", "CREATING", "CLOSING"})
         return [ResourceHandle.model_validate(handle) for handle in handles[:128]]
 
+    def compact_outcomes(self) -> None:
+        self.journal.compact(pinned_operations=set(self.tasks) | self.outputs.pinned_operations())
+        self.workspace_bindings.collect()
+
     async def lease_watchdog(self) -> None:
         last_maintenance = time.monotonic()
         while not self.stopping.is_set():
             await asyncio.sleep(0.25)
             if time.monotonic() - last_maintenance >= 60:
-                self.journal.compact(
-                    pinned_operations=set(self.tasks) | self.outputs.pinned_operations()
-                )
+                self.compact_outcomes()
                 last_maintenance = time.monotonic()
             if self.lease_expires and time.monotonic() >= self.lease_expires:
                 for task in list(self.tasks.values()):
@@ -816,6 +1144,8 @@ class Agent:
                 await self.browsers.cleanup()
                 await self.desktop.cleanup()
                 await self.reversing.cleanup()
+                await self.native.shutdown()
+                await self.proxy.shutdown()
             else:
                 await self.processes.cleanup(expired_only=True)
                 await self.terminals.cleanup(expired_only=True)
@@ -851,12 +1181,48 @@ class Agent:
                     Hello(
                         device_id=self.device_id,
                         agent_boot_id=self.boot_id,
-                        agent_version="0.1.0",
+                        agent_version=VERSION,
                         supported_protocols=[1],
                         platform=platform.system(),
                         architecture=platform.machine(),
-                        execution_identity=getpass.getuser(),
+                        execution_identity=execution_identity(),
                         capabilities=[
+                            self.native.capability(),
+                            self.proxy.capability(),
+                            self.network_capture.capability(),
+                            self.process_dump.capability(),
+                            self.desktop.clipboard_capability(),
+                            Capability(
+                                name="os_observation",
+                                version="1.0.0",
+                                operations=list(OS_OBSERVATION_MODELS),
+                                attributes={
+                                    "scope": "os_account",
+                                    "network_routes": False,
+                                    "network_dns_servers": False,
+                                    "capture": False,
+                                    "windows_inventory": os.name == "nt",
+                                    "windows_only_operations": sorted(WINDOWS_INVENTORY_READS),
+                                },
+                            ),
+                            Capability(
+                                name="permissions",
+                                version="1.0.0",
+                                operations=[],
+                                attributes={
+                                    "source": "local",
+                                    "revision": self.permissions.revision,
+                                    "enforcement": "structured_api",
+                                    "grants": dict(self.permissions.grants),
+                                    "disabled_categories": sorted(
+                                        self.permissions.disabled_categories
+                                    ),
+                                    "constraints": self.permissions.constraints.model_dump(
+                                        mode="json"
+                                    ),
+                                    "local_approval_supported": False,
+                                },
+                            ),
                             self.browser_capability(),
                             self.desktop.capability(),
                             *self.reversing.capabilities(),
@@ -913,6 +1279,7 @@ class Agent:
                                     name
                                     for name in REGISTRY
                                     if name.startswith("process.")
+                                    and name != "process.dump"
                                     and (os.name == "nt" or name not in SENSITIVE_PROCESS_READS)
                                 ],
                                 attributes={
@@ -964,12 +1331,16 @@ class Agent:
                     device_id=self.device_id,
                     agent_boot_id=self.boot_id,
                     connection_epoch=self.epoch,
-                    execution_identity=getpass.getuser(),
+                    execution_identity=execution_identity(),
                     workspace=str(self.filesystem.guard.root),
                     profile=self.profile,
                 )
                 self.streams = TerminalStreams(
-                    self.terminals, self.send, self.profile, lambda: self.lease_expires
+                    self.terminals,
+                    self.send,
+                    self.profile,
+                    lambda: self.lease_expires,
+                    self.authorize_stream,
                 )
                 heartbeat = asyncio.create_task(self.heartbeat(welcome.heartbeat_interval_ms))
                 try:
@@ -1006,6 +1377,24 @@ class Agent:
                                     task.cancel()
                             elif isinstance(message, StreamSubscribe):
                                 await self.streams.subscribe(message)
+                            elif isinstance(message, NativeSubscribe):
+                                try:
+                                    if message.handle_id in self.proxy.sessions:
+                                        await self.proxy.subscribe(message)
+                                    else:
+                                        await self.native.subscribe(message)
+                                except RACPError:
+                                    await self.send(NativeStopped(
+                                        **{key:getattr(message,key) for key in (
+                                            "device_id","agent_boot_id","connection_epoch",
+                                            "stream_id","handle_id"
+                                        )},reason="error"
+                                    ))
+                            elif isinstance(message, (NativePacket,NativeUnsubscribe)):
+                                if message.handle_id in self.proxy.sessions:
+                                    await self.proxy.receive(message)
+                                else:
+                                    await self.native.receive(message)
                             elif isinstance(message, StreamAck):
                                 self.streams.ack(message)
                             elif isinstance(message, StreamUnsubscribe):
@@ -1019,6 +1408,8 @@ class Agent:
                     heartbeat.cancel()
                     await asyncio.gather(heartbeat, return_exceptions=True)
             finally:
+                await self.native.shutdown()
+                await self.proxy.shutdown()
                 if self.streams is not None:
                     await self.streams.close()
                     self.streams = None

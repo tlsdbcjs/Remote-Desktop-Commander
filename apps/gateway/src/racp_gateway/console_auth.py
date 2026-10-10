@@ -83,6 +83,33 @@ class ConsoleAuth:
             )
         return credential, self.view(credential)
 
+    def create_session(self, owner: str) -> tuple[str, ConsoleSession]:
+        """Create a browser session for an already authenticated local/OIDC principal."""
+        credential = token()
+        current = monotonic()
+        with self.store.transaction():
+            active = self.store.db.execute(
+                "SELECT COUNT(*) FROM console_sessions WHERE clock_id=? "
+                "AND last_activity>? AND created_monotonic>?",
+                (self.store.retention_clock_id, current - 1800, current - 43200),
+            ).fetchone()[0]
+            if active >= 16:
+                raise RACPError("RESOURCE_EXHAUSTED", "Console session limit reached")
+            expires = (datetime.now(UTC) + timedelta(hours=12)).isoformat().replace("+00:00", "Z")
+            self.store.db.execute(
+                "INSERT INTO console_sessions VALUES (?,?,?,?,?,?)",
+                (
+                    digest(credential),
+                    owner,
+                    self.store.retention_clock_id,
+                    current,
+                    current,
+                    expires,
+                ),
+            )
+            self.store.audit("console_session_created", {"context": {"principal_id": owner}})
+        return credential, self.view(credential)
+
     def authenticate(self, credential: str, *, csrf: str | None = None, touch: bool = False) -> str:
         row = self.store.db.execute(
             "SELECT * FROM console_sessions WHERE digest=?", (digest(credential),)

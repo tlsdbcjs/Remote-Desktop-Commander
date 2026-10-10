@@ -4,6 +4,384 @@
  */
 
 export interface paths {
+  "/api/v1/management/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Management Status */
+    get: operations["management_status_api_v1_management_status_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/settings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Management Settings */
+    get: operations["management_settings_api_v1_management_settings_get"];
+    /** Management Settings Apply */
+    put: operations["management_settings_apply_api_v1_management_settings_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/settings/stage": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Management Settings Stage */
+    post: operations["management_settings_stage_api_v1_management_settings_stage_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/devices": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Management Devices */
+    get: operations["management_devices_api_v1_management_devices_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/users": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Management Users */
+    get: operations["management_users_api_v1_management_users_get"];
+    put?: never;
+    /** Management User Create */
+    post: operations["management_user_create_api_v1_management_users_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/users/{user_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Management User Patch */
+    patch: operations["management_user_patch_api_v1_management_users__user_id__patch"];
+    trace?: never;
+  };
+  "/api/v1/management/groups": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Management Groups */
+    get: operations["management_groups_api_v1_management_groups_get"];
+    put?: never;
+    /** Management Group Create */
+    post: operations["management_group_create_api_v1_management_groups_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/groups/{group_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Management Group Patch */
+    patch: operations["management_group_patch_api_v1_management_groups__group_id__patch"];
+    trace?: never;
+  };
+  "/api/v1/management/devices/{device_id}/groups": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Management Device Groups */
+    patch: operations["management_device_groups_api_v1_management_devices__device_id__groups_patch"];
+    trace?: never;
+  };
+  "/api/v1/management/logs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Management Logs */
+    get: operations["management_logs_api_v1_management_logs_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/log-exports": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Management Log Export Create */
+    post: operations["management_log_export_create_api_v1_management_log_exports_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/log-exports/{export_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Management Log Export Status */
+    get: operations["management_log_export_status_api_v1_management_log_exports__export_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/log-exports/{export_id}/download": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Management Log Export Download */
+    get: operations["management_log_export_download_api_v1_management_log_exports__export_id__download_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/backups": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Management Backups */
+    get: operations["management_backups_api_v1_management_backups_get"];
+    put?: never;
+    /** Management Backup Create */
+    post: operations["management_backup_create_api_v1_management_backups_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/backups/{backup_id}/restore-preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Management Restore Preview */
+    get: operations["management_restore_preview_api_v1_management_backups__backup_id__restore_preview_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/restores": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Management Restore Create */
+    post: operations["management_restore_create_api_v1_management_restores_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/maintenance-jobs/{job_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Management Maintenance Job */
+    get: operations["management_maintenance_job_api_v1_management_maintenance_jobs__job_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/updates/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Management Update Status */
+    get: operations["management_update_status_api_v1_management_updates_status_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/updates/check": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Management Update Check */
+    post: operations["management_update_check_api_v1_management_updates_check_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/updates/apply": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Management Update Apply */
+    post: operations["management_update_apply_api_v1_management_updates_apply_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/support-bundles": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Management Support Bundle Create */
+    post: operations["management_support_bundle_create_api_v1_management_support_bundles_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/support-bundles/{bundle_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Management Support Bundle Download */
+    get: operations["management_support_bundle_download_api_v1_management_support_bundles__bundle_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/console/setup-token": {
     parameters: {
       query?: never;
@@ -768,6 +1146,45 @@ export interface components {
         [key: string]: unknown;
       };
     };
+    /** BackupCreateRequest */
+    BackupCreateRequest: {
+      /** Idempotency Key */
+      idempotency_key: string;
+    };
+    /** BackupSetView */
+    BackupSetView: {
+      /** Id */
+      id: string;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "COMPLETE" | "INCOMPLETE" | "CORRUPT";
+      /** Manifest Path */
+      manifest_path: string;
+      /** Sha256 */
+      sha256: string;
+      /** Schema Version */
+      schema_version: number;
+      /** Instance Id */
+      instance_id: string;
+      /** Created At */
+      created_at: string;
+    };
+    /** ConfigCheck */
+    ConfigCheck: {
+      /** Valid */
+      valid: boolean;
+      /** Errors */
+      errors?: string[];
+      /** Warnings */
+      warnings?: string[];
+      /**
+       * Restart Required
+       * @default false
+       */
+      restart_required: boolean;
+    };
     /** ConsoleLogin */
     ConsoleLogin: {
       /** Setup Secret */
@@ -791,6 +1208,62 @@ export interface components {
       absolute_seconds: number;
       /** Expires At */
       expires_at: string;
+    };
+    /** DeviceGroupCreateRequest */
+    DeviceGroupCreateRequest: {
+      /** Name */
+      name: string;
+      /** Tags */
+      tags?: string[];
+    };
+    /** DeviceGroupPatchRequest */
+    DeviceGroupPatchRequest: {
+      /** Expected Revision */
+      expected_revision: number;
+      /** Name */
+      name?: string | null;
+      /** Tags */
+      tags?: string[] | null;
+      /** Device Ids */
+      device_ids?: string[] | null;
+    };
+    /** DeviceGroupView */
+    DeviceGroupView: {
+      /** Id */
+      id: string;
+      /** Name */
+      name: string;
+      /** Tags */
+      tags?: string[];
+      /** Device Ids */
+      device_ids?: string[];
+      /** Revision */
+      revision: number;
+    };
+    /** DeviceGroupsPatch */
+    DeviceGroupsPatch: {
+      /** Group Ids */
+      group_ids?: string[];
+      /** Expected Revision */
+      expected_revision: number;
+    };
+    /** DeviceMetadataView */
+    DeviceMetadataView: {
+      /** Device Id */
+      device_id: string;
+      /** Group Ids */
+      group_ids?: string[];
+      /** Tags */
+      tags?: string[];
+      /** Revision */
+      revision: number;
+    };
+    /** DevicePage */
+    DevicePage: {
+      /** Items */
+      items: components["schemas"]["ManagedDeviceView"][];
+      /** Next Cursor */
+      next_cursor?: string | null;
     };
     /** DeviceView */
     DeviceView: {
@@ -848,6 +1321,66 @@ export interface components {
        * @default false
        */
       include_connection_file: boolean;
+    };
+    /** GatewayStatusView */
+    GatewayStatusView: {
+      /**
+       * Lifecycle
+       * @enum {string}
+       */
+      lifecycle:
+        | "STARTING"
+        | "READY"
+        | "DRAINING"
+        | "STOPPING"
+        | "STOPPED"
+        | "DEGRADED"
+        | "FAILED";
+      /** Ready */
+      ready: boolean;
+      /** Version */
+      version: string;
+      /** Instance Id */
+      instance_id?: string | null;
+      /**
+       * Mode
+       * @enum {string}
+       */
+      mode: "service" | "portable" | "legacy";
+      /**
+       * Setup Mode
+       * @enum {string}
+       */
+      setup_mode: "local_owner" | "oidc";
+      /**
+       * Database
+       * @enum {string}
+       */
+      database: "ready" | "busy" | "failed";
+      /**
+       * Mcp
+       * @enum {string}
+       */
+      mcp: "owner_bearer" | "oauth" | "not_configured";
+      /** Settings Revision */
+      settings_revision: number;
+      /** Connected Devices */
+      connected_devices: number;
+      /** Total Devices */
+      total_devices: number;
+      /** Event Streams */
+      event_streams: number;
+      /**
+       * Tls Configured
+       * @default false
+       */
+      tls_configured: boolean;
+      /** Tls Expires At */
+      tls_expires_at?: string | null;
+      /** Disk Free Bytes */
+      disk_free_bytes?: number | null;
+      /** Warnings */
+      warnings?: string[];
     };
     /** HTTPValidationError */
     HTTPValidationError: {
@@ -1009,6 +1542,235 @@ export interface components {
        */
       sort: "rowid_desc";
     };
+    /** LogExportCreateRequest */
+    LogExportCreateRequest: {
+      query?: components["schemas"]["LogQuery"];
+      /**
+       * Format
+       * @default jsonl
+       * @enum {string}
+       */
+      format: "json" | "jsonl";
+      /** Idempotency Key */
+      idempotency_key: string;
+      /**
+       * Max Rows
+       * @default 10000
+       */
+      max_rows: number;
+      /**
+       * Max Bytes
+       * @default 5242880
+       */
+      max_bytes: number;
+    };
+    /** LogExportReceiptView */
+    LogExportReceiptView: {
+      /** Id */
+      id: string;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "PENDING" | "SUCCEEDED" | "FAILED";
+      /**
+       * Format
+       * @enum {string}
+       */
+      format: "json" | "jsonl";
+      /** File Name */
+      file_name: string;
+      /** Rows */
+      rows: number;
+      /** Size Bytes */
+      size_bytes: number;
+      /**
+       * Truncated
+       * @default false
+       */
+      truncated: boolean;
+      /** Sha256 */
+      sha256?: string | null;
+      /** Created At */
+      created_at: string;
+      /** Expires At */
+      expires_at: string;
+      /** Error */
+      error?: string | null;
+    };
+    /** LogItem */
+    LogItem: {
+      /** Id */
+      id: string;
+      /**
+       * Source
+       * @enum {string}
+       */
+      source: "audit" | "diagnostic";
+      /** Timestamp */
+      timestamp: string;
+      /** Event */
+      event: string;
+      /** Level */
+      level: string;
+      /** Message */
+      message: string;
+      /** Device Id */
+      device_id: string;
+      /** Request Id */
+      request_id: string;
+      /** Actor Id */
+      actor_id: string;
+      /** Fields */
+      fields: {
+        [key: string]: unknown;
+      };
+    };
+    /** LogPage */
+    LogPage: {
+      /** Items */
+      items: components["schemas"]["LogItem"][];
+      /** Next Cursor */
+      next_cursor?: string | null;
+      /**
+       * Dropped Count
+       * @default 0
+       */
+      dropped_count: number;
+    };
+    /** LogQuery */
+    LogQuery: {
+      /** Source */
+      source?: ("audit" | "diagnostic") | null;
+      /** Device Id */
+      device_id?: string | null;
+      /** Request Id */
+      request_id?: string | null;
+      /** Actor Id */
+      actor_id?: string | null;
+      /** From Utc */
+      from_utc?: string | null;
+      /** To Utc */
+      to_utc?: string | null;
+      /**
+       * Limit
+       * @default 100
+       */
+      limit: number;
+      /** Cursor */
+      cursor?: string | null;
+    };
+    /** MaintenanceJobView */
+    MaintenanceJobView: {
+      /** Id */
+      id: string;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "backup" | "restore" | "update";
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "PENDING" | "RUNNING" | "DEFERRED" | "SUCCEEDED" | "FAILED";
+      /** Actor Id */
+      actor_id: string;
+      /** Realm Id */
+      realm_id: string;
+      /** Created At */
+      created_at: string;
+      /** Updated At */
+      updated_at: string;
+      /** Progress */
+      progress?: number | null;
+      /** Error */
+      error?: string | null;
+      /** Receipt Id */
+      receipt_id?: string | null;
+    };
+    /** ManagedDeviceView */
+    ManagedDeviceView: {
+      /** Id */
+      id: string;
+      /** Name */
+      name: string;
+      /** Revoked */
+      revoked: boolean;
+      /** Epoch */
+      epoch: number;
+      /** Info */
+      info: {
+        [key: string]: unknown;
+      };
+      /** Group Ids */
+      group_ids?: string[];
+      /** Tags */
+      tags?: string[];
+      /** Revision */
+      revision: number;
+    };
+    /** ManagementUserCreateRequest */
+    ManagementUserCreateRequest: {
+      /** Issuer */
+      issuer: string;
+      /** Subject */
+      subject: string;
+      /** Display Name */
+      display_name: string;
+      /**
+       * Role
+       * @enum {string}
+       */
+      role: "owner" | "admin" | "operator" | "viewer";
+      /** Device Grants */
+      device_grants?: string[];
+      /** Output Grants */
+      output_grants?: string[];
+      /** Operation Grants */
+      operation_grants?: string[];
+    };
+    /** ManagementUserPatchRequest */
+    ManagementUserPatchRequest: {
+      /** Role */
+      role?: ("owner" | "admin" | "operator" | "viewer") | null;
+      /** Active */
+      active?: boolean | null;
+      /** Device Grants */
+      device_grants?: string[] | null;
+      /** Output Grants */
+      output_grants?: string[] | null;
+      /** Operation Grants */
+      operation_grants?: string[] | null;
+    };
+    /** ManagementUserView */
+    ManagementUserView: {
+      /** Id */
+      id: string;
+      /** Realm Id */
+      realm_id: string;
+      /** Issuer */
+      issuer: string;
+      /** Subject */
+      subject: string;
+      /** Display Name */
+      display_name: string;
+      /**
+       * Role
+       * @enum {string}
+       */
+      role: "owner" | "admin" | "operator" | "viewer";
+      /** Active */
+      active: boolean;
+      /** Auth Revision */
+      auth_revision: number;
+      /** Device Grants */
+      device_grants?: string[];
+      /** Output Grants */
+      output_grants?: string[];
+      /** Operation Grants */
+      operation_grants?: string[];
+    };
     /** OperationInput */
     OperationInput: {
       /** Device Id */
@@ -1042,6 +1804,91 @@ export interface components {
       execution_profile_id: "read_only" | "standard" | "trusted_personal";
       /** Approval Id */
       approval_id?: string | null;
+    };
+    /** RestoreCreateRequest */
+    RestoreCreateRequest: {
+      /** Backup Id */
+      backup_id: string;
+      /** Expected Instance Id */
+      expected_instance_id: string;
+      /** Expected Revision */
+      expected_revision: number;
+      /** Idempotency Key */
+      idempotency_key: string;
+      /**
+       * Confirm
+       * @constant
+       */
+      confirm: true;
+    };
+    /** RestorePreview */
+    RestorePreview: {
+      /** Backup Id */
+      backup_id: string;
+      /** Valid */
+      valid: boolean;
+      /** Schema Version */
+      schema_version: number;
+      /** Instance Id */
+      instance_id: string;
+      /**
+       * Database Integrity
+       * @enum {string}
+       */
+      database_integrity: "ok" | "failed";
+      /** Warnings */
+      warnings?: string[];
+    };
+    /** SettingsPatch */
+    SettingsPatch: {
+      /** Expected Revision */
+      expected_revision: number;
+      /** Changes */
+      changes: {
+        [key: string]: unknown;
+      };
+    };
+    /** SettingsView */
+    SettingsView: {
+      /** Revision */
+      revision: number;
+      /** Values */
+      values: {
+        [key: string]: unknown;
+      };
+      /**
+       * Restart Required
+       * @default false
+       */
+      restart_required: boolean;
+    };
+    /** SupportBundleCreateRequest */
+    SupportBundleCreateRequest: {
+      /**
+       * Log Limit
+       * @default 200
+       */
+      log_limit: number;
+      /**
+       * Max Bytes
+       * @default 5242880
+       */
+      max_bytes: number;
+    };
+    /** SupportBundleReceiptView */
+    SupportBundleReceiptView: {
+      /** Id */
+      id: string;
+      /** File Name */
+      file_name: string;
+      /** Sha256 */
+      sha256: string;
+      /** Size Bytes */
+      size_bytes: number;
+      /** Created At */
+      created_at: string;
+      /** Log Entries */
+      log_entries: number;
     };
     /** TransferComplete */
     TransferComplete: {
@@ -1082,6 +1929,62 @@ export interface components {
         | "image/png"
         | "image/jpeg"
         | "text/plain";
+    };
+    /** UpdateApplyRequest */
+    UpdateApplyRequest: {
+      /** Release Id */
+      release_id: string;
+      /** Expected Revision */
+      expected_revision: number;
+      /** Idempotency Key */
+      idempotency_key: string;
+      /**
+       * Confirm
+       * @constant
+       */
+      confirm: true;
+    };
+    /** UpdateCandidateView */
+    UpdateCandidateView: {
+      /** Release Id */
+      release_id: string;
+      /** Version */
+      version: string;
+      /**
+       * Platform
+       * @constant
+       */
+      platform: "win-x64";
+      /** Manifest Sha256 */
+      manifest_sha256: string;
+      /** Schema Rollback Compatible */
+      schema_rollback_compatible: boolean;
+      /** Checked At */
+      checked_at: string;
+    };
+    /** UpdateCheckRequest */
+    UpdateCheckRequest: {
+      /** Expected Revision */
+      expected_revision: number;
+    };
+    /** UpdateStatusView */
+    UpdateStatusView: {
+      /** Configured */
+      configured: boolean;
+      /** Current Version */
+      current_version: string;
+      /** Channel */
+      channel: string;
+      /** Feed Configured */
+      feed_configured: boolean;
+      /** Trust Key Configured */
+      trust_key_configured: boolean;
+      /** Automatic Check */
+      automatic_check: boolean;
+      /** Apply Enabled */
+      apply_enabled: boolean;
+      /** Reason */
+      reason?: string | null;
     };
     /** ValidationError */
     ValidationError: {
@@ -1134,6 +2037,789 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  management_status_api_v1_management_status_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GatewayStatusView"];
+        };
+      };
+    };
+  };
+  management_settings_api_v1_management_settings_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SettingsView"];
+        };
+      };
+    };
+  };
+  management_settings_apply_api_v1_management_settings_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SettingsPatch"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SettingsView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_settings_stage_api_v1_management_settings_stage_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SettingsPatch"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConfigCheck"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_devices_api_v1_management_devices_get: {
+    parameters: {
+      query?: {
+        search?: string | null;
+        status_filter?: string | null;
+        group_id?: string | null;
+        limit?: number;
+        cursor?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DevicePage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_users_api_v1_management_users_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ManagementUserView"][];
+        };
+      };
+    };
+  };
+  management_user_create_api_v1_management_users_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ManagementUserCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ManagementUserView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_user_patch_api_v1_management_users__user_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ManagementUserPatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ManagementUserView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_groups_api_v1_management_groups_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceGroupView"][];
+        };
+      };
+    };
+  };
+  management_group_create_api_v1_management_groups_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DeviceGroupCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceGroupView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_group_patch_api_v1_management_groups__group_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        group_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DeviceGroupPatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceGroupView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_device_groups_api_v1_management_devices__device_id__groups_patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        device_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DeviceGroupsPatch"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceMetadataView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_logs_api_v1_management_logs_get: {
+    parameters: {
+      query?: {
+        source?: ("audit" | "diagnostic") | null;
+        device_id?: string | null;
+        request_id?: string | null;
+        actor_id?: string | null;
+        from_utc?: string | null;
+        to_utc?: string | null;
+        limit?: number;
+        cursor?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LogPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_log_export_create_api_v1_management_log_exports_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LogExportCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LogExportReceiptView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_log_export_status_api_v1_management_log_exports__export_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        export_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LogExportReceiptView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_log_export_download_api_v1_management_log_exports__export_id__download_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        export_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_backups_api_v1_management_backups_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupSetView"][];
+        };
+      };
+    };
+  };
+  management_backup_create_api_v1_management_backups_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BackupCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupSetView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_restore_preview_api_v1_management_backups__backup_id__restore_preview_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        backup_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RestorePreview"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_restore_create_api_v1_management_restores_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RestoreCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MaintenanceJobView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_maintenance_job_api_v1_management_maintenance_jobs__job_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MaintenanceJobView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_update_status_api_v1_management_updates_status_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UpdateStatusView"];
+        };
+      };
+    };
+  };
+  management_update_check_api_v1_management_updates_check_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateCheckRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UpdateCandidateView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_update_apply_api_v1_management_updates_apply_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateApplyRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MaintenanceJobView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_support_bundle_create_api_v1_management_support_bundles_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SupportBundleCreateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupportBundleReceiptView"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  management_support_bundle_download_api_v1_management_support_bundles__bundle_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        bundle_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   console_setup_api_v1_console_setup_token_post: {
     parameters: {
       query?: never;

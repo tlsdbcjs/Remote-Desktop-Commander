@@ -1,0 +1,1667 @@
+[
+  {
+    "id": "system.identity.read",
+    "category": "system",
+    "category_label": "장비·OS·사용자 상태",
+    "label": "hostname·OS·아키텍처·Agent 버전",
+    "description": "원격 Device 출처 포함",
+    "baseline": "기존 정보 일부 / 통합 후속",
+    "implementation": "rpc",
+    "operations": [
+      "debugger.backends",
+      "re.backends",
+      "system.info"
+    ]
+  },
+  {
+    "id": "system.resources.read",
+    "category": "system",
+    "category_label": "장비·OS·사용자 상태",
+    "label": "CPU·메모리·uptime·부하",
+    "description": "시점·샘플 주기·항목 수 제한",
+    "baseline": "후속",
+    "implementation": "rpc",
+    "operations": [
+      "system.resources"
+    ]
+  },
+  {
+    "id": "system.sessions.read",
+    "category": "system",
+    "category_label": "장비·OS·사용자 상태",
+    "label": "로그인 사용자·session·잠금 상태",
+    "description": "SID/session identity, 민감한 계정 정보 구분",
+    "baseline": "기존 desktop 일부",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.sessions"
+    ]
+  },
+  {
+    "id": "system.locale.read",
+    "category": "system",
+    "category_label": "장비·OS·사용자 상태",
+    "label": "시간대·언어·환경 기본 경로",
+    "description": "환경 전체 dump와 credential 출력 금지",
+    "baseline": "후속",
+    "implementation": "rpc",
+    "operations": [
+      "system.locale"
+    ]
+  },
+  {
+    "id": "system.environment.read",
+    "category": "system",
+    "category_label": "장비·OS·사용자 상태",
+    "label": "허용된 환경 변수 조회",
+    "description": "allowlist, 민감 변수 값 비노출",
+    "baseline": "후속",
+    "implementation": "rpc",
+    "operations": [
+      "system.environment"
+    ]
+  },
+  {
+    "id": "files.list",
+    "category": "files_read",
+    "category_label": "파일 보기",
+    "label": "폴더 탐색",
+    "description": "named workspace·page limit",
+    "baseline": "기존 `filesystem.list`",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.list"
+    ]
+  },
+  {
+    "id": "files.search.names",
+    "category": "files_read",
+    "category_label": "파일 보기",
+    "label": "이름/glob 검색",
+    "description": "루트·깊이·결과 수·시간 제한",
+    "baseline": "기존 search 일부",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.search"
+    ]
+  },
+  {
+    "id": "files.search.content",
+    "category": "files_read",
+    "category_label": "파일 보기",
+    "label": "텍스트 내용 검색",
+    "description": "bytes/encoding·파일 크기 제한",
+    "baseline": "후속 · 현재 search는 이름/glob만 지원",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.search_content"
+    ]
+  },
+  {
+    "id": "files.read.text",
+    "category": "files_read",
+    "category_label": "파일 보기",
+    "label": "텍스트 구간 읽기",
+    "description": "encoding·BOM·줄바꿈·truncate 명시",
+    "baseline": "기존 read",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.patch",
+      "filesystem.read",
+      "filesystem.search_content"
+    ]
+  },
+  {
+    "id": "files.read.binary",
+    "category": "files_read",
+    "category_label": "파일 보기",
+    "label": "binary 읽기·회수",
+    "description": "hash·Artifact·전송 예산",
+    "baseline": "기존 read",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.copy",
+      "filesystem.read",
+      "re.open"
+    ]
+  },
+  {
+    "id": "files.preview.image",
+    "category": "files_read",
+    "category_label": "파일 보기",
+    "label": "원격 이미지 보기",
+    "description": "binary read + host preview, Device/hash 대응",
+    "baseline": "기존 회수 / 전용 UX 후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "files.metadata.read",
+    "category": "files_read",
+    "category_label": "파일 보기",
+    "label": "stat·크기·수정 시각·revision",
+    "description": "내용 읽기와 별도 권한",
+    "baseline": "기존 stat",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.stat"
+    ]
+  },
+  {
+    "id": "files.hash",
+    "category": "files_read",
+    "category_label": "파일 보기",
+    "label": "SHA-256 등 무결성 확인",
+    "description": "대상 revision과 hash 연결",
+    "baseline": "기존 hash",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.hash"
+    ]
+  },
+  {
+    "id": "files.create",
+    "category": "files_write",
+    "category_label": "파일 변경",
+    "label": "새 파일 생성",
+    "description": "기존 파일 덮어쓰기 금지",
+    "baseline": "기존 write create",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.copy",
+      "filesystem.move",
+      "filesystem.write"
+    ]
+  },
+  {
+    "id": "files.directory.create",
+    "category": "files_write",
+    "category_label": "파일 변경",
+    "label": "폴더 생성",
+    "description": "허용 workspace 내",
+    "baseline": "기존 mkdir",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.mkdir"
+    ]
+  },
+  {
+    "id": "files.edit",
+    "category": "files_write",
+    "category_label": "파일 변경",
+    "label": "replace·append·truncate",
+    "description": "expected revision/offset, 원본 보존",
+    "baseline": "기존 일부",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.copy",
+      "filesystem.move",
+      "filesystem.patch",
+      "filesystem.write",
+      "re.command"
+    ]
+  },
+  {
+    "id": "files.patch",
+    "category": "files_write",
+    "category_label": "파일 변경",
+    "label": "검토 가능한 diff·여러 파일 편집",
+    "description": "batch 실패 계약·원자성 별도 구현",
+    "baseline": "후속",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.patch"
+    ]
+  },
+  {
+    "id": "files.copy",
+    "category": "files_write",
+    "category_label": "파일 변경",
+    "label": "복사",
+    "description": "출발 read + 목적 create/edit 모두 검사",
+    "baseline": "기존 copy",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.copy"
+    ]
+  },
+  {
+    "id": "files.move",
+    "category": "files_write",
+    "category_label": "파일 변경",
+    "label": "이동·이름 변경",
+    "description": "양쪽 workspace·revision 검사",
+    "baseline": "기존 move",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.move"
+    ]
+  },
+  {
+    "id": "files.delete",
+    "category": "files_write",
+    "category_label": "파일 변경",
+    "label": "파일·폴더 삭제",
+    "description": "recursive 별도 제약·정확한 대상",
+    "baseline": "기존 delete",
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.delete"
+    ]
+  },
+  {
+    "id": "files.trash",
+    "category": "files_write",
+    "category_label": "파일 변경",
+    "label": "휴지통으로 이동·복원",
+    "description": "Windows 사용자/session 지원 확인",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "files.acl.read",
+    "category": "files_write",
+    "category_label": "파일 변경",
+    "label": "ACL 조회/변경",
+    "description": "변경은 강한 opt-in, 권한 상향과 분리",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "files.acl.modify",
+    "category": "files_write",
+    "category_label": "파일 변경",
+    "label": "ACL 조회/변경",
+    "description": "변경은 강한 opt-in, 권한 상향과 분리",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "storage.volumes.read",
+    "category": "storage",
+    "category_label": "디스크·볼륨",
+    "label": "volume·filesystem·용량",
+    "description": "filesystem 경로 읽기와 분리",
+    "baseline": "후속",
+    "implementation": "rpc",
+    "operations": [
+      "storage.volumes"
+    ]
+  },
+  {
+    "id": "storage.health.read",
+    "category": "storage",
+    "category_label": "디스크·볼륨",
+    "label": "디스크·SMART·오류 상태",
+    "description": "실제 장치/driver 지원에 의존",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "storage.usage.read",
+    "category": "storage",
+    "category_label": "디스크·볼륨",
+    "label": "폴더별 사용량 분석",
+    "description": "traversal·시간·결과 예산",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "storage.mount.modify",
+    "category": "storage",
+    "category_label": "디스크·볼륨",
+    "label": "mount·drive letter 관리",
+    "description": "Agent state/workspace 영향 검토",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "storage.raw.read",
+    "category": "storage",
+    "category_label": "디스크·볼륨",
+    "label": "raw volume/disk 읽기",
+    "description": "admin·장치 allowlist·정확한 offset/bytes",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "storage.partition.modify",
+    "category": "storage",
+    "category_label": "디스크·볼륨",
+    "label": "partition·format·raw write",
+    "description": "기본 off, maintenance·현지 확인·별도 복구 절차",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "storage.format",
+    "category": "storage",
+    "category_label": "디스크·볼륨",
+    "label": "partition·format·raw write",
+    "description": "기본 off, maintenance·현지 확인·별도 복구 절차",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "storage.raw.write",
+    "category": "storage",
+    "category_label": "디스크·볼륨",
+    "label": "partition·format·raw write",
+    "description": "기본 off, maintenance·현지 확인·별도 복구 절차",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "process.list",
+    "category": "process",
+    "category_label": "프로세스 관측·제어",
+    "label": "process 목록",
+    "description": "snapshot·page limit",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "process.list"
+    ]
+  },
+  {
+    "id": "process.inspect",
+    "category": "process",
+    "category_label": "프로세스 관측·제어",
+    "label": "exe·사용자·상태·생성 시각",
+    "description": "민감 cmdline은 분리·redaction",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "process.inspect"
+    ]
+  },
+  {
+    "id": "process.arguments.read",
+    "category": "process",
+    "category_label": "프로세스 관측·제어",
+    "label": "command line 관측",
+    "description": "token/password 인자 포함 가능, 명시 opt-in",
+    "baseline": "기존 반환 범위 분리 필요",
+    "implementation": "rpc",
+    "operations": [
+      "process.inspect",
+      "process.list",
+      "process.tree"
+    ]
+  },
+  {
+    "id": "process.tree",
+    "category": "process",
+    "category_label": "프로세스 관측·제어",
+    "label": "부모·자식 tree",
+    "description": "PID/create_time/boot, 보호 대상",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "process.tree"
+    ]
+  },
+  {
+    "id": "process.wait",
+    "category": "process",
+    "category_label": "프로세스 관측·제어",
+    "label": "종료 대기",
+    "description": "wait timeout은 target을 종료하지 않음",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "process.wait"
+    ]
+  },
+  {
+    "id": "process.spawn",
+    "category": "process",
+    "category_label": "프로세스 관측·제어",
+    "label": "프로그램 시작",
+    "description": "실행 정책·cwd/env·Job 소유권",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "debugger.launch",
+      "process.spawn"
+    ]
+  },
+  {
+    "id": "process.stop.owned",
+    "category": "process",
+    "category_label": "프로세스 관측·제어",
+    "label": "RACP 소유 process/tree 종료",
+    "description": "kernel 종료 확인, 동일 principal",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "process.terminate"
+    ]
+  },
+  {
+    "id": "process.stop.external",
+    "category": "process",
+    "category_label": "프로세스 관측·제어",
+    "label": "외부 process 종료 요청",
+    "description": "보호 process 거부, exact identity·추가 승인",
+    "baseline": "기존 primitive / 세부 gate 후속",
+    "implementation": "rpc",
+    "operations": [
+      "process.terminate"
+    ]
+  },
+  {
+    "id": "exec.recipe",
+    "category": "execution",
+    "category_label": "명령 실행",
+    "label": "사전에 정의한 실행 recipe",
+    "description": "고정 executable/hash·argv schema·출력 계약",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "exec.argv",
+    "category": "execution",
+    "category_label": "명령 실행",
+    "label": "명시 executable/argv",
+    "description": "실행 파일·cwd·env·timeout 제약",
+    "baseline": "기존 shell argv",
+    "implementation": "rpc",
+    "operations": [
+      "debugger.launch",
+      "native.close",
+      "native.prepare",
+      "native.start",
+      "process.spawn",
+      "proxy.close",
+      "proxy.prepare",
+      "shell.exec",
+      "terminal.open",
+      "terminal.write"
+    ]
+  },
+  {
+    "id": "exec.shell",
+    "category": "execution",
+    "category_label": "명령 실행",
+    "label": "PowerShell/CMD 등 shell",
+    "description": "shell 선택·script·redirection 위험 표시",
+    "baseline": "기존 explicit shell",
+    "implementation": "rpc",
+    "operations": [
+      "shell.exec"
+    ]
+  },
+  {
+    "id": "exec.script",
+    "category": "execution",
+    "category_label": "명령 실행",
+    "label": "임의 Python/JS/기타 코드",
+    "description": "OS 사용자 권한으로 동작, 상위 위험 권한",
+    "baseline": "기존 shell primitive",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "exec.environment.override",
+    "category": "execution",
+    "category_label": "명령 실행",
+    "label": "허용 환경 변수 설정",
+    "description": "시스템 root와 credential 관련 키 보호",
+    "baseline": "기존 일부",
+    "implementation": "rpc",
+    "operations": [
+      "process.spawn",
+      "shell.exec",
+      "terminal.open"
+    ]
+  },
+  {
+    "id": "exec.elevated",
+    "category": "execution",
+    "category_label": "명령 실행",
+    "label": "관리자 실행 경로 사용",
+    "description": "이미 확보한 token만 사용; 조용한 UAC 우회 금지",
+    "baseline": "실행 token 정보 / 전용 흐름 후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "terminal.open",
+    "category": "terminal",
+    "category_label": "지속 터미널·Job",
+    "label": "PTY/REPL session 생성",
+    "description": "실행 정책 + Handle 소유권",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "terminal.keepalive",
+      "terminal.open"
+    ]
+  },
+  {
+    "id": "terminal.output.read",
+    "category": "terminal",
+    "category_label": "지속 터미널·Job",
+    "label": "출력·cursor·gap 관측",
+    "description": "출력에 민감 데이터 포함 가능",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "terminal.read"
+    ]
+  },
+  {
+    "id": "terminal.input.write",
+    "category": "terminal",
+    "category_label": "지속 터미널·Job",
+    "label": "stdin 입력",
+    "description": "interactive shell의 임의 실행 위험 동일",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "terminal.write"
+    ]
+  },
+  {
+    "id": "terminal.resize",
+    "category": "terminal",
+    "category_label": "지속 터미널·Job",
+    "label": "크기 변경",
+    "description": "소유 session만",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "terminal.resize"
+    ]
+  },
+  {
+    "id": "terminal.close",
+    "category": "terminal",
+    "category_label": "지속 터미널·Job",
+    "label": "종료·renew",
+    "description": "lease·동일 owner·boot",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "terminal.close"
+    ]
+  },
+  {
+    "id": "jobs.observe",
+    "category": "terminal",
+    "category_label": "지속 터미널·Job",
+    "label": "장기 작업 진행·취소",
+    "description": "terminal 결과 불변·소유 tree 정리",
+    "baseline": "기존",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "jobs.cancel",
+    "category": "terminal",
+    "category_label": "지속 터미널·Job",
+    "label": "장기 작업 진행·취소",
+    "description": "terminal 결과 불변·소유 tree 정리",
+    "baseline": "기존",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "desktop.monitors.read",
+    "category": "desktop_read",
+    "category_label": "화면 보기",
+    "label": "monitor·원점·배율",
+    "description": "실제 session·display 상태",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.monitors"
+    ]
+  },
+  {
+    "id": "desktop.windows.read",
+    "category": "desktop_read",
+    "category_label": "화면 보기",
+    "label": "창 목록·foreground·bounds",
+    "description": "process/window identity",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.activate",
+      "desktop.foreground",
+      "desktop.inspect",
+      "desktop.lease_acquire",
+      "desktop.lease_release",
+      "desktop.lease_renew",
+      "desktop.windows"
+    ]
+  },
+  {
+    "id": "desktop.capture.screen",
+    "category": "desktop_read",
+    "category_label": "화면 보기",
+    "label": "화면 캡처",
+    "description": "민감 화면 opt-in·해상도/bytes·선택 monitor",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.screenshot"
+    ]
+  },
+  {
+    "id": "desktop.capture.window",
+    "category": "desktop_read",
+    "category_label": "화면 보기",
+    "label": "지정 창 캡처",
+    "description": "stale HWND·대상 PID 방지",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.screenshot"
+    ]
+  },
+  {
+    "id": "desktop.uia.read",
+    "category": "desktop_read",
+    "category_label": "화면 보기",
+    "label": "native UI 요소 관측",
+    "description": "password/protected 요소 제한",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.inspect"
+    ]
+  },
+  {
+    "id": "desktop.mouse.click",
+    "category": "desktop_input",
+    "category_label": "화면 입력·앱 제어",
+    "label": "click·double/right click",
+    "description": "관측 revision·대상 창·입력 lease",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.click"
+    ]
+  },
+  {
+    "id": "desktop.mouse.move",
+    "category": "desktop_input",
+    "category_label": "화면 입력·앱 제어",
+    "label": "이동·drag",
+    "description": "buttons release·Guardian 정리",
+    "baseline": "기존 일부",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.activate",
+      "desktop.move"
+    ]
+  },
+  {
+    "id": "desktop.mouse.drag",
+    "category": "desktop_input",
+    "category_label": "화면 입력·앱 제어",
+    "label": "이동·drag",
+    "description": "buttons release·Guardian 정리",
+    "baseline": "기존 일부",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.drag"
+    ]
+  },
+  {
+    "id": "desktop.mouse.scroll",
+    "category": "desktop_input",
+    "category_label": "화면 입력·앱 제어",
+    "label": "세로/가로 scroll",
+    "description": "own observation·modifier ledger",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.scroll"
+    ]
+  },
+  {
+    "id": "desktop.keyboard.text",
+    "category": "desktop_input",
+    "category_label": "화면 입력·앱 제어",
+    "label": "Unicode text 입력",
+    "description": "foreground·session·취소 경계",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.type"
+    ]
+  },
+  {
+    "id": "desktop.keyboard.keys",
+    "category": "desktop_input",
+    "category_label": "화면 입력·앱 제어",
+    "label": "key·shortcut",
+    "description": "Ctrl/Alt/Shift 및 key-up 정리",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.key"
+    ]
+  },
+  {
+    "id": "desktop.uia.invoke",
+    "category": "desktop_input",
+    "category_label": "화면 입력·앱 제어",
+    "label": "native 요소 action",
+    "description": "stale ref·protected 값 거부",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.invoke"
+    ]
+  },
+  {
+    "id": "desktop.uia.set_value",
+    "category": "desktop_input",
+    "category_label": "화면 입력·앱 제어",
+    "label": "native 요소 action",
+    "description": "stale ref·protected 값 거부",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "desktop.set_value"
+    ]
+  },
+  {
+    "id": "apps.inventory.read",
+    "category": "desktop_input",
+    "category_label": "화면 입력·앱 제어",
+    "label": "앱 목록·시작·닫기",
+    "description": "process/exec 권한과 결합",
+    "baseline": "기존 primitive / 전용 모델 후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "apps.launch",
+    "category": "desktop_input",
+    "category_label": "화면 입력·앱 제어",
+    "label": "앱 목록·시작·닫기",
+    "description": "process/exec 권한과 결합",
+    "baseline": "기존 primitive / 전용 모델 후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "apps.close",
+    "category": "desktop_input",
+    "category_label": "화면 입력·앱 제어",
+    "label": "앱 목록·시작·닫기",
+    "description": "process/exec 권한과 결합",
+    "baseline": "기존 primitive / 전용 모델 후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "clipboard.text.read",
+    "category": "clipboard",
+    "category_label": "클립보드",
+    "label": "현재 text 읽기",
+    "description": "명시한 로그인 session·UTF-8 8 KiB 상한·기본 off",
+    "baseline": "v0.1.20 clipboard.read RPC 추가",
+    "implementation": "rpc",
+    "operations": [
+      "clipboard.read"
+    ]
+  },
+  {
+    "id": "clipboard.text.write",
+    "category": "clipboard",
+    "category_label": "클립보드",
+    "label": "text 교체·지우기",
+    "description": "내용 없는 상태 조회·필수 sequence/CAS·session·8 KiB 상한",
+    "baseline": "v0.1.20 clipboard.state/write RPC 추가",
+    "implementation": "rpc",
+    "operations": [
+      "clipboard.state",
+      "clipboard.write"
+    ]
+  },
+  {
+    "id": "clipboard.formats.read",
+    "category": "clipboard",
+    "category_label": "클립보드",
+    "label": "formats·이미지 읽기",
+    "description": "native clipboard 접근·Artifact 경계",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "clipboard.files.write",
+    "category": "clipboard",
+    "category_label": "클립보드",
+    "label": "파일 목록/이미지 설정",
+    "description": "대상 경로·데이터 ownership",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "browser.create",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "RACP 소유 격리 browser",
+    "description": "native runtime·소유 tree 정리",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "browser.keepalive",
+      "browser.new_page",
+      "browser.open"
+    ]
+  },
+  {
+    "id": "browser.close",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "RACP 소유 격리 browser",
+    "description": "native runtime·소유 tree 정리",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "browser.close",
+      "browser.close_page"
+    ]
+  },
+  {
+    "id": "browser.pages.read",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "tab/frame·URL·DOM·snapshot",
+    "description": "관측 ID·navigation revision",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "browser.frames",
+      "browser.pages",
+      "browser.snapshot"
+    ]
+  },
+  {
+    "id": "browser.capture",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "screenshot",
+    "description": "Artifact/hash·page scope",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "browser.screenshot"
+    ]
+  },
+  {
+    "id": "browser.navigate",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "URL 이동·새 page",
+    "description": "URL/domain·redirect 범위",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "browser.navigate"
+    ]
+  },
+  {
+    "id": "browser.input",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "click/type/key",
+    "description": "page·element·관측 경계",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "browser.click",
+      "browser.key",
+      "browser.type"
+    ]
+  },
+  {
+    "id": "browser.evaluate",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "page JavaScript",
+    "description": "DOM·통신·storage 변화 가능, 별도 권한",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "browser.evaluate"
+    ]
+  },
+  {
+    "id": "browser.files.upload",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "upload/download",
+    "description": "files/export 권한·hash·quota",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "browser.upload"
+    ]
+  },
+  {
+    "id": "browser.files.download",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "upload/download",
+    "description": "files/export 권한·hash·quota",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "browser.download"
+    ]
+  },
+  {
+    "id": "browser.attach.external",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "기존 사용자 browser attach",
+    "description": "명시한 CDP scope, 사용자 browser 보존",
+    "baseline": "기존 / 강한 opt-in",
+    "implementation": "rpc",
+    "operations": [
+      "browser.attach",
+      "browser.cdp_targets"
+    ]
+  },
+  {
+    "id": "browser.console.read",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "console·요청/응답 기록",
+    "description": "secret redaction·body opt-in·HAR 한도",
+    "baseline": "후속 전용 RPC",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "browser.network.read",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "console·요청/응답 기록",
+    "description": "secret redaction·body opt-in·HAR 한도",
+    "baseline": "후속 전용 RPC",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "browser.cookies.read",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "cookie/storage",
+    "description": "credential 민감도, 기본 off",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "browser.storage.modify",
+    "category": "browser",
+    "category_label": "브라우저",
+    "label": "cookie/storage",
+    "description": "credential 민감도, 기본 off",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "network.interfaces.read",
+    "category": "network",
+    "category_label": "네트워크",
+    "label": "NIC·IP·route·DNS·counters",
+    "description": "관측 시점·namespace",
+    "baseline": "후속",
+    "implementation": "rpc",
+    "operations": [
+      "network.interfaces"
+    ]
+  },
+  {
+    "id": "network.connections.read",
+    "category": "network",
+    "category_label": "네트워크",
+    "label": "연결·listen port·가능한 PID",
+    "description": "정확한 endpoint·권한에 따른 가시성",
+    "baseline": "후속",
+    "implementation": "rpc",
+    "operations": [
+      "network.connections"
+    ]
+  },
+  {
+    "id": "network.probe",
+    "category": "network",
+    "category_label": "네트워크",
+    "label": "DNS·연결·latency 검사",
+    "description": "peer/port allowlist·시간·빈도",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "network.capture.ipv4",
+    "category": "network",
+    "category_label": "네트워크",
+    "label": "지정 interface의 IPv4 TCP/UDP 수집",
+    "description": "admin·local port/peer 필터·30초/16 MiB 상한",
+    "baseline": "v0.1.19 CLI / v0.1.20 RPC 추가",
+    "implementation": "rpc",
+    "operations": [
+      "network.capture"
+    ]
+  },
+  {
+    "id": "network.capture.layer2",
+    "category": "network",
+    "category_label": "네트워크",
+    "label": "Ethernet/ARP·IPv6 등",
+    "description": "지원 backend와 실제 OS/driver probe",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "network.capture.ipv6",
+    "category": "network",
+    "category_label": "네트워크",
+    "label": "Ethernet/ARP·IPv6 등",
+    "description": "지원 backend와 실제 OS/driver probe",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "network.http.record",
+    "category": "network",
+    "category_label": "네트워크",
+    "label": "승인된 앱/session의 HAR/HTTP 기록",
+    "description": "request/response body·cookie 범위",
+    "baseline": "실제 Browser HAR 시험 / RPC 후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "network.proxy.intercept",
+    "category": "network",
+    "category_label": "네트워크",
+    "label": "명시한 proxy session 관측·변경",
+    "description": "라우팅·CA·pinning/mTLS 조건, 다른 앱 설정 보존",
+    "baseline": "후속",
+    "implementation": "rpc",
+    "operations": [
+      "proxy.prepare"
+    ]
+  },
+  {
+    "id": "network.http.replay",
+    "category": "network",
+    "category_label": "네트워크",
+    "label": "자체/승인된 요청 재전송",
+    "description": "대상·횟수·method/body·부작용 승인",
+    "baseline": "후속 원격 경로",
+    "implementation": "rpc",
+    "operations": [
+      "proxy.prepare"
+    ]
+  },
+  {
+    "id": "network.tunnel.open",
+    "category": "network",
+    "category_label": "네트워크",
+    "label": "host 도구와 Agent endpoint의 duplex channel",
+    "description": "인증 Handle·peer/owner·bytes/시간; native opaque command는 광역 실행 권한 필요",
+    "baseline": "v0.1.20 managed CDB native.prepare/start/close",
+    "implementation": "rpc",
+    "operations": [
+      "native.close",
+      "native.prepare",
+      "native.start",
+      "proxy.close",
+      "proxy.prepare"
+    ]
+  },
+  {
+    "id": "network.configuration.modify",
+    "category": "network",
+    "category_label": "네트워크",
+    "label": "DNS/route/firewall 변경",
+    "description": "연결 단절·복구·현재 설정 revision",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "network.firewall.modify",
+    "category": "network",
+    "category_label": "네트워크",
+    "label": "DNS/route/firewall 변경",
+    "description": "연결 단절·복구·현재 설정 revision",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "memory.regions.read",
+    "category": "memory",
+    "category_label": "메모리·dump",
+    "label": "virtual memory 영역·보호 속성",
+    "description": "PID/create_time/boot·보호 PID",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "process.memory_regions"
+    ]
+  },
+  {
+    "id": "memory.bytes.read",
+    "category": "memory",
+    "category_label": "메모리·dump",
+    "label": "지정 주소/범위 읽기",
+    "description": "live/non-atomic·크기·민감 정보",
+    "baseline": "기존, 현 한도 16 MiB",
+    "implementation": "rpc",
+    "operations": [
+      "debugger.read_memory",
+      "native.prepare",
+      "native.start",
+      "process.memory_read"
+    ]
+  },
+  {
+    "id": "memory.dump.create",
+    "category": "memory",
+    "category_label": "메모리·dump",
+    "label": "선택 process dump",
+    "description": "mini/full·PID/create_time/boot·spool/quota·취소 정리",
+    "baseline": "v0.1.20 전용 process.dump RPC 추가",
+    "implementation": "rpc",
+    "operations": [
+      "process.dump"
+    ]
+  },
+  {
+    "id": "memory.bytes.write",
+    "category": "memory",
+    "category_label": "메모리·dump",
+    "label": "지정 bytes 변경",
+    "description": "expected bytes·정확한 identity·추가 승인",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "memory.allocate",
+    "category": "memory",
+    "category_label": "메모리·dump",
+    "label": "allocation·memory protection",
+    "description": "reversible 범위·원본 정보·소유 process",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "memory.protection.modify",
+    "category": "memory",
+    "category_label": "메모리·dump",
+    "label": "allocation·memory protection",
+    "description": "reversible 범위·원본 정보·소유 process",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "analysis.binary.export",
+    "category": "analysis",
+    "category_label": "디버깅·리버싱 연결",
+    "label": "바이너리·의존성 회수",
+    "description": "files read + Artifact export·hash",
+    "baseline": "실제 IDA/Ghidra host MCP",
+    "implementation": "rpc",
+    "operations": [
+      "re.close",
+      "re.command",
+      "re.keepalive",
+      "re.open",
+      "re.query"
+    ]
+  },
+  {
+    "id": "analysis.dump.export",
+    "category": "analysis",
+    "category_label": "디버깅·리버싱 연결",
+    "label": "dump·실행 증거 회수",
+    "description": "memory/dump 권한 + export",
+    "baseline": "실제 WinDbg host MCP",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "analysis.trace.export",
+    "category": "analysis",
+    "category_label": "디버깅·리버싱 연결",
+    "label": "PCAP/HAR/event trace 회수",
+    "description": "capture 종류·출처·hash",
+    "baseline": "실제 Wireshark/mitmproxy host MCP",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "debugger.attach",
+    "category": "analysis",
+    "category_label": "디버깅·리버싱 연결",
+    "label": "승인 target live session",
+    "description": "exact process identity·native helper·lease",
+    "baseline": "기존 optional plugin; host WinDbg bridge 후속",
+    "implementation": "rpc",
+    "operations": [
+      "debugger.attach",
+      "debugger.keepalive",
+      "debugger.launch",
+      "native.prepare",
+      "native.start"
+    ]
+  },
+  {
+    "id": "debugger.detach",
+    "category": "analysis",
+    "category_label": "디버깅·리버싱 연결",
+    "label": "승인 target live session",
+    "description": "exact process identity·native helper·lease",
+    "baseline": "기존 optional plugin; host WinDbg bridge 후속",
+    "implementation": "rpc",
+    "operations": [
+      "debugger.close"
+    ]
+  },
+  {
+    "id": "debugger.observe",
+    "category": "analysis",
+    "category_label": "디버깅·리버싱 연결",
+    "label": "register·stack·memory·module 관측",
+    "description": "debug session ownership·민감 정보",
+    "baseline": "기존 optional plugin 일부",
+    "implementation": "rpc",
+    "operations": [
+      "debugger.backtrace",
+      "debugger.info",
+      "debugger.read_memory",
+      "debugger.registers",
+      "debugger.wait"
+    ]
+  },
+  {
+    "id": "debugger.breakpoint",
+    "category": "analysis",
+    "category_label": "디버깅·리버싱 연결",
+    "label": "breakpoint·step/continue",
+    "description": "target 진행 상태·부작용·cleanup",
+    "baseline": "기존 optional plugin 일부 / host bridge 후속",
+    "implementation": "rpc",
+    "operations": [
+      "debugger.command"
+    ]
+  },
+  {
+    "id": "debugger.step",
+    "category": "analysis",
+    "category_label": "디버깅·리버싱 연결",
+    "label": "breakpoint·step/continue",
+    "description": "target 진행 상태·부작용·cleanup",
+    "baseline": "기존 optional plugin 일부 / host bridge 후속",
+    "implementation": "rpc",
+    "operations": [
+      "debugger.command"
+    ]
+  },
+  {
+    "id": "debugger.resume",
+    "category": "analysis",
+    "category_label": "디버깅·리버싱 연결",
+    "label": "breakpoint·step/continue",
+    "description": "target 진행 상태·부작용·cleanup",
+    "baseline": "기존 optional plugin 일부 / host bridge 후속",
+    "implementation": "rpc",
+    "operations": [
+      "debugger.command"
+    ]
+  },
+  {
+    "id": "debugger.registers.write",
+    "category": "analysis",
+    "category_label": "디버깅·리버싱 연결",
+    "label": "디버거를 통한 변경",
+    "description": "observe와 별도 gate",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "debugger.memory.write",
+    "category": "analysis",
+    "category_label": "디버깅·리버싱 연결",
+    "label": "디버거를 통한 변경",
+    "description": "observe와 별도 gate",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "services.read",
+    "category": "configuration",
+    "category_label": "OS 구성·서비스·작업 스케줄러",
+    "label": "Client OS 서비스 상태·설정",
+    "description": "Gateway 자체 서비스 관리와 별개",
+    "baseline": "후속",
+    "implementation": "rpc",
+    "operations": [
+      "services.get",
+      "services.list"
+    ]
+  },
+  {
+    "id": "services.control",
+    "category": "configuration",
+    "category_label": "OS 구성·서비스·작업 스케줄러",
+    "label": "시작·중지·설정 변경",
+    "description": "보호 서비스·복구·dependencies",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "services.configure",
+    "category": "configuration",
+    "category_label": "OS 구성·서비스·작업 스케줄러",
+    "label": "시작·중지·설정 변경",
+    "description": "보호 서비스·복구·dependencies",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "registry.read",
+    "category": "configuration",
+    "category_label": "OS 구성·서비스·작업 스케줄러",
+    "label": "key/value 관측",
+    "description": "registry root/value allowlist·secret 제외",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "registry.modify",
+    "category": "configuration",
+    "category_label": "OS 구성·서비스·작업 스케줄러",
+    "label": "key/value 변경·삭제",
+    "description": "expected value·backup·protected keys",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "tasks.read",
+    "category": "configuration",
+    "category_label": "OS 구성·서비스·작업 스케줄러",
+    "label": "스케줄러 목록·RACP 소유 task 관리",
+    "description": "소유 namespace·action 실행 정책",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "tasks.modify.owned",
+    "category": "configuration",
+    "category_label": "OS 구성·서비스·작업 스케줄러",
+    "label": "스케줄러 목록·RACP 소유 task 관리",
+    "description": "소유 namespace·action 실행 정책",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "software.inventory.read",
+    "category": "configuration",
+    "category_label": "OS 구성·서비스·작업 스케줄러",
+    "label": "설치 프로그램·배포/제거",
+    "description": "출처/hash·설치자·사용자 데이터 보존",
+    "baseline": "후속",
+    "implementation": "rpc",
+    "operations": [
+      "software.inventory"
+    ]
+  },
+  {
+    "id": "software.install",
+    "category": "configuration",
+    "category_label": "OS 구성·서비스·작업 스케줄러",
+    "label": "설치 프로그램·배포/제거",
+    "description": "출처/hash·설치자·사용자 데이터 보존",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "software.uninstall",
+    "category": "configuration",
+    "category_label": "OS 구성·서비스·작업 스케줄러",
+    "label": "설치 프로그램·배포/제거",
+    "description": "출처/hash·설치자·사용자 데이터 보존",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "accounts.read",
+    "category": "sessions",
+    "category_label": "계정·session·전원",
+    "label": "사용자/group/SID 관측",
+    "description": "credential 값과 분리",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "accounts.modify",
+    "category": "sessions",
+    "category_label": "계정·session·전원",
+    "label": "계정/group 변경",
+    "description": "관리자 범위·로컬 재승인·audit",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "session.lock",
+    "category": "sessions",
+    "category_label": "계정·session·전원",
+    "label": "현재 session 잠금·로그오프",
+    "description": "GUI/Handle 퇴역·사용자 영향",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "session.logoff",
+    "category": "sessions",
+    "category_label": "계정·session·전원",
+    "label": "현재 session 잠금·로그오프",
+    "description": "GUI/Handle 퇴역·사용자 영향",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "power.reboot",
+    "category": "sessions",
+    "category_label": "계정·session·전원",
+    "label": "재부팅·종료·절전",
+    "description": "drain·복구 계획·실제 현지 확인",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "power.shutdown",
+    "category": "sessions",
+    "category_label": "계정·session·전원",
+    "label": "재부팅·종료·절전",
+    "description": "drain·복구 계획·실제 현지 확인",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "power.sleep",
+    "category": "sessions",
+    "category_label": "계정·session·전원",
+    "label": "재부팅·종료·절전",
+    "description": "drain·복구 계획·실제 현지 확인",
+    "baseline": "후속 / 고위험",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "diagnostics.agent.read",
+    "category": "diagnostics",
+    "category_label": "로그·이벤트·성능",
+    "label": "Agent 상태·최근 활동·진단",
+    "description": "redaction·bounded tail",
+    "baseline": "기존 일부",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "events.os.read",
+    "category": "diagnostics",
+    "category_label": "로그·이벤트·성능",
+    "label": "Windows Event Log 등 조회",
+    "description": "channel/time/query·결과 한도",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "events.trace.record",
+    "category": "diagnostics",
+    "category_label": "로그·이벤트·성능",
+    "label": "ETW/Procmon 계열 trace",
+    "description": "backend·권한·필터·기간",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "performance.sample",
+    "category": "diagnostics",
+    "category_label": "로그·이벤트·성능",
+    "label": "CPU/RSS/handle/I/O 시계열",
+    "description": "주기·보관·clock 출처",
+    "baseline": "후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "diagnostics.export",
+    "category": "diagnostics",
+    "category_label": "로그·이벤트·성능",
+    "label": "지원 bundle·시험 증거 회수",
+    "description": "credential/원문 DB 제외, export 권한",
+    "baseline": "Client 전용 후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "artifacts.export",
+    "category": "artifacts",
+    "category_label": "Artifact·backup·복구",
+    "label": "Client 자료를 host로 전달",
+    "description": "owner/device·hash·size·retention",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "browser.download",
+      "browser.screenshot",
+      "desktop.screenshot",
+      "filesystem.read",
+      "native.prepare",
+      "native.start",
+      "network.capture",
+      "process.dump",
+      "process.memory_read",
+      "proxy.prepare"
+    ]
+  },
+  {
+    "id": "artifacts.import",
+    "category": "artifacts",
+    "category_label": "Artifact·backup·복구",
+    "label": "host 자료를 Client에 전달",
+    "description": "destination files create/edit도 필요",
+    "baseline": "기존",
+    "implementation": "rpc",
+    "operations": [
+      "browser.upload",
+      "filesystem.write"
+    ]
+  },
+  {
+    "id": "backup.workspace",
+    "category": "artifacts",
+    "category_label": "Artifact·backup·복구",
+    "label": "허용한 폴더/앱 state backup",
+    "description": "manifest·revision·일관성·exclude",
+    "baseline": "후속 Client 모델",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "restore.workspace",
+    "category": "artifacts",
+    "category_label": "Artifact·backup·복구",
+    "label": "승인된 backup 복원",
+    "description": "검증·diff·rollback·원본 보존",
+    "baseline": "후속 Client 모델",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "agent.settings.read",
+    "category": "artifacts",
+    "category_label": "Artifact·backup·복구",
+    "label": "로컬 설정 보기/편집",
+    "description": "인증된 로컬 IPC만, credential 비노출",
+    "baseline": "기존 coarse 설정 / v2 후속",
+    "implementation": "planned",
+    "operations": []
+  },
+  {
+    "id": "agent.settings.modify.local",
+    "category": "artifacts",
+    "category_label": "Artifact·backup·복구",
+    "label": "로컬 설정 보기/편집",
+    "description": "인증된 로컬 IPC만, credential 비노출",
+    "baseline": "기존 coarse 설정 / v2 후속",
+    "implementation": "planned",
+    "operations": []
+  }
+]

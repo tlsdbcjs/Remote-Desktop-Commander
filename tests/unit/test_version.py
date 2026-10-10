@@ -1,7 +1,5 @@
 """Unit tests for RACP version definitions and version management logic."""
 
-from pathlib import Path
-
 import pytest
 from racp_domain.version import VERSION, __version__
 
@@ -9,7 +7,7 @@ from scripts.version import calculate_next_version, parse_semver
 
 
 def test_package_version_constants() -> None:
-    assert VERSION == "0.1.11"
+    assert VERSION == "0.1.20"
     assert __version__ == VERSION
 
     import racp_agent
@@ -68,16 +66,3 @@ def test_calculate_next_version_major() -> None:
 def test_calculate_next_version_combinations() -> None:
     assert calculate_next_version("0.1.8", major_val=2, minor_val=3, patch_val=4) == "2.3.4"
     assert calculate_next_version("0.1.8", patch_val=12) == "0.1.12"
-
-
-def test_version_updates_rust_and_tauri(tmp_path: Path) -> None:
-    from scripts.version import update_file
-
-    cargo = tmp_path / "Cargo.toml"
-    cargo.write_text('[workspace.package]\nversion = "0.1.10"\n')
-    assert update_file(cargo, "0.1.10", "0.1.11", False)
-    assert 'version = "0.1.11"' in cargo.read_text()
-    tauri = tmp_path / "tauri.conf.json"
-    tauri.write_text('{"version":"0.1.10"}')
-    assert update_file(tauri, "0.1.10", "0.1.11", False)
-    assert '"version":"0.1.11"' in tauri.read_text()

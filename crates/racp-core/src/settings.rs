@@ -29,6 +29,8 @@ pub struct AgentSettings {
     pub ca_file: Option<PathBuf>,
     #[serde(default)]
     pub desktop_enabled: bool,
+    #[serde(default)]
+    pub permissions: Option<Value>,
 }
 fn one() -> u8 {
     1
@@ -63,7 +65,14 @@ impl AgentSettings {
             "../../../docs/protocol/agent-settings-v1.schema.json"
         ))
         .expect("settings schema");
-        validate_schema(&schema, &serde_json::to_value(self)?)?;
+        let mut document = serde_json::to_value(self)?;
+        document["version"] = json!(2);
+        document["permissions"] = self
+            .permissions
+            .clone()
+            .unwrap_or_else(|| crate::legacy_permissions(self.desktop_enabled));
+        validate_schema(&schema, &document)?;
+        crate::validate_permissions(&document["permissions"])?;
         gateway_origin(&self.gateway)?;
         let mut ids = BTreeSet::new();
         if self.allowed_workspaces.len() > 15 {
@@ -114,7 +123,17 @@ pub fn load_settings(
     if document.len() > 16384 {
         return Err(RacpError::new("CONFIG_UNREADABLE"));
     }
-    let settings: AgentSettings = serde_json::from_str(document)?;
+    let mut raw: Value = serde_json::from_str(document)?;
+    if raw["version"].as_u64().unwrap_or(1) == 1 {
+        if raw.get("permissions").is_some() {
+            return Err(RacpError::new("CONFIG_UNREADABLE"));
+        }
+        raw["permissions"] = crate::legacy_permissions(raw["desktop_enabled"] == true);
+        raw["version"] = json!(2);
+    } else if raw["version"] != 2 || raw["permissions"].is_null() {
+        return Err(RacpError::new("CONFIG_UNREADABLE"));
+    }
+    let settings: AgentSettings = serde_json::from_value(raw)?;
     settings.validate(live)?;
     if value.get("gateway") != Some(&settings.gateway)
         || value.get("device_id") != Some(&settings.device_id)
@@ -130,7 +149,13 @@ pub fn credential_document(
     settings: &AgentSettings,
     credential: &str,
 ) -> Result<BTreeMap<String, String>, RacpError> {
-    let document = serde_json::to_string(settings)?;
+    let mut raw = serde_json::to_value(settings)?;
+    raw["version"] = json!(2);
+    raw["permissions"] = settings
+        .permissions
+        .clone()
+        .unwrap_or_else(|| crate::legacy_permissions(settings.desktop_enabled));
+    let document = serde_json::to_string(&raw)?;
     if document.len() > 16384 {
         return Err(RacpError::new("LOCAL_STATE_FAILED"));
     }
@@ -201,15 +226,19 @@ pub fn update_settings(state: &Path, request: Value) -> Result<Value, RacpError>
         "ca_file",
         "allowed_workspaces",
         "desktop_enabled",
+        "permissions",
     ] {
         if let Some(v) = request.get(key) {
-            if key != "desktop_enabled" || !v.is_null() {
+            if !matches!(key, "desktop_enabled" | "permissions") || !v.is_null() {
                 pending[key] = v.clone();
             }
         }
     }
     let mut settings: AgentSettings = serde_json::from_value(pending)?;
     settings.gateway = gateway_origin(&settings.gateway)?;
+    if let Some(p) = &settings.permissions {
+        settings.desktop_enabled = crate::desktop_enabled(p);
+    }
     settings.validate(true)?;
     let replacement = credential_document(&settings, &value["credential"])?;
     SecretStore::new(

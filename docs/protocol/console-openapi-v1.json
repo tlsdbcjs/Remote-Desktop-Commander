@@ -2,9 +2,1177 @@
   "openapi": "3.1.0",
   "info": {
     "title": "RACP Gateway",
-    "version": "0.1.0"
+    "version": "0.1.20"
   },
   "paths": {
+    "/api/v1/management/status": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Status",
+        "operationId": "management_status_api_v1_management_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayStatusView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/settings": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Settings",
+        "operationId": "management_settings_api_v1_management_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsView"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Settings Apply",
+        "operationId": "management_settings_apply_api_v1_management_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/settings/stage": {
+      "post": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Settings Stage",
+        "operationId": "management_settings_stage_api_v1_management_settings_stage_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigCheck"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/devices": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Devices",
+        "operationId": "management_devices_api_v1_management_devices_get",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "status_filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status Filter"
+            }
+          },
+          {
+            "name": "group_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DevicePage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/users": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Users",
+        "operationId": "management_users_api_v1_management_users_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ManagementUserView"
+                  },
+                  "type": "array",
+                  "title": "Response Management Users Api V1 Management Users Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management User Create",
+        "operationId": "management_user_create_api_v1_management_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagementUserCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagementUserView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/users/{user_id}": {
+      "patch": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management User Patch",
+        "operationId": "management_user_patch_api_v1_management_users__user_id__patch",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagementUserPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagementUserView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/groups": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Groups",
+        "operationId": "management_groups_api_v1_management_groups_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DeviceGroupView"
+                  },
+                  "type": "array",
+                  "title": "Response Management Groups Api V1 Management Groups Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Group Create",
+        "operationId": "management_group_create_api_v1_management_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceGroupCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceGroupView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/groups/{group_id}": {
+      "patch": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Group Patch",
+        "operationId": "management_group_patch_api_v1_management_groups__group_id__patch",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceGroupPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceGroupView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/devices/{device_id}/groups": {
+      "patch": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Device Groups",
+        "operationId": "management_device_groups_api_v1_management_devices__device_id__groups_patch",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Device Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceGroupsPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceMetadataView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/logs": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Logs",
+        "operationId": "management_logs_api_v1_management_logs_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "audit",
+                    "diagnostic"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "name": "device_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Device Id"
+            }
+          },
+          {
+            "name": "request_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Request Id"
+            }
+          },
+          {
+            "name": "actor_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor Id"
+            }
+          },
+          {
+            "name": "from_utc",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Utc"
+            }
+          },
+          {
+            "name": "to_utc",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Utc"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/log-exports": {
+      "post": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Log Export Create",
+        "operationId": "management_log_export_create_api_v1_management_log_exports_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogExportCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogExportReceiptView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/log-exports/{export_id}": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Log Export Status",
+        "operationId": "management_log_export_status_api_v1_management_log_exports__export_id__get",
+        "parameters": [
+          {
+            "name": "export_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Export Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogExportReceiptView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/log-exports/{export_id}/download": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Log Export Download",
+        "operationId": "management_log_export_download_api_v1_management_log_exports__export_id__download_get",
+        "parameters": [
+          {
+            "name": "export_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Export Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/backups": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Backups",
+        "operationId": "management_backups_api_v1_management_backups_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BackupSetView"
+                  },
+                  "type": "array",
+                  "title": "Response Management Backups Api V1 Management Backups Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Backup Create",
+        "operationId": "management_backup_create_api_v1_management_backups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupSetView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/backups/{backup_id}/restore-preview": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Restore Preview",
+        "operationId": "management_restore_preview_api_v1_management_backups__backup_id__restore_preview_get",
+        "parameters": [
+          {
+            "name": "backup_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Backup Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestorePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/restores": {
+      "post": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Restore Create",
+        "operationId": "management_restore_create_api_v1_management_restores_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceJobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/maintenance-jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Maintenance Job",
+        "operationId": "management_maintenance_job_api_v1_management_maintenance_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceJobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/updates/status": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Update Status",
+        "operationId": "management_update_status_api_v1_management_updates_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateStatusView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/updates/check": {
+      "post": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Update Check",
+        "operationId": "management_update_check_api_v1_management_updates_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateCandidateView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/updates/apply": {
+      "post": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Update Apply",
+        "operationId": "management_update_apply_api_v1_management_updates_apply_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceJobView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/support-bundles": {
+      "post": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Support Bundle Create",
+        "operationId": "management_support_bundle_create_api_v1_management_support_bundles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupportBundleCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportBundleReceiptView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/management/support-bundles/{bundle_id}": {
+      "get": {
+        "tags": [
+          "management"
+        ],
+        "summary": "Management Support Bundle Download",
+        "operationId": "management_support_bundle_download_api_v1_management_support_bundles__bundle_id__get",
+        "parameters": [
+          {
+            "name": "bundle_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Bundle Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/console/setup-token": {
       "post": {
         "summary": "Console Setup",
@@ -1991,6 +3159,113 @@
         ],
         "title": "AuditView"
       },
+      "BackupCreateRequest": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[!-~]+$",
+            "title": "Idempotency Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key"
+        ],
+        "title": "BackupCreateRequest"
+      },
+      "BackupSetView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "COMPLETE",
+              "INCOMPLETE",
+              "CORRUPT"
+            ],
+            "title": "State"
+          },
+          "manifest_path": {
+            "type": "string",
+            "maxLength": 4096,
+            "title": "Manifest Path"
+          },
+          "sha256": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Sha256"
+          },
+          "schema_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Schema Version"
+          },
+          "instance_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Instance Id"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "state",
+          "manifest_path",
+          "sha256",
+          "schema_version",
+          "instance_id",
+          "created_at"
+        ],
+        "title": "BackupSetView"
+      },
+      "ConfigCheck": {
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "title": "Valid"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Errors"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Warnings"
+          },
+          "restart_required": {
+            "type": "boolean",
+            "title": "Restart Required",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "valid"
+        ],
+        "title": "ConfigCheck"
+      },
       "ConsoleLogin": {
         "properties": {
           "setup_secret": {
@@ -2043,6 +3318,223 @@
           "expires_at"
         ],
         "title": "ConsoleSession"
+      },
+      "DeviceGroupCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Tags"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "DeviceGroupCreateRequest"
+      },
+      "DeviceGroupPatchRequest": {
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Revision"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "device_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,96}$"
+                },
+                "type": "array",
+                "maxItems": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_revision"
+        ],
+        "title": "DeviceGroupPatchRequest"
+      },
+      "DeviceGroupView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "Name"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Tags"
+          },
+          "device_ids": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,96}$"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Device Ids"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "revision"
+        ],
+        "title": "DeviceGroupView"
+      },
+      "DeviceGroupsPatch": {
+        "properties": {
+          "group_ids": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,96}$"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Group Ids"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_revision"
+        ],
+        "title": "DeviceGroupsPatch"
+      },
+      "DeviceMetadataView": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Device Id"
+          },
+          "group_ids": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,96}$"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Group Ids"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Tags"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "device_id",
+          "revision"
+        ],
+        "title": "DeviceMetadataView"
+      },
+      "DevicePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ManagedDeviceView"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "DevicePage"
       },
       "DeviceView": {
         "properties": {
@@ -2176,6 +3668,152 @@
           "name"
         ],
         "title": "EnrollmentInput"
+      },
+      "GatewayStatusView": {
+        "properties": {
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "STARTING",
+              "READY",
+              "DRAINING",
+              "STOPPING",
+              "STOPPED",
+              "DEGRADED",
+              "FAILED"
+            ],
+            "title": "Lifecycle"
+          },
+          "ready": {
+            "type": "boolean",
+            "title": "Ready"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Version"
+          },
+          "instance_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,96}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "service",
+              "portable",
+              "legacy"
+            ],
+            "title": "Mode"
+          },
+          "setup_mode": {
+            "type": "string",
+            "enum": [
+              "local_owner",
+              "oidc"
+            ],
+            "title": "Setup Mode"
+          },
+          "database": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "busy",
+              "failed"
+            ],
+            "title": "Database"
+          },
+          "mcp": {
+            "type": "string",
+            "enum": [
+              "owner_bearer",
+              "oauth",
+              "not_configured"
+            ],
+            "title": "Mcp"
+          },
+          "settings_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Settings Revision"
+          },
+          "connected_devices": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Connected Devices"
+          },
+          "total_devices": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Devices"
+          },
+          "event_streams": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Event Streams"
+          },
+          "tls_configured": {
+            "type": "boolean",
+            "title": "Tls Configured",
+            "default": false
+          },
+          "tls_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tls Expires At"
+          },
+          "disk_free_bytes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disk Free Bytes"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Warnings"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lifecycle",
+          "ready",
+          "version",
+          "mode",
+          "setup_mode",
+          "database",
+          "mcp",
+          "settings_revision",
+          "connected_devices",
+          "total_devices",
+          "event_streams"
+        ],
+        "title": "GatewayStatusView"
       },
       "HTTPValidationError": {
         "properties": {
@@ -2566,6 +4204,735 @@
         ],
         "title": "ListPage[JobView]"
       },
+      "LogExportCreateRequest": {
+        "properties": {
+          "query": {
+            "$ref": "#/components/schemas/LogQuery"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "jsonl"
+            ],
+            "title": "Format",
+            "default": "jsonl"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[!-~]+$",
+            "title": "Idempotency Key"
+          },
+          "max_rows": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Max Rows",
+            "default": 10000
+          },
+          "max_bytes": {
+            "type": "integer",
+            "maximum": 5242880.0,
+            "minimum": 1024.0,
+            "title": "Max Bytes",
+            "default": 5242880
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key"
+        ],
+        "title": "LogExportCreateRequest"
+      },
+      "LogExportReceiptView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "SUCCEEDED",
+              "FAILED"
+            ],
+            "title": "State"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "jsonl"
+            ],
+            "title": "Format"
+          },
+          "file_name": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "File Name"
+          },
+          "rows": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Rows"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "maximum": 5242880.0,
+            "minimum": 0.0,
+            "title": "Size Bytes"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "created_at": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Created At"
+          },
+          "expires_at": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Expires At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "state",
+          "format",
+          "file_name",
+          "rows",
+          "size_bytes",
+          "created_at",
+          "expires_at"
+        ],
+        "title": "LogExportReceiptView"
+      },
+      "LogItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Id"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "audit",
+              "diagnostic"
+            ],
+            "title": "Source"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "event": {
+            "type": "string",
+            "title": "Event"
+          },
+          "level": {
+            "type": "string",
+            "title": "Level"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "device_id": {
+            "type": "string",
+            "title": "Device Id"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "fields": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Fields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "timestamp",
+          "event",
+          "level",
+          "message",
+          "device_id",
+          "request_id",
+          "actor_id",
+          "fields"
+        ],
+        "title": "LogItem"
+      },
+      "LogPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LogItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "dropped_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Dropped Count",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "LogPage"
+      },
+      "LogQuery": {
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "audit",
+                  "diagnostic"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "device_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,96}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,96}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "from_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Utc"
+          },
+          "to_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Utc"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 100
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LogQuery"
+      },
+      "MaintenanceJobView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "backup",
+              "restore",
+              "update"
+            ],
+            "title": "Kind"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "DEFERRED",
+              "SUCCEEDED",
+              "FAILED"
+            ],
+            "title": "State"
+          },
+          "actor_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Actor Id"
+          },
+          "realm_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Realm Id"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "receipt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,96}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "actor_id",
+          "realm_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "MaintenanceJobView"
+      },
+      "ManagedDeviceView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "revoked": {
+            "type": "boolean",
+            "title": "Revoked"
+          },
+          "epoch": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Epoch"
+          },
+          "info": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Info"
+          },
+          "group_ids": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,96}$"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Group Ids"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Tags"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "revoked",
+          "epoch",
+          "info",
+          "revision"
+        ],
+        "title": "ManagedDeviceView"
+      },
+      "ManagementUserCreateRequest": {
+        "properties": {
+          "issuer": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Issuer"
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Subject"
+          },
+          "display_name": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Display Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "operator",
+              "viewer"
+            ],
+            "title": "Role"
+          },
+          "device_grants": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,96}$"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Device Grants"
+          },
+          "output_grants": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,96}$"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Output Grants"
+          },
+          "operation_grants": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 256,
+            "title": "Operation Grants"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "issuer",
+          "subject",
+          "display_name",
+          "role"
+        ],
+        "title": "ManagementUserCreateRequest"
+      },
+      "ManagementUserPatchRequest": {
+        "properties": {
+          "role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "owner",
+                  "admin",
+                  "operator",
+                  "viewer"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "device_grants": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,96}$"
+                },
+                "type": "array",
+                "maxItems": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Grants"
+          },
+          "output_grants": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,96}$"
+                },
+                "type": "array",
+                "maxItems": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Grants"
+          },
+          "operation_grants": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 256
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Grants"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ManagementUserPatchRequest"
+      },
+      "ManagementUserView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Id"
+          },
+          "realm_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Realm Id"
+          },
+          "issuer": {
+            "type": "string",
+            "maxLength": 2048,
+            "title": "Issuer"
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Subject"
+          },
+          "display_name": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Display Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "operator",
+              "viewer"
+            ],
+            "title": "Role"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "auth_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Auth Revision"
+          },
+          "device_grants": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,96}$"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Device Grants"
+          },
+          "output_grants": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,96}$"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Output Grants"
+          },
+          "operation_grants": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 256,
+            "title": "Operation Grants"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "realm_id",
+          "issuer",
+          "subject",
+          "display_name",
+          "role",
+          "active",
+          "auth_revision"
+        ],
+        "title": "ManagementUserView"
+      },
       "OperationInput": {
         "properties": {
           "device_id": {
@@ -2657,6 +5024,210 @@
           "payload"
         ],
         "title": "OperationInput"
+      },
+      "RestoreCreateRequest": {
+        "properties": {
+          "backup_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Backup Id"
+          },
+          "expected_instance_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Expected Instance Id"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Revision"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[!-~]+$",
+            "title": "Idempotency Key"
+          },
+          "confirm": {
+            "type": "boolean",
+            "const": true,
+            "title": "Confirm"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "backup_id",
+          "expected_instance_id",
+          "expected_revision",
+          "idempotency_key",
+          "confirm"
+        ],
+        "title": "RestoreCreateRequest"
+      },
+      "RestorePreview": {
+        "properties": {
+          "backup_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Backup Id"
+          },
+          "valid": {
+            "type": "boolean",
+            "title": "Valid"
+          },
+          "schema_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Schema Version"
+          },
+          "instance_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Instance Id"
+          },
+          "database_integrity": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "failed"
+            ],
+            "title": "Database Integrity"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "title": "Warnings"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "backup_id",
+          "valid",
+          "schema_version",
+          "instance_id",
+          "database_integrity"
+        ],
+        "title": "RestorePreview"
+      },
+      "SettingsPatch": {
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Revision"
+          },
+          "changes": {
+            "additionalProperties": true,
+            "type": "object",
+            "maxProperties": 32,
+            "title": "Changes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "changes"
+        ],
+        "title": "SettingsPatch"
+      },
+      "SettingsView": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision"
+          },
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values"
+          },
+          "restart_required": {
+            "type": "boolean",
+            "title": "Restart Required",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision",
+          "values"
+        ],
+        "title": "SettingsView"
+      },
+      "SupportBundleCreateRequest": {
+        "properties": {
+          "log_limit": {
+            "type": "integer",
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Log Limit",
+            "default": 200
+          },
+          "max_bytes": {
+            "type": "integer",
+            "maximum": 104857600.0,
+            "minimum": 4096.0,
+            "title": "Max Bytes",
+            "default": 5242880
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SupportBundleCreateRequest"
+      },
+      "SupportBundleReceiptView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Id"
+          },
+          "file_name": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "File Name"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Size Bytes"
+          },
+          "created_at": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Created At"
+          },
+          "log_entries": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Log Entries"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "file_name",
+          "sha256",
+          "size_bytes",
+          "created_at",
+          "log_entries"
+        ],
+        "title": "SupportBundleReceiptView"
       },
       "TransferComplete": {
         "properties": {
@@ -2761,6 +5332,7 @@
             "type": "string",
             "enum": [
               "application/octet-stream",
+              "application/vnd.tcpdump.pcap",
               "application/json",
               "application/vnd.racp.output-stream",
               "image/png",
@@ -2777,6 +5349,158 @@
           "device_id"
         ],
         "title": "TransferCreate"
+      },
+      "UpdateApplyRequest": {
+        "properties": {
+          "release_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Release Id"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Revision"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[!-~]+$",
+            "title": "Idempotency Key"
+          },
+          "confirm": {
+            "type": "boolean",
+            "const": true,
+            "title": "Confirm"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "release_id",
+          "expected_revision",
+          "idempotency_key",
+          "confirm"
+        ],
+        "title": "UpdateApplyRequest"
+      },
+      "UpdateCandidateView": {
+        "properties": {
+          "release_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,96}$",
+            "title": "Release Id"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Version"
+          },
+          "platform": {
+            "type": "string",
+            "const": "win-x64",
+            "title": "Platform"
+          },
+          "manifest_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Manifest Sha256"
+          },
+          "schema_rollback_compatible": {
+            "type": "boolean",
+            "title": "Schema Rollback Compatible"
+          },
+          "checked_at": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Checked At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "release_id",
+          "version",
+          "platform",
+          "manifest_sha256",
+          "schema_rollback_compatible",
+          "checked_at"
+        ],
+        "title": "UpdateCandidateView"
+      },
+      "UpdateCheckRequest": {
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Revision"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_revision"
+        ],
+        "title": "UpdateCheckRequest"
+      },
+      "UpdateStatusView": {
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "current_version": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Current Version"
+          },
+          "channel": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Channel"
+          },
+          "feed_configured": {
+            "type": "boolean",
+            "title": "Feed Configured"
+          },
+          "trust_key_configured": {
+            "type": "boolean",
+            "title": "Trust Key Configured"
+          },
+          "automatic_check": {
+            "type": "boolean",
+            "title": "Automatic Check"
+          },
+          "apply_enabled": {
+            "type": "boolean",
+            "title": "Apply Enabled"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "configured",
+          "current_version",
+          "channel",
+          "feed_configured",
+          "trust_key_configured",
+          "automatic_check",
+          "apply_enabled"
+        ],
+        "title": "UpdateStatusView"
       },
       "ValidationError": {
         "properties": {

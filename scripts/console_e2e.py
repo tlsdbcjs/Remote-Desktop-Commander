@@ -208,6 +208,7 @@ async def run(node: Path, grep: str | None = None) -> int:
                     str(node),
                     str(playwright_cli),
                     "test",
+                    "console.spec.ts",
                     *(["--grep", grep] if grep else []),
                 ],
                 cwd=Path("apps/console"),

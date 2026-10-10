@@ -12,7 +12,7 @@ env:
   PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.tools/playwright
 jobs:
   python:
-    if: ${{ (github.ref_name != 'codex/client-rust-migration' && github.head_ref != 'codex/client-rust-migration') || (github.event_name == 'workflow_dispatch' && inputs.run_tests) }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_tests }}
     strategy:
       matrix:
         os: [windows-latest, ubuntu-24.04]
@@ -35,7 +35,7 @@ jobs:
           name: racp-${{ matrix.os }}
           path: dist/
   console:
-    if: ${{ (github.ref_name != 'codex/client-rust-migration' && github.head_ref != 'codex/client-rust-migration') || (github.event_name == 'workflow_dispatch' && inputs.run_tests) }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_tests }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

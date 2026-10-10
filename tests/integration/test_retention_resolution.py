@@ -106,10 +106,12 @@ async def test_late_result_is_resolution_without_overwriting_unknown(
     entered, release = asyncio.Event(), asyncio.Event()
     original = live["agent"].filesystem.execute
 
-    async def delayed(operation: str, payload: dict[str, Any], context: Any) -> dict[str, Any]:
+    async def delayed(
+        operation: str, payload: dict[str, Any], context: Any, **kwargs: Any
+    ) -> dict[str, Any]:
         entered.set()
         await release.wait()
-        return await original(operation, payload, context)
+        return await original(operation, payload, context, **kwargs)
 
     monkeypatch.setattr(live["agent"].filesystem, "execute", delayed)
     response = await live["client"].post(

@@ -11,6 +11,9 @@ pub trait Provider: Send + Sync {
         request: Value,
         cancel: CancellationToken,
     ) -> BoxFuture<'_, Result<Value, RacpError>>;
+    fn owns_process(&self, _: &Value) -> bool {
+        false
+    }
     fn inventory(&self) -> Vec<Value> {
         vec![]
     }
@@ -90,6 +93,9 @@ impl NativeProviders {
     }
 }
 impl Provider for NativeProviders {
+    fn owns_process(&self, r: &Value) -> bool {
+        self.providers.iter().any(|p| p.owns_process(r))
+    }
     fn events_after(&self, after: u64) -> Vec<Value> {
         self.providers
             .iter()

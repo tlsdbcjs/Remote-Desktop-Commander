@@ -76,6 +76,21 @@
           "maxItems": 15,
           "title": "Allowed Workspaces",
           "type": "array"
+        },
+        "permissions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalPermissions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "desktop_enabled": {
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -127,6 +142,21 @@
           "maxItems": 15,
           "title": "Allowed Workspaces",
           "type": "array"
+        },
+        "permissions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalPermissions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "desktop_enabled": {
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -223,6 +253,17 @@
           ],
           "default": null,
           "title": "Desktop Enabled"
+        },
+        "permissions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalPermissions"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -254,6 +295,99 @@
         "path"
       ],
       "title": "WorkspaceSpec",
+      "type": "object"
+    },
+    "LocalPermissions": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": 1,
+          "default": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "grants": {
+          "additionalProperties": {
+            "enum": [
+              "allow",
+              "deny",
+              "require_approval"
+            ],
+            "type": "string"
+          },
+          "maxProperties": 256,
+          "title": "Grants",
+          "type": "object"
+        },
+        "disabled_categories": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 18,
+          "title": "Disabled Categories",
+          "type": "array"
+        },
+        "constraints": {
+          "$ref": "#/$defs/PermissionConstraints"
+        }
+      },
+      "title": "LocalPermissions",
+      "type": "object"
+    },
+    "PermissionConstraints": {
+      "additionalProperties": false,
+      "properties": {
+        "workspace_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Workspace Ids",
+          "type": "array"
+        },
+        "max_timeout_ms": {
+          "default": 86400000,
+          "maximum": 86400000,
+          "minimum": 1,
+          "title": "Max Timeout Ms",
+          "type": "integer"
+        },
+        "max_output_bytes": {
+          "default": 1073741824,
+          "maximum": 1073741824,
+          "minimum": 1,
+          "title": "Max Output Bytes",
+          "type": "integer"
+        },
+        "executable_allowlist": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Executable Allowlist",
+          "type": "array"
+        },
+        "executable_denylist": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Executable Denylist",
+          "type": "array"
+        },
+        "strict_os_isolation": {
+          "const": false,
+          "default": false,
+          "title": "Strict Os Isolation",
+          "type": "boolean"
+        }
+      },
+      "title": "PermissionConstraints",
       "type": "object"
     }
   },

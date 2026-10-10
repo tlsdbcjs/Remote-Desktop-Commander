@@ -12,6 +12,7 @@ on:
     paths: ["apps/client/**", "apps/agent/**", "packages/**", "scripts/**", "uv.lock", "pnpm-lock.yaml", ".github/workflows/client.yml"]
 jobs:
   native-client:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_deferred_platforms }}
     strategy:
       fail-fast: false
       matrix:

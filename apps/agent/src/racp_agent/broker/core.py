@@ -6,6 +6,7 @@ from typing import Any, Protocol
 
 from pydantic import Field, ValidationError
 from racp_domain.models import RACPError
+from racp_protocol.clipboard import CLIPBOARD_MODELS, CLIPBOARD_READS
 from racp_protocol.desktop import DESKTOP_MODELS, DESKTOP_READS
 from racp_protocol.models import Identifier, StrictModel, new_id, timestamp
 
@@ -42,6 +43,7 @@ class DesktopBackend(Protocol):
     def clear_observations(self) -> None: ...
     def attach_guard(self, raw: dict[str, Any]) -> dict[str, Any]: ...
     def guard_info(self) -> dict[str, Any]: ...
+    def clipboard(self, operation: str, payload: dict[str, Any]) -> dict[str, Any]: ...
 
 
 @dataclass
@@ -200,14 +202,20 @@ class BrokerCore:
                 return self.captures.read(*args)
             self.captures.release(*args)
             return {"released": True}
-        if operation not in DESKTOP_MODELS or operation == "desktop.sessions":
+        models = {**DESKTOP_MODELS, **CLIPBOARD_MODELS}
+        if operation not in models or operation == "desktop.sessions":
             raise RACPError(
                 "CAPABILITY_UNAVAILABLE", "operation not allowed in Broker", layer="broker"
             )
-        payload = DESKTOP_MODELS[operation].model_validate(payload).model_dump()
+        payload = models[operation].model_validate(payload).model_dump()
         if payload["session_id"] != self.session_id:
             raise RACPError("PERMISSION_DENIED", "Broker session mismatch", layer="broker")
         self.available()
+        if operation in CLIPBOARD_MODELS:
+            result = self.backend.clipboard(operation, payload)
+            if operation in CLIPBOARD_READS:
+                self.available()
+            return {"session_id": self.session_id, **result}
         if operation in DESKTOP_READS or operation == "desktop.lease_acquire":
             self.tick()
         if operation == "desktop.lease_acquire":

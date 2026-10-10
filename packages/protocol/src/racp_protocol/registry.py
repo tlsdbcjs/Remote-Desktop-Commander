@@ -1,23 +1,30 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 from racp_domain.models import RACPError
 
 from racp_protocol.browser import BROWSER_MODELS
+from racp_protocol.clipboard import CLIPBOARD_MODELS
 from racp_protocol.desktop import DESKTOP_MODELS, DESKTOP_READS
 from racp_protocol.models import ShellInput
+from racp_protocol.native_operations import NATIVE_MODELS
+from racp_protocol.network_capture import NetworkCapture
+from racp_protocol.os_observation import OS_OBSERVATION_MODELS, WINDOWS_INVENTORY_READS
 from racp_protocol.provider_models import (
     SENSITIVE_PROCESS_READS,
+    FileContentSearch,
     FileCopy,
     FileDelete,
     FileList,
     FileMkdir,
     FileMove,
+    FilePatchBatch,
     FilePath,
     FileRead,
     FileSearch,
     FileWrite,
+    ProcessDump,
     ProcessInspect,
     ProcessList,
     ProcessMemoryRead,
@@ -27,6 +34,7 @@ from racp_protocol.provider_models import (
     ProcessTerminate,
     ProcessWait,
 )
+from racp_protocol.proxy import PROXY_MODELS
 from racp_protocol.reversing import RE_MODELS, RE_READS
 from racp_protocol.terminal import (
     TerminalOpen,
@@ -93,9 +101,14 @@ SHELL = OperationSpec(
 )
 REGISTRY = {SHELL.name: SHELL}
 INPUT_MODELS: dict[str, type[BaseModel]] = {
+    **PROXY_MODELS,
+    **NATIVE_MODELS,
+    **CLIPBOARD_MODELS,
+    **OS_OBSERVATION_MODELS,
     **BROWSER_MODELS,
     **DESKTOP_MODELS,
     **RE_MODELS,
+    "network.capture": NetworkCapture,
     "shell.exec": ShellInput,
     "filesystem.read": FileRead,
     "filesystem.write": FileWrite,
@@ -106,6 +119,8 @@ INPUT_MODELS: dict[str, type[BaseModel]] = {
     "filesystem.move": FileMove,
     "filesystem.delete": FileDelete,
     "filesystem.search": FileSearch,
+    "filesystem.search_content": FileContentSearch,
+    "filesystem.patch": FilePatchBatch,
     "filesystem.hash": FilePath,
     "process.list": ProcessList,
     "process.inspect": ProcessInspect,
@@ -115,6 +130,7 @@ INPUT_MODELS: dict[str, type[BaseModel]] = {
     "process.tree": ProcessTarget,
     "process.memory_regions": ProcessMemoryRegions,
     "process.memory_read": ProcessMemoryRead,
+    "process.dump": ProcessDump,
     "terminal.open": TerminalOpen,
     "terminal.read": TerminalRead,
     "terminal.write": TerminalWrite,
@@ -124,8 +140,14 @@ INPUT_MODELS: dict[str, type[BaseModel]] = {
 }
 MUTATIONS = frozenset(
     {
+        *NATIVE_MODELS,
+        *PROXY_MODELS,
         "shell.exec",
+        "network.capture",
+        "process.dump",
+        "clipboard.write",
         "filesystem.write",
+        "filesystem.patch",
         "filesystem.mkdir",
         "filesystem.copy",
         "filesystem.move",
@@ -213,6 +235,56 @@ for name, model in INPUT_MODELS.items():
         else 10000
         if name in {"browser.click", "browser.type", "browser.key"}
         else 30000,
+    )
+
+
+REGISTRY["network.capture"] = replace(
+    REGISTRY["network.capture"],
+    minimum_os=("Windows",),
+    cancel="owned_capture_process",
+    max_timeout_ms=60000,
+    max_sync_timeout_ms=60000,
+    default_job_timeout_ms=60000,
+    max_job_timeout_ms=60000,
+    resource_lock_key="local_ip/local_port",
+    permission_scope="network.capture",
+    verification_ids=("CAPTURE-01", "LIFE-01", "RPC-01", "POLICY-01"),
+)
+
+REGISTRY["process.dump"] = replace(
+    REGISTRY["process.dump"],
+    minimum_os=("Windows",),
+    cancel="owned_dump_process",
+    max_timeout_ms=120000,
+    max_sync_timeout_ms=120000,
+    default_job_timeout_ms=120000,
+    max_job_timeout_ms=120000,
+    permission_scope="process.memory.dump",
+    verification_ids=("DUMP-01", "LIFE-01", "RPC-01", "POLICY-01"),
+)
+
+for name in WINDOWS_INVENTORY_READS:
+    REGISTRY[name] = replace(
+        REGISTRY[name], minimum_os=("Windows",), resource_lock_key="os_account",
+        verification_ids=("OS-INVENTORY-01", "RPC-01", "POLICY-01"),
+    )
+
+for name in CLIPBOARD_MODELS:
+    REGISTRY[name] = replace(
+        REGISTRY[name], minimum_os=("Windows",), cancel="session_broker_interrupt",
+        resource_lock_key="session_id", max_timeout_ms=30000, max_sync_timeout_ms=30000,
+        default_timeout_ms=5000, default_job_timeout_ms=30000, max_job_timeout_ms=30000,
+        permission_scope="clipboard.text", verification_ids=("CLIPBOARD-01", "RPC-01", "POLICY-01"),
+    )
+
+
+for name in [*NATIVE_MODELS, *PROXY_MODELS]:
+    REGISTRY[name] = replace(
+        REGISTRY[name], minimum_os=("Windows",), cancel="owned_native_session",
+        resource_lock_key="handle_id", max_timeout_ms=30000, max_sync_timeout_ms=30000,
+        default_timeout_ms=10000, default_job_timeout_ms=30000, max_job_timeout_ms=30000,
+        permission_scope="native.broad_os_access",
+        verification_ids=("NATIVE-01", "LIFE-01", "POLICY-01"),
     )
 
 

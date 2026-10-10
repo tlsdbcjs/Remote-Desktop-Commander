@@ -1,6 +1,6 @@
 [project]
 name = "racp-protocol"
-version = "0.1.11"
+version = "0.1.21"
 requires-python = ">=3.12,<3.13"
 dependencies = ["racp-domain", "pydantic>=2.10,<3"]
 

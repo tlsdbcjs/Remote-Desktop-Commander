@@ -1,8 +1,8 @@
 # RACP 시스템 설계 및 엔지니어링 명세서 (Specifications)
 
 > **Document ID**: `DOC-SPEC-INDEX`  
-> **Status**: Active · **Target Version**: v0.1.9  
-> **Last Updated**: 2026-10-07 · **Classification**: Specification Index
+> **Status**: Active · **Target Version**: v0.1.20  
+> **Last Updated**: 2026-10-10 · **Classification**: Specification Index
 
 ---
 
@@ -16,8 +16,12 @@
 
 | 문서명 | 문서 ID | 상태 | 설명 |
 | :--- | :--- | :--- | :--- |
+| [Client 영역 전체 Rust 전환 작업 계획서](rust-client-migration-plan.md) | `DOC-PLAN-RUST-CLIENT` | **Active** | Rust native GUI·Agent·Broker·OS Provider·Client 배포 전체 전환, R00–R14와 레거시 제거. Gateway Python 유지 |
+| [Agent 세부 권한 및 원격 OS 기능 아키텍처](agent-permissions-and-capabilities.md) | `DOC-SPEC-AGENT-PERMISSIONS` | **Draft** | Client 세부 권한·Agent 검사·18개 기능 분류·host MCP 결합·향후 중앙 정책 경계. Server→Client 정책 배포는 현재 미구현 |
+| [Agent 세부 권한 구현 계획](agent-permissions-implementation-plan.md) | `DOC-PLAN-AGENT-PERMISSIONS` | **Superseded** | Python/Electron 구현의 과거 계획. 후속 실행은 Rust 전체 전환 계획에서 기능·권한 요구를 이어받음 |
+| [Gateway 웹 관리 서버 작업 계획서](gateway-web-management-plan.md) | `DOC-SPEC-GATEWAY-WEB-PLAN` | **Draft** | v0.1.15 기준 · 중앙 웹 관리·SQLite·서비스·Setup·업데이트·백업, G00–G12와 GT01–GT29 |
 | [RACP 종합 개발정의서 v1.1](racp-specification-v1.1.md) | `DOC-SPEC-CORE-v1.1` | **Active** | 전체 시스템의 마스터 설계 명세서 (통신 프로토콜, 보안 경계, 실행 엔진, 도메인 모델, 부록 E 상세) |
-| [Windows 작업 및 테스트 계획서](windows-engineering-plan.md) | `DOC-SPEC-WIN-v1.0` | **Active** | 문서 개정 1.1 / 코드 기준 v0.1.9 · 작업 12개, 상세 시험 54개, 화면·세션 조합 8개, 실제 두 PC 인수 3개 |
+| [Windows 작업 및 테스트 계획서](windows-engineering-plan.md) | `DOC-SPEC-WIN-v1.0` | **Active** | 문서 개정 1.5 · 작업 12개, 상세 시험 54개, 화면·세션 조합 8개, 실제 두 PC 인수 및 리버싱 경로 |
 | [Client·Agent Rust 전환 설계](client-rust-migration.md) | `DOC-SPEC-CLIENT-RUST` | **Active** | 승인된 Tauri/Rust·React 구조, 내장 Python 제거 범위, 데이터 호환성 및 검증·삭제 조건 |
 | [Client·Agent Rust 구현 계획](client-rust-implementation-plan.md) | `DOC-PLAN-CLIENT-RUST` | **Draft** | 10개 구현·검증 task, 공통 인터페이스와 최종 Python 제거 게이트 |
 
