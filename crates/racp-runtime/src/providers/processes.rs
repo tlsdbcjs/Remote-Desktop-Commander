@@ -241,7 +241,7 @@ impl Processes {
         }
         Ok((pid, expected))
     }
-    fn protected(system: &sysinfo::System, pid: u32) -> bool {
+    pub(super) fn protected(system: &sysinfo::System, pid: u32) -> bool {
         let mut parent = Some(sysinfo::Pid::from_u32(std::process::id()));
         let mut ancestors = std::collections::BTreeSet::new();
         for _ in 0..100 {

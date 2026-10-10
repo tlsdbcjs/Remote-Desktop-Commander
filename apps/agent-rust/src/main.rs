@@ -20,6 +20,10 @@ async fn main() {
         .find(|a| a[0] == "--state-dir")
         .map(|a| PathBuf::from(&a[1]));
     let result = async {
+        if action == "collection-worker" {
+            racp_runtime::providers::recipes::run_worker()?;
+            return Ok(Value::Null);
+        }
         if matches!(action, "plugin-gdb" | "plugin-ghidra") {
             racp_runtime::providers::reversing::run_native_plugin(action, &args)?;
             return Ok(Value::Null);

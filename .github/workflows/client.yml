@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 concurrency:
   group: rust-client-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 permissions:
   contents: read
 jobs:
@@ -25,6 +25,7 @@ jobs:
       - run: rustup toolchain install 1.90.0 --profile minimal
       - uses: Swatinem/rust-cache@v2
         with:
+          cache-on-failure: true
           workspaces: |
             . -> target
             apps/client/src-tauri -> target

@@ -44,12 +44,12 @@ pub(super) fn locale() -> Result<Value, RacpError> {
         return Err(denied());
     }
     let bias = zone.Bias
-        + if kind == TIME_ZONE_ID_DAYLIGHT {
+        + if kind == 2 {
             zone.DaylightBias
         } else {
             zone.StandardBias
         };
-    let timezone = if kind == TIME_ZONE_ID_DAYLIGHT {
+    let timezone = if kind == 2 {
         text(&zone.DaylightName)
     } else {
         text(&zone.StandardName)
@@ -396,7 +396,7 @@ fn connections(p: &Value) -> Result<Value, RacpError> {
             let (state, local, remote) = if family == 2 {
                 let start = if tcp { 4 } else { 0 };
                 let local = json!({"ip":Ipv4Addr::from(dword(row,start).to_ne_bytes()).to_string(),"port":port(row,start+4)});
-                let remote = if tcp && dword(row, 0) != MIB_TCP_STATE_LISTEN {
+                let remote = if tcp && dword(row, 0) != MIB_TCP_STATE_LISTEN as u32 {
                     json!({"ip":Ipv4Addr::from(dword(row,12).to_ne_bytes()).to_string(),"port":port(row,16)})
                 } else {
                     Value::Null
@@ -406,7 +406,7 @@ fn connections(p: &Value) -> Result<Value, RacpError> {
                 let address: [u8; 16] = row[..16].try_into().unwrap();
                 let local = json!({"ip":Ipv6Addr::from(address).to_string(),"port":port(row,20),"scope_id":dword(row,16)});
                 let state = if tcp { dword(row, 48) } else { 0 };
-                let remote = if tcp && state != MIB_TCP_STATE_LISTEN {
+                let remote = if tcp && state != MIB_TCP_STATE_LISTEN as u32 {
                     let address: [u8; 16] = row[24..40].try_into().unwrap();
                     json!({"ip":Ipv6Addr::from(address).to_string(),"port":port(row,44),"scope_id":dword(row,40)})
                 } else {
