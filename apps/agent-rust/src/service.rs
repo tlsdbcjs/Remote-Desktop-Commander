@@ -101,7 +101,7 @@ fn verify_service_identity() -> Result<(), RacpError> {
     let mut text = std::ptr::null_mut();
     if unsafe {
         windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW(
-            sid.as_ptr().cast(),
+            sid.as_mut_ptr().cast(),
             &mut text,
         )
     } == 0

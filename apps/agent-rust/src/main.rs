@@ -131,7 +131,13 @@ async fn main() {
         Ok(value) => {
             if !matches!(
                 action,
-                "serve" | "run" | "broker" | "plugin-gdb" | "plugin-ghidra"
+                "serve"
+                    | "run"
+                    | "broker"
+                    | "guardian"
+                    | "service"
+                    | "plugin-gdb"
+                    | "plugin-ghidra"
             ) {
                 println!("{}", json!({"ok":true,"result":value}));
             }
@@ -139,7 +145,13 @@ async fn main() {
         Err(error) => {
             if !matches!(
                 action,
-                "serve" | "run" | "broker" | "plugin-gdb" | "plugin-ghidra"
+                "serve"
+                    | "run"
+                    | "broker"
+                    | "guardian"
+                    | "service"
+                    | "plugin-gdb"
+                    | "plugin-ghidra"
             ) {
                 println!("{}", json!({"ok":false,"code":error.code}));
             } else {

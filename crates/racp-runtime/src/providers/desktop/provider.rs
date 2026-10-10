@@ -427,7 +427,7 @@ impl Provider for Desktop {
             .map(|s| s.clone())
             .unwrap_or_else(|_| json!({"available":false}));
         vec![
-            json!({"name":"desktop","version":"1.0.0","supported":true,"enabled":self.enabled,"healthy":status["broker_running"]==true,"unavailable_reason":status["error_code"],"operations":["desktop.sessions","desktop.monitors","desktop.windows","desktop.foreground","desktop.screenshot","desktop.inspect","desktop.lease_acquire","desktop.lease_renew","desktop.lease_release","desktop.activate","desktop.move","desktop.click","desktop.type","desktop.key","desktop.scroll","desktop.drag","desktop.invoke","desktop.set_value"],"attributes":{"backend":"rust-windows-local-session-broker","sessions":[status],"input_guardian_available":true,"capture":"visible_rectangle","service_cross_session_launch":false}}),
+            json!({"name":"desktop","version":"1.0.0","supported":true,"enabled":self.enabled,"healthy":status["broker_running"]==true,"unavailable_reason":status["error_code"],"operations":["clipboard.state","clipboard.read","clipboard.write","desktop.sessions","desktop.monitors","desktop.windows","desktop.foreground","desktop.screenshot","desktop.inspect","desktop.lease_acquire","desktop.lease_renew","desktop.lease_release","desktop.activate","desktop.move","desktop.click","desktop.type","desktop.key","desktop.scroll","desktop.drag","desktop.invoke","desktop.set_value"],"attributes":{"backend":"rust-windows-local-session-broker","sessions":[status],"input_guardian_available":true,"capture":"visible_rectangle","service_cross_session_launch":false}}),
         ]
     }
     fn execute(

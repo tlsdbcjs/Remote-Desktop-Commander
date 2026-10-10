@@ -181,6 +181,9 @@ impl Broker {
         if payload["session_id"] != self.native.status()["session_id"] {
             return Err(RacpError::new("PERMISSION_DENIED"));
         }
+        if operation.starts_with("clipboard.") {
+            return self.native.clipboard(operation, &payload);
+        }
         let (snapshot, layout) = self.native.snapshot()?;
         let now = Instant::now();
         self.authority.tick(&snapshot, now);

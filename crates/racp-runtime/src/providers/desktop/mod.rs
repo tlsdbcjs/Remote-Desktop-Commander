@@ -35,3 +35,5 @@ mod input;
 
 #[cfg(windows)]
 mod automation;
+#[cfg(windows)]
+mod clipboard;

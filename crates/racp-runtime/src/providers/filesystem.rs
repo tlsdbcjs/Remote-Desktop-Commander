@@ -1,4 +1,5 @@
 use super::{cursor::Cursor, encoding, Provider};
+mod text;
 use futures_util::future::BoxFuture;
 use racp_contract::{new_id, registry, RacpError};
 use racp_core::{private_dir, AgentSettings, Directory, FileInfo, Workspaces};
@@ -600,6 +601,9 @@ impl Filesystem {
             return Err(RacpError::new("PATH_ACCESS_DENIED").into());
         }
         match op {
+            "filesystem.search_content" => {
+                return self.search_content(id, &target, payload, budget)
+            }
             "filesystem.read" => return self.read(id, &target, payload, budget, operation),
             "filesystem.stat" => {
                 let info = if self.guards.is_root(&target) {
@@ -681,6 +685,9 @@ impl Filesystem {
         budget.check()?;
         if op == "filesystem.write" {
             return self.write(id, &target, payload, budget);
+        }
+        if op == "filesystem.patch" {
+            return self.patch_batch(id, payload, budget);
         }
         if op == "filesystem.mkdir" {
             return self.mkdir(id, &target, payload, budget);

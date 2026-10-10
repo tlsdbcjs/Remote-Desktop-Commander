@@ -32,6 +32,9 @@ pub struct FileInfo {
     pub mode: u32,
 }
 impl FileInfo {
+    pub fn from_file(file: &File) -> Result<Self, RacpError> {
+        file_info(file)
+    }
     pub fn revision(&self) -> String {
         format!(
             "{:x}-{:x}-{:x}-{:x}",

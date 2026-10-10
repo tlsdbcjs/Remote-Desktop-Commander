@@ -50,6 +50,7 @@ impl Provider for EmptyProvider {
     }
 }
 mod filesystem;
+mod os_observation;
 pub use filesystem::Filesystem;
 mod cursor;
 mod encoding;
@@ -78,6 +79,7 @@ impl NativeProviders {
     ) -> Result<Self, RacpError> {
         let providers: Vec<Arc<dyn Provider>> = vec![
             Arc::new(Filesystem::new(settings)?),
+            Arc::new(os_observation::OSObservation::new(settings, boot)),
             Arc::new(Shell::new(settings)?),
             Arc::new(Processes::new(settings, boot)?),
             Arc::new(Terminal::new(settings, boot)?),
