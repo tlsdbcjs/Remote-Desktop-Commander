@@ -29,12 +29,19 @@ impl Browser {
         }
         let session = self.get(request)?;
         let _serial = session.serial.lock().await;
+        let borrowed_page = session.borrowed
+            && session
+                .state
+                .lock()
+                .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+                .pages
+                .get(p["page_id"].as_str().unwrap_or(""))
+                .is_some_and(|page| page.handle["ownership"] == "borrowed");
         if session.borrowed
             && (action == "browser.download"
-                || matches!(
-                    action,
-                    "browser.evaluate" | "browser.upload" | "browser.close_page"
-                ) && !session.allow_termination)
+                || borrowed_page
+                    && matches!(action, "browser.evaluate" | "browser.upload")
+                    && !session.allow_termination)
         {
             return Err(RacpError::new("OPERATION_NOT_SUPPORTED"));
         }
@@ -61,7 +68,7 @@ impl Browser {
             state.handle["last_access_at"] = json!(racp_contract::timestamp());
             state.handle["expires_at"] = json!((chrono::Utc::now() + chrono::Duration::hours(1))
                 .to_rfc3339_opts(chrono::SecondsFormat::Micros, true));
-            return Ok(json!({"handle":state.handle}));
+            return Ok(json!({"browser_id":state.handle["id"],"handle":state.handle}));
         }
         let page_id = p["page_id"].as_str().unwrap_or("");
         if action == "browser.frames" {
@@ -641,6 +648,7 @@ pub(super) async fn click(
             cancel,
         )
         .await?;
+    effect.store(true, std::sync::atomic::Ordering::SeqCst);
     session
         .cdp
         .call(

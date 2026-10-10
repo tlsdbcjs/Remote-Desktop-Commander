@@ -26,6 +26,7 @@ pub(super) struct Frame {
     pub active: bool,
 }
 pub(super) struct Page {
+    pub browser_context: String,
     pub target: String,
     pub session: String,
     pub handle: Value,
@@ -74,6 +75,7 @@ fn detach(page: &mut Page, session: &str, native: &str, swapping: bool) -> bool 
 }
 
 pub(super) struct State {
+    pub history: Vec<Value>,
     pub uploads: usize,
     pub download: Option<super::files::Download>,
     pub handle: Value,
@@ -84,6 +86,7 @@ pub(super) struct Session {
     pub(super) events: Arc<Mutex<super::BrowserOutbox>>,
     pub(super) siblings: std::sync::Weak<Mutex<BTreeMap<String, Arc<Session>>>>,
     pub opening_operation: String,
+    pub backend_version: String,
     pub remote: Option<String>,
     pub borrowed: bool,
     pub allow_termination: bool,
@@ -93,6 +96,7 @@ pub(super) struct Session {
     pub state: Mutex<State>,
     pub process: Mutex<Option<OwnedProcess>>,
     pub protected: Mutex<Option<crate::identity::ProtectedProcess>>,
+    pub proxy: super::PolicyProxy,
     pub profile: PathBuf,
     pub width: u64,
     pub height: u64,
@@ -104,6 +108,7 @@ pub(super) struct Session {
 }
 #[derive(Clone)]
 pub struct Browser {
+    pub(super) ready: Arc<std::sync::atomic::AtomicBool>,
     pub(super) outbox: Arc<Mutex<super::BrowserOutbox>>,
     pub(super) cursor: crate::providers::cursor::Cursor,
     pub(super) opening: Arc<tokio::sync::Mutex<()>>,
@@ -136,8 +141,10 @@ impl Browser {
         private_dir(&root)?;
         let spool = settings.data_dir.join("spool");
         private_dir(&spool)?;
+        let markers = super::recovery::markers(&root)?;
         let instance = new_id("provider");
         let this = Self {
+            ready: Arc::new(std::sync::atomic::AtomicBool::new(markers.is_empty())),
             outbox: Arc::new(Mutex::new(super::BrowserOutbox::new(&instance, 128))),
             cursor: Default::default(),
             opening: Arc::default(),
@@ -150,6 +157,7 @@ impl Browser {
             instance,
             guards: Workspaces::new(&settings.workspace, &settings.allowed_workspaces)?,
         };
+        this.recover(markers);
         let weak = Arc::downgrade(&this.sessions);
         let quota_root = this.root.clone();
         tokio::spawn(async move {
@@ -299,6 +307,13 @@ impl Browser {
             cwd,
         })?;
         let protected = crate::identity::ProtectedProcess::register(process.pid())?;
+        if let Err(error) =
+            super::recovery::persist_process(&profile, &self.device, &self.boot, &process)
+        {
+            drop(process);
+            let _ = std::fs::remove_dir_all(&profile);
+            return Err(error);
+        }
         let connection = async {
             let deadline = Instant::now() + Duration::from_secs(10);
             loop {
@@ -339,10 +354,33 @@ impl Browser {
                 return Err(e);
             }
         };
+        let backend_version = match cdp
+            .call("Browser.getVersion", json!({}), None, cancel)
+            .await
+        {
+            Ok(version) => {
+                super::operations::bounded(version["product"].as_str().unwrap_or(""), 256)
+            }
+            Err(error) => {
+                cdp.close().await;
+                drop(process);
+                let _ = std::fs::remove_dir_all(&profile);
+                return Err(error);
+            }
+        };
+        let proxy = match super::PolicyProxy::bind(self.config.clone()).await {
+            Ok(proxy) => proxy,
+            Err(error) => {
+                cdp.close().await;
+                drop(process);
+                let _ = std::fs::remove_dir_all(&profile);
+                return Err(error);
+            }
+        };
         let context = match cdp
             .call(
                 "Target.createBrowserContext",
-                json!({"disposeOnDetach":true}),
+                json!({"disposeOnDetach":true,"proxyServer":format!("http://{}",proxy.address()),"proxyBypassList":"<-loopback>"}),
                 None,
                 cancel,
             )
@@ -362,6 +400,7 @@ impl Browser {
             events: self.outbox.clone(),
             siblings: Arc::downgrade(&self.sessions),
             opening_operation: request["operation_id"].as_str().unwrap_or("").into(),
+            backend_version,
             remote: None,
             borrowed: false,
             allow_termination: true,
@@ -369,6 +408,7 @@ impl Browser {
             cdp,
             context,
             state: Mutex::new(State {
+                history: vec![],
                 uploads: 0,
                 download: None,
                 handle,
@@ -377,6 +417,7 @@ impl Browser {
             }),
             process: Mutex::new(Some(process)),
             protected: Mutex::new(Some(protected)),
+            proxy,
             profile,
             width: request["payload"]["width"].as_u64().unwrap_or(1280),
             height: request["payload"]["height"].as_u64().unwrap_or(720),
@@ -393,18 +434,49 @@ impl Browser {
         session.emit("inventory", "pending");
         session.start(self.config.clone()).await;
         let result = async {
-            session.cdp.call("Target.setDiscoverTargets",json!({"discover":true}),None,cancel).await?;
-            session.cdp.call("Target.setAutoAttach",json!({"autoAttach":true,"waitForDebuggerOnStart":true,"flatten":true}),None,cancel).await?;
+            session.watch_downloads(cancel).await?;
+            session
+                .cdp
+                .call(
+                    "Target.setDiscoverTargets",
+                    json!({"discover":true}),
+                    None,
+                    cancel,
+                )
+                .await?;
+            session
+                .cdp
+                .call(
+                    "Target.setAutoAttach",
+                    json!({"autoAttach":true,"waitForDebuggerOnStart":true,"flatten":true}),
+                    None,
+                    cancel,
+                )
+                .await?;
             session.new_page(cancel).await?;
-            session.state.lock().map_err(|_|RacpError::new("LOCAL_STATE_FAILED"))?.handle["state"]=json!("ACTIVE");
-            session.state.lock().map_err(|_|RacpError::new("LOCAL_STATE_FAILED"))?.handle["availability"]=json!("available");
-            session.emit("inventory","active");
-            Ok(json!({"browser_id":id,"agent_boot_id":self.boot,"handle":session.handle(),"pages":session.pages()}))
-        }.await;
+            session
+                .state
+                .lock()
+                .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+                .handle["state"] = json!("ACTIVE");
+            session
+                .state
+                .lock()
+                .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+                .handle["availability"] = json!("available");
+            session.emit("inventory", "active");
+            Ok(session.opened())
+        }
+        .await;
         if result.is_err() {
             session.close().await?;
         }
         result
+    }
+}
+impl Browser {
+    pub(super) fn capabilities_value(&self) -> Value {
+        self.capabilities()[0].clone()
     }
 }
 impl Session {
@@ -472,6 +544,12 @@ impl Session {
         Ok(())
     }
     pub(super) fn emit(&self, kind: &str, status: &str) {
+        if let Ok(mut state) = self.state.lock() {
+            state.history.push(json!({"type":kind,"state":status}));
+            if state.history.len() > 32 {
+                state.history.remove(0);
+            }
+        }
         let Some(siblings) = self.siblings.upgrade() else {
             return;
         };
@@ -504,6 +582,9 @@ impl Session {
             .map(|s| s.handle.clone())
             .unwrap_or(Value::Null)
     }
+    pub(super) fn opened(&self) -> Value {
+        json!({"browser_id":self.handle()["id"],"agent_boot_id":self.handle()["agent_boot_id"],"handle":self.handle(),"pages":self.pages(),"backend_version":self.backend_version,"ownership":if self.borrowed {"borrowed"}else{"racp_owned"},"profile":if self.borrowed{"existing_explicit"}else{"isolated_ephemeral"},"sandbox":if self.remote.is_some(){json!("external_unverified")}else{json!(true)}})
+    }
     pub fn pages(&self) -> Vec<Value> {
         self.state.lock().map(|s|s.pages.iter().map(|(id,p)|json!({"page_id":id,"navigation_revision":p.revision.to_string(),"closed":p.handle["state"]=="CLOSED","ownership":p.handle["ownership"],"cdp_target_id":p.target})).collect()).unwrap_or_default()
     }
@@ -528,16 +609,6 @@ impl Session {
             )
             .await?;
         let target = target["targetId"].as_str().unwrap_or("");
-        if self.remote.is_some() {
-            self.cdp
-                .call(
-                    "Target.attachToTarget",
-                    json!({"targetId":target,"flatten":true}),
-                    None,
-                    cancel,
-                )
-                .await?;
-        }
         loop {
             let notified = self.notify.notified();
             if let Some(id) = self
@@ -565,7 +636,7 @@ impl Session {
                 .map_err(|_| RacpError::new("CLEANUP_FAILED"))?;
             if state.handle["state"] == "CLOSED" {
                 return Ok(
-                    json!({"browser_id":state.handle["id"],"cleanup_status":"complete","handle":state.handle}),
+                    json!({"browser_id":state.handle["id"],"cleanup_status":"complete","state":"CLOSED","resource_disposition":if self.remote.is_some(){"external_browser_preserved"}else{"owned_browser_terminated"},"handle":state.handle}),
                 );
             }
             state.handle["state"] = json!("CLOSING");
@@ -575,6 +646,7 @@ impl Session {
             self.cleanup_remote().await?;
         }
         self.stop.cancel();
+        self.proxy.close().await;
         self.cdp.close().await;
         if let Some(worker) = self.worker.lock().await.take() {
             let _ = worker.await;
@@ -627,7 +699,7 @@ impl Session {
             p.handle["state"] = json!("CLOSED");
             p.handle["availability"] = json!("unavailable");
         }
-        let result = json!({"browser_id":state.handle["id"],"cleanup_status":"complete","handle":state.handle});
+        let result = json!({"browser_id":state.handle["id"],"cleanup_status":"complete","state":"CLOSED","resource_disposition":if self.remote.is_some(){"external_browser_preserved"}else{"owned_browser_terminated"},"handle":state.handle});
         drop(state);
         self.emit("inventory", "closed");
         Ok(result)
@@ -668,7 +740,29 @@ impl Session {
         ) {
             return self.download_event(method, params, config).await;
         }
-        if method == "Target.attachedToTarget" {
+        if method == "Target.targetCreated"
+            && self.remote.is_some()
+            && params["targetInfo"]["type"] == "page"
+            && params["targetInfo"]["browserContextId"] == self.context
+        {
+            let known = self
+                .state
+                .lock()
+                .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+                .pages
+                .values()
+                .any(|p| p.target == params["targetInfo"]["targetId"]);
+            if !known {
+                self.cdp
+                    .call(
+                        "Target.attachToTarget",
+                        json!({"targetId":params["targetInfo"]["targetId"],"flatten":true}),
+                        None,
+                        &self.stop,
+                    )
+                    .await?;
+            }
+        } else if method == "Target.attachedToTarget" {
             let target = &params["targetInfo"];
             let child = params["sessionId"].as_str().unwrap_or("");
             if target["type"] == "page" {
@@ -729,12 +823,23 @@ impl Session {
                         .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
                     let mut handle = state.handle.clone();
                     handle["id"] = json!(id);
+                    handle["ownership"] = json!(if self.borrowed
+                        && self.selected.iter().any(|t| target["targetId"] == *t)
+                    {
+                        "borrowed"
+                    } else {
+                        "racp_owned"
+                    });
                     handle["type"] = json!("browser-page");
                     handle["state"] = json!("ACTIVE");
                     handle["availability"] = json!("available");
                     state.pages.insert(
                         id,
                         Page {
+                            browser_context: target["browserContextId"]
+                                .as_str()
+                                .unwrap_or("")
+                                .into(),
                             target: target["targetId"].as_str().unwrap_or("").into(),
                             session: child.into(),
                             handle,
@@ -768,7 +873,9 @@ impl Session {
                     .call("Runtime.enable", json!({}), Some(child), &self.stop)
                     .await?;
                 self.configure_network(child, config).await?;
-                self.cdp.call("Emulation.setDeviceMetricsOverride",json!({"width":self.width,"height":self.height,"deviceScaleFactor":1,"mobile":false}),Some(child),&self.stop).await?;
+                if !self.borrowed || !self.selected.iter().any(|t| target["targetId"] == *t) {
+                    self.cdp.call("Emulation.setDeviceMetricsOverride",json!({"width":self.width,"height":self.height,"deviceScaleFactor":1,"mobile":false}),Some(child),&self.stop).await?;
+                }
                 self.cdp
                     .call(
                         "Target.setAutoAttach",
@@ -1130,6 +1237,7 @@ impl Provider for Browser {
                     "browser.snapshot",
                     "browser.frames",
                     "browser.screenshot",
+                    "browser.download",
                     "browser.upload",
                     "browser.click",
                     "browser.type",
@@ -1139,8 +1247,9 @@ impl Provider for Browser {
             }
         }
         let available = installed || self.config.cdp_enabled;
+        let ready = self.ready.load(std::sync::atomic::Ordering::SeqCst);
         vec![
-            json!({"name":"browser","version":"1.0.0","operations":operations,"installed":available,"supported":true,"enabled":true,"healthy":available,"unavailable_reason":if available {Value::Null}else{json!("BROWSER_RUNTIME_UNAVAILABLE")},"attributes":{"engine":"chromium","automation":"native_cdp","cdp_enabled":self.config.cdp_enabled}}),
+            json!({"name":"browser","version":"1.0.0","operations":operations,"installed":available,"supported":true,"enabled":true,"healthy":available && ready,"unavailable_reason":if !ready {json!("BROWSER_CLEANUP_UNKNOWN")}else if available {Value::Null}else{json!("BROWSER_RUNTIME_UNAVAILABLE")},"attributes":{"engine":"chromium","automation":"native_cdp","cdp_enabled":self.config.cdp_enabled}}),
         ]
     }
     fn inventory(&self) -> Vec<Value> {
@@ -1170,6 +1279,9 @@ impl Provider for Browser {
         cancel: CancellationToken,
     ) -> BoxFuture<'_, Result<Value, RacpError>> {
         Box::pin(async move {
+            if !self.ready.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err(RacpError::new("RESOURCE_BUSY"));
+            }
             let timeout =
                 Duration::from_millis(request["remaining_timeout_ms"].as_u64().unwrap_or(30000));
             let scope = cancel.child_token();
@@ -1217,6 +1329,25 @@ impl Provider for Browser {
                     }
                 }
             }
+            if let Ok(ref mut result) = result {
+                if result.is_object() {
+                    if let Ok(session) = self.get(&request) {
+                        let state = session
+                            .state
+                            .lock()
+                            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+                        result["events"] = json!(state.history);
+                        if result.get("navigation_revision").is_none() {
+                            if let Some(page) = state
+                                .pages
+                                .get(request["payload"]["page_id"].as_str().unwrap_or(""))
+                            {
+                                result["navigation_revision"] = json!(page.revision.to_string());
+                            }
+                        }
+                    }
+                }
+            }
             Ok(match result {
                 Ok(result) => json!({"state":"SUCCEEDED","result":result,"error":null}),
                 Err(error) => {
@@ -1227,6 +1358,9 @@ impl Provider for Browser {
     }
     fn cleanup(&self) -> BoxFuture<'_, Result<(), RacpError>> {
         Box::pin(async move {
+            if !self.ready.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err(RacpError::new("CLEANUP_FAILED"));
+            }
             let sessions = self
                 .sessions
                 .lock()
@@ -1258,6 +1392,7 @@ mod frame_race_tests {
             active: true,
         };
         let mut page = Page {
+            browser_context: String::new(),
             target: "target_main".into(),
             session: "parent_session".into(),
             handle: json!({}),

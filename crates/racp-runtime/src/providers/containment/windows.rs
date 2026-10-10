@@ -140,6 +140,7 @@ impl Drop for Attributes {
 pub struct OwnedProcess {
     process: OwnedHandle,
     job: OwnedHandle,
+    job_name: String,
     pid: u32,
     console: Option<HPCON>,
     pub stdout: Pipe,
@@ -338,7 +339,12 @@ impl OwnedProcess {
         if environment.len() == 1 {
             environment.push(0);
         }
-        let job = own(unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) })?;
+        let job_name = format!("Local\\RACP_{}", racp_contract::new_id("job"));
+        let name = wide(std::ffi::OsStr::new(&job_name));
+        let job = own(unsafe { CreateJobObjectW(std::ptr::null(), name.as_ptr()) })?;
+        if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+            return Err(RacpError::new("EXECUTION_FAILED"));
+        }
         let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
         limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         if unsafe {
@@ -391,6 +397,7 @@ impl OwnedProcess {
         Ok(Self {
             process,
             job,
+            job_name,
             pid: info.dwProcessId,
             console,
             stdout: Pipe {
@@ -405,6 +412,9 @@ impl OwnedProcess {
     }
     pub fn pid(&self) -> u32 {
         self.pid
+    }
+    pub fn job_name(&self) -> Option<&str> {
+        Some(&self.job_name)
     }
     pub fn tree_empty(&self) -> Result<bool, RacpError> {
         let mut info = JOBOBJECT_BASIC_ACCOUNTING_INFORMATION::default();

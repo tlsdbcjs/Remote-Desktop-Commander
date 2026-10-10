@@ -30,6 +30,15 @@ fn guid(value: &str) -> bool {
         })
 }
 impl Session {
+    pub(super) async fn watch_downloads(
+        &self,
+        cancel: &CancellationToken,
+    ) -> Result<(), RacpError> {
+        let directory = self.profile.join("downloads");
+        racp_core::private_dir(&directory)?;
+        self.cdp.call("Browser.setDownloadBehavior",json!({"behavior":"allowAndName","downloadPath":directory,"browserContextId":self.context,"eventsEnabled":true}),None,cancel).await?;
+        Ok(())
+    }
     pub(super) async fn upload(
         &self,
         request: &Value,
@@ -104,6 +113,7 @@ impl Session {
         }
         let mut cancel = false;
         let mut unsolicited = false;
+        let mut cancel_context = self.context.clone();
         {
             let mut state = self
                 .state
@@ -119,6 +129,11 @@ impl Session {
                             .any(|frame| frame.active && frame.native == p["frameId"])
                     })
                     .map(|(id, _)| id.clone());
+                let Some(page_id) = page.as_ref() else {
+                    return Ok(());
+                };
+                cancel_context = state.pages[page_id].browser_context.clone();
+
                 if let Some(download) = state
                     .download
                     .as_mut()
@@ -167,13 +182,12 @@ impl Session {
             }
         }
         if cancel {
+            let mut arguments = json!({"guid":id});
+            if !cancel_context.is_empty() {
+                arguments["browserContextId"] = json!(cancel_context);
+            }
             self.cdp
-                .call(
-                    "Browser.cancelDownload",
-                    json!({"guid":id,"browserContextId":self.context}),
-                    None,
-                    &self.stop,
-                )
+                .call("Browser.cancelDownload", arguments, None, &self.stop)
                 .await?;
             if unsolicited {
                 self.emit("download", "unsolicited_cancelled");
@@ -227,15 +241,7 @@ impl Session {
             self.emit("download","completed");
             Ok(json!({"artifact_id":null,"spool_path":output,"artifact_media_type":"application/octet-stream","size_bytes":size,"sha256":sha256,"suggested_filename":filename,"native_cleanup":"complete","trust":"untrusted_page_data"}))
         }.await;
-        let reset = self
-            .cdp
-            .call(
-                "Browser.setDownloadBehavior",
-                json!({"behavior":"deny","browserContextId":self.context,"eventsEnabled":true}),
-                None,
-                &self.stop,
-            )
-            .await;
+        let reset = self.watch_downloads(&self.stop).await;
         self.state
             .lock()
             .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?

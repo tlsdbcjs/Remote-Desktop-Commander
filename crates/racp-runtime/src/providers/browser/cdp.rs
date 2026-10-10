@@ -209,6 +209,9 @@ fn metadata_event(value: Value) -> Option<Value> {
             json!({"requestId":p["requestId"],"resourceType":p["resourceType"],"frameId":p["frameId"],"request":{"url":p["request"]["url"]}})
         }
         "Page.javascriptDialogOpening" => json!({}),
+        "Target.targetCreated" => {
+            json!({"targetInfo":{"targetId":p["targetInfo"]["targetId"],"type":p["targetInfo"]["type"],"browserContextId":p["targetInfo"]["browserContextId"]}})
+        }
         "Target.attachedToTarget" => {
             json!({"sessionId":p["sessionId"],"waitingForDebugger":p["waitingForDebugger"],"targetInfo":{"targetId":p["targetInfo"]["targetId"],"type":p["targetInfo"]["type"],"browserContextId":p["targetInfo"]["browserContextId"]}})
         }

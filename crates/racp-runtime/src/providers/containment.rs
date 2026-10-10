@@ -354,6 +354,9 @@ impl OwnedProcess {
     pub fn pid(&self) -> u32 {
         self.pid
     }
+    pub fn job_name(&self) -> Option<&str> {
+        None
+    }
     pub fn tree_empty(&self) -> Result<bool, RacpError> {
         Ok(true)
     }

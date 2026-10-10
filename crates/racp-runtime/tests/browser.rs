@@ -573,6 +573,39 @@ async fn external_cdp_opt_in_context_and_target_ownership() {
         .await,
     );
     assert_ne!(isolated["pages"][0]["cdp_target_id"], target);
+    let snapshot = succeeded(
+        execute(
+            &attached,
+            "snapshot",
+            json!({"browser_id":isolated["browser_id"],"page_id":isolated["pages"][0]["page_id"]}),
+            "owner_one",
+        )
+        .await,
+    );
+    let mut pop = observed(&isolated, &snapshot);
+    pop["expression"] = json!("()=>{window.open('about:blank');return true;}");
+    succeeded(execute(&attached, "evaluate", pop, "owner_one").await);
+    let mut pages = serde_json::Value::Null;
+    for _ in 0..100 {
+        pages = succeeded(
+            execute(
+                &attached,
+                "pages",
+                json!({"browser_id":isolated["browser_id"]}),
+                "owner_one",
+            )
+            .await,
+        );
+        if pages["pages"].as_array().unwrap().len() == 2 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        pages["pages"].as_array().unwrap().len(),
+        2,
+        "owned external popup must be tracked"
+    );
     let borrowed = succeeded(
         execute(
             &attached,
@@ -597,6 +630,48 @@ async fn external_cdp_opt_in_context_and_target_ownership() {
         execute(&attached, "evaluate", page, "owner_one").await["error"]["code"],
         "OPERATION_NOT_SUPPORTED"
     );
+    let new_page = succeeded(
+        execute(
+            &attached,
+            "new_page",
+            json!({"browser_id":borrowed["browser_id"]}),
+            "owner_one",
+        )
+        .await,
+    );
+    let inventory = succeeded(
+        execute(
+            &attached,
+            "pages",
+            json!({"browser_id":borrowed["browser_id"]}),
+            "owner_one",
+        )
+        .await,
+    );
+    assert_eq!(
+        inventory["pages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["page_id"] == new_page["page_id"])
+            .unwrap()["ownership"],
+        "racp_owned"
+    );
+    let owned_snapshot = succeeded(
+        execute(
+            &attached,
+            "snapshot",
+            json!({"browser_id":borrowed["browser_id"],"page_id":new_page["page_id"]}),
+            "owner_one",
+        )
+        .await,
+    );
+    let owned = json!({"browser_id":borrowed["browser_id"],"page_id":new_page["page_id"],"observation_id":owned_snapshot["observation_id"],"navigation_revision":owned_snapshot["navigation_revision"],"expression":"42"});
+    assert_eq!(
+        succeeded(execute(&attached, "evaluate", owned, "owner_one").await)["value"],
+        42
+    );
+    assert_eq!(borrowed["ownership"], "borrowed");
     succeeded(
         execute(
             &attached,
@@ -699,4 +774,267 @@ async fn browser_process_is_protected_from_generic_termination() {
     let result=processes.execute(json!({"operation":"process.terminate","payload":{"pid":owned["pid"],"create_time":owned["create_time"],"agent_boot_id":"boot_browser","force":true},"remaining_timeout_ms":1000,"context":{"workspace_id":"default","principal_id":"owner_one"}}),CancellationToken::new()).await.unwrap();
     assert_eq!(result["error"]["code"], "PERMISSION_DENIED");
     browser.cleanup().await.unwrap();
+}
+
+#[tokio::test]
+async fn context_proxy_denies_http_and_connect_before_network_effect() {
+    use racp_runtime::providers::browser::PolicyProxy;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let forbidden = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = forbidden.local_addr().unwrap();
+    let config = BrowserConfig {
+        allow_origins: vec!["http://localhost:1234".into()],
+        ..Default::default()
+    };
+    let proxy = PolicyProxy::bind(config).await.unwrap();
+    for request in [
+        format!("GET http://{address}/ HTTP/1.1\r\nHost: {address}\r\n\r\n"),
+        format!("CONNECT {address} HTTP/1.1\r\nHost: {address}\r\n\r\n"),
+    ] {
+        let mut socket = tokio::net::TcpStream::connect(proxy.address())
+            .await
+            .unwrap();
+        socket.write_all(request.as_bytes()).await.unwrap();
+        let mut data = [0; 1024];
+        let n = socket.read(&mut data).await.unwrap();
+        assert!(std::str::from_utf8(&data[..n])
+            .unwrap()
+            .starts_with("HTTP/1.1 403"));
+    }
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(100), forbidden.accept())
+            .await
+            .is_err()
+    );
+    proxy.close().await;
+}
+
+#[tokio::test]
+async fn context_proxy_preserves_http_bytes_and_connect_tunnel_and_closes_both() {
+    use racp_runtime::providers::browser::PolicyProxy;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let http = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let http_address = http.local_addr().unwrap();
+    let http_server = tokio::spawn(async move {
+        let (mut socket, _) = http.accept().await.unwrap();
+        let mut data = [0; 8192];
+        let _ = socket.read(&mut data).await.unwrap();
+        socket
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\nbody raw")
+            .await
+            .unwrap();
+    });
+    let tunnel = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let tunnel_address = tunnel.local_addr().unwrap();
+    let echo = tokio::spawn(async move {
+        let (mut socket, _) = tunnel.accept().await.unwrap();
+        let mut data = [0; 8];
+        socket.read_exact(&mut data).await.unwrap();
+        socket.write_all(&data).await.unwrap();
+        let mut rest = [0; 1];
+        assert_eq!(socket.read(&mut rest).await.unwrap(), 0);
+    });
+    let proxy = PolicyProxy::bind(BrowserConfig {
+        allow_origins: vec![
+            format!("http://{http_address}"),
+            format!("https://{tunnel_address}"),
+        ],
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    let client = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::all(format!("http://{}", proxy.address())).unwrap())
+        .build()
+        .unwrap();
+    let body = client
+        .get(format!("http://{http_address}/"))
+        .send()
+        .await
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    assert_eq!(body.as_ref(), b"body raw");
+    let mut socket = tokio::net::TcpStream::connect(proxy.address())
+        .await
+        .unwrap();
+    socket
+        .write_all(
+            format!("CONNECT {tunnel_address} HTTP/1.1\r\nHost: {tunnel_address}\r\n\r\n")
+                .as_bytes(),
+        )
+        .await
+        .unwrap();
+    let mut response = vec![];
+    while !response.ends_with(b"\r\n\r\n") {
+        let mut byte = [0; 1];
+        socket.read_exact(&mut byte).await.unwrap();
+        response.push(byte[0]);
+        assert!(response.len() < 1024);
+    }
+    assert!(response.starts_with(b"HTTP/1.1 200"));
+    socket.write_all(b"tls raw!").await.unwrap();
+    let mut reply = [0; 8];
+    socket.read_exact(&mut reply).await.unwrap();
+    assert_eq!(&reply, b"tls raw!");
+    proxy.close().await;
+    let mut byte = [0; 1];
+    assert_eq!(socket.read(&mut byte).await.unwrap(), 0);
+    http_server.await.unwrap();
+    echo.await.unwrap();
+}
+
+#[tokio::test]
+async fn restart_recovers_only_persisted_authorized_external_targets() {
+    let (root, external) = setup();
+    let original = succeeded(execute(&external, "open", json!({}), "external_owner").await);
+    let untouched = succeeded(
+        execute(
+            &external,
+            "new_page",
+            json!({"browser_id":original["browser_id"]}),
+            "external_owner",
+        )
+        .await,
+    );
+    let port = std::fs::read_to_string(
+        root.path()
+            .join("data/browser")
+            .join(original["browser_id"].as_str().unwrap())
+            .join("DevToolsActivePort"),
+    )
+    .unwrap();
+    let endpoint = format!("http://127.0.0.1:{}", port.lines().next().unwrap());
+    let settings:racp_core::AgentSettings=serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("attached"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+    let config = BrowserConfig {
+        cdp_enabled: true,
+        ..Default::default()
+    };
+    let attached = Browser::new(&settings, "boot_controller", config.clone()).unwrap();
+    let chosen = original["pages"][0]["cdp_target_id"].clone();
+    let session=succeeded(execute(&attached,"attach",json!({"endpoint_url":endpoint,"context_mode":"existing","page_target_ids":[chosen],"allow_page_termination":true}),"owner_one").await);
+    let profile = settings
+        .data_dir
+        .join("browser")
+        .join(session["browser_id"].as_str().unwrap());
+    assert!(profile.join("ownership.json").is_file());
+    drop(attached);
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let recovered = Browser::new(&settings, "boot_recovered", config).unwrap();
+    for _ in 0..100 {
+        if !profile.exists() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(
+        !profile.exists(),
+        "authorized remote cleanup must survive controller restart"
+    );
+    let targets = succeeded(
+        execute(
+            &recovered,
+            "cdp_targets",
+            json!({"endpoint_url":endpoint}),
+            "owner_one",
+        )
+        .await,
+    );
+    assert!(!targets["targets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|t| t["target_id"] == chosen));
+    let pages = succeeded(
+        execute(
+            &external,
+            "pages",
+            json!({"browser_id":original["browser_id"]}),
+            "external_owner",
+        )
+        .await,
+    );
+    let untouched_target = pages["pages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["page_id"] == untouched["page_id"])
+        .unwrap()["cdp_target_id"]
+        .clone();
+    assert!(targets["targets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|t| t["target_id"] == untouched_target));
+    recovered.cleanup().await.unwrap();
+    external.cleanup().await.unwrap();
+}
+
+#[tokio::test]
+async fn foreign_recovery_authority_is_retained_and_cannot_report_complete_cleanup() {
+    let root = tempfile::tempdir().unwrap();
+    let settings:racp_core::AgentSettings=serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("data"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+    let profile = settings.data_dir.join("browser/browser_foreign");
+    racp_core::private_dir(&profile).unwrap();
+    racp_core::atomic_write(&profile.join("ownership.json"),serde_json::to_string(&json!({"version":1,"agent_boot_id":"boot_foreign","device_id":"dev_other","endpoint":"ws://127.0.0.1:9/devtools/browser/foreign","context_id":"ctx_foreign","target_ids":["target_foreign"]})).unwrap().as_bytes(),false).unwrap();
+    let browser = Browser::new(
+        &settings,
+        "boot_new",
+        BrowserConfig {
+            cdp_enabled: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    assert_eq!(browser.capabilities()[0]["healthy"], false);
+    assert_eq!(
+        browser.cleanup().await.unwrap_err().code.0,
+        "CLEANUP_FAILED"
+    );
+    assert!(profile.join("ownership.json").is_file());
+}
+
+#[tokio::test]
+async fn restart_removes_profile_only_after_owned_process_tree_has_exited() {
+    let (root, browser) = setup();
+    let opened = succeeded(execute(&browser, "open", json!({}), "owner_one").await);
+    let profile = root
+        .path()
+        .join("data/browser")
+        .join(opened["browser_id"].as_str().unwrap());
+    let config = BrowserConfig::bundled();
+    drop(browser);
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let settings:racp_core::AgentSettings=serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("data"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+    let restarted = Browser::new(&settings, "boot_restarted", config).unwrap();
+    for _ in 0..100 {
+        if !profile.exists() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(
+        !profile.exists(),
+        "owned dead process profile must be recovered"
+    );
+    restarted.cleanup().await.unwrap();
+}
+
+#[tokio::test]
+async fn recovery_never_deletes_a_live_owned_process_profile() {
+    let root = tempfile::tempdir().unwrap();
+    let settings:racp_core::AgentSettings=serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("data"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+    let profile = settings.data_dir.join("browser/browser_live");
+    racp_core::private_dir(&profile).unwrap();
+    racp_core::atomic_write(&profile.join("process.json"),serde_json::to_vec(&json!({"version":1,"agent_boot_id":"boot_old","device_id":"dev_browser","pid":std::process::id(),"create_time":1.0,"job_name":null})).unwrap().as_slice(),false).unwrap();
+    let browser = Browser::new(&settings, "boot_new", BrowserConfig::bundled()).unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    assert_eq!(browser.capabilities()[0]["healthy"], false);
+    assert_eq!(
+        browser.cleanup().await.unwrap_err().code.0,
+        "CLEANUP_FAILED"
+    );
+    assert!(profile.join("process.json").is_file());
 }

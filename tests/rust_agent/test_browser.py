@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -342,3 +343,89 @@ async def test_browser_large_download_and_oversize_cleanup(rust_live, native_fil
             assert download["error"]["code"] == "RESOURCE_EXHAUSTED", download
             assert download["error"]["execution_state"] == "unknown", download
         assert not list((live["state"] / "data/browser").iterdir())
+
+
+@pytest.mark.asyncio
+async def test_unsolicited_download_is_cancelled_while_agent_is_idle(rust_live, native_file_site):
+    live, site = rust_live, native_file_site
+    await online(live)
+    opened = await execute(live, "browser.open", {})
+    assert opened["state"] == "SUCCEEDED", opened
+    target = {
+        "browser_id": opened["result"]["browser_id"],
+        "page_id": opened["result"]["pages"][0]["page_id"],
+    }
+    navigated = await execute(live, "browser.navigate", {**target, "url": site["url"]})
+    assert navigated["state"] == "SUCCEEDED", navigated
+    snapshot = await execute(live, "browser.snapshot", target)
+    observed = {
+        **target,
+        "observation_id": snapshot["result"]["observation_id"],
+        "navigation_revision": snapshot["result"]["navigation_revision"],
+    }
+    clicked = await execute(
+        live, "browser.click", {**observed, "selector": {"by": "test_id", "value": "download"}}
+    )
+    assert clicked["state"] == "SUCCEEDED", clicked
+    await asyncio.sleep(0.3)
+    for index in range(50):
+        status = await execute(live, "browser.snapshot", target, key=f"idle-snapshot-{index}")
+        assert status["state"] == "SUCCEEDED", status
+        if {"type": "download", "state": "unsolicited_cancelled"} in status["result"].get(
+            "events", []
+        ):
+            break
+        await asyncio.sleep(0.02)
+    assert {"type": "download", "state": "unsolicited_cancelled"} in status["result"].get(
+        "events", []
+    ), status
+    profile = live["state"] / "data/browser" / target["browser_id"]
+    assert not list((profile / "downloads").glob("*"))
+    closed = await execute(live, "browser.close", {"browser_id": target["browser_id"]})
+    assert closed["result"]["cleanup_status"] == "complete", closed
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows Job Object crash acceptance")
+async def test_controller_os_crash_kills_browser_tree_and_recovers_profile(rust_live):
+    import psutil
+
+    from .support import bridge
+
+    live = rust_live
+    await online(live)
+    opened = await execute(live, "browser.open", {})
+    assert opened["state"] == "SUCCEEDED", opened
+    profile = live["state"] / "data" / "browser" / opened["result"]["browser_id"]
+    ownership = json.loads((profile / "process.json").read_text())
+    assert ownership["job_name"].startswith("Local\\RACP_")
+    native = psutil.Process(ownership["pid"])
+    descendants = [
+        (process.pid, process.create_time()) for process in native.children(recursive=True)
+    ]
+    descendants.append((native.pid, native.create_time()))
+    control = await bridge(live["executable"], live["state"], "status")
+    controller = psutil.Process(control["pid"])
+    controller.kill()
+    await asyncio.to_thread(controller.wait, 10)
+    for _ in range(200):
+        active = []
+        for pid, created in descendants:
+            try:
+                process = psutil.Process(pid)
+                if abs(process.create_time() - created) <= 0.000001 and process.is_running():
+                    active.append(pid)
+            except psutil.NoSuchProcess:
+                pass
+        if not active:
+            break
+        await asyncio.sleep(0.05)
+    assert not active, "owned Job descendants survived controller termination"
+    started = await bridge(live["executable"], live["state"], "start")
+    assert started["pid"] != control["pid"]
+    for _ in range(200):
+        if not profile.exists():
+            break
+        await asyncio.sleep(0.05)
+    assert not profile.exists(), "private profile was not recovered after native Job exit"
+    stopped = await bridge(live["executable"], live["state"], "stop")
+    assert stopped["cleanup_status"] == "complete"

@@ -93,11 +93,19 @@ impl Browser {
             }
         }
         // Even borrowed sessions create new pages only inside a disposable owned context.
+        let backend_version = super::operations::bounded(
+            cdp.call("Browser.getVersion", json!({}), None, cancel)
+                .await?["product"]
+                .as_str()
+                .unwrap_or(""),
+            256,
+        );
+        let proxy = super::PolicyProxy::bind(self.config.clone()).await?;
         effect.store(true, std::sync::atomic::Ordering::SeqCst);
         let context = cdp
             .call(
                 "Target.createBrowserContext",
-                json!({"disposeOnDetach":true}),
+                json!({"disposeOnDetach":true,"proxyServer":format!("http://{}",proxy.address()),"proxyBypassList":"<-loopback>"}),
                 None,
                 cancel,
             )
@@ -124,6 +132,7 @@ impl Browser {
             events: self.outbox.clone(),
             siblings: Arc::downgrade(&self.sessions),
             opening_operation: request["operation_id"].as_str().unwrap_or("").into(),
+            backend_version,
             remote: Some(endpoint),
             borrowed,
             allow_termination,
@@ -131,6 +140,7 @@ impl Browser {
             cdp,
             context,
             state: Mutex::new(State {
+                history: vec![],
                 uploads: 0,
                 download: None,
                 handle,
@@ -139,6 +149,7 @@ impl Browser {
             }),
             process: Mutex::new(None),
             protected: Mutex::new(None),
+            proxy,
             profile,
             width: request["payload"]["width"].as_u64().unwrap_or(1280),
             height: request["payload"]["height"].as_u64().unwrap_or(720),
@@ -155,7 +166,9 @@ impl Browser {
         session.start(self.config.clone()).await;
         let result = async {
             // Global auto-attach would pause or alter unrelated user targets. Attach explicitly.
+            session.watch_downloads(cancel).await?;
             session.cdp.call("Target.setDiscoverTargets",json!({"discover":true}),None,cancel).await?;
+            session.cdp.call("Target.setAutoAttach",json!({"autoAttach":false,"waitForDebuggerOnStart":true,"flatten":true}),None,cancel).await?;
             if borrowed {
                 for target in &session.selected { session.cdp.call("Target.attachToTarget",json!({"targetId":target,"flatten":true}),None,cancel).await?; }
                 loop {
@@ -167,7 +180,7 @@ impl Browser {
             } else { session.new_page(cancel).await?; }
             {let mut state=session.state.lock().map_err(|_|RacpError::new("LOCAL_STATE_FAILED"))?; state.handle["state"]=json!("ACTIVE");state.handle["availability"]=json!("available");}
             session.emit("inventory","active");
-            Ok(json!({"browser_id":id,"agent_boot_id":self.boot,"handle":session.handle(),"pages":session.pages()}))
+            Ok(session.opened())
         }.await;
         if result.is_err() {
             session.close().await?;
@@ -190,44 +203,15 @@ impl Session {
         } else {
             &self.cdp
         };
-        let cancel = CancellationToken::new();
-        let result = tokio::time::timeout(Duration::from_secs(5), async {
-            let contexts = peer
-                .call("Target.getBrowserContexts", json!({}), None, &cancel)
-                .await?;
-            if contexts["browserContextIds"]
-                .as_array()
-                .is_some_and(|c| c.iter().any(|v| v == &self.context))
-            {
-                peer.call(
-                    "Target.disposeBrowserContext",
-                    json!({"browserContextId":self.context}),
-                    None,
-                    &cancel,
-                )
-                .await?;
-            }
-            if self.borrowed && self.allow_termination {
-                let targets = peer
-                    .call("Target.getTargets", json!({}), None, &cancel)
-                    .await?;
-                for target in &self.selected {
-                    if targets["targetInfos"]
-                        .as_array()
-                        .is_some_and(|items| items.iter().any(|p| p["targetId"] == *target))
-                    {
-                        peer.call(
-                            "Target.closeTarget",
-                            json!({"targetId":target}),
-                            None,
-                            &cancel,
-                        )
-                        .await?;
-                    }
-                }
-            }
-            Ok::<_, RacpError>(())
-        })
+        let targets = if self.borrowed && self.allow_termination {
+            self.selected.clone()
+        } else {
+            vec![]
+        };
+        let result = tokio::time::timeout(
+            Duration::from_secs(5),
+            super::recovery::cleanup_scope(peer, &self.context, &targets),
+        )
         .await
         .map_err(|_| RacpError::new("CLEANUP_FAILED"))?;
         if self.cdp.is_closed() {
