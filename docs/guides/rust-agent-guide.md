@@ -95,7 +95,7 @@ GDB/Ghidra/JDK/CDB는 패키지에 포함하지 않는다. 다음 명령은 명�
 
 ## 7. 서비스와 로그인 세션
 
-SCM 명령은 racp-agent.exe service --state-dir <absolute-path>다. 서비스 이름은 RACPAgent이며 Session 0과 활성화된 서비스 SID, 비관리자 실행 계정을 확인한 뒤 credential을 연다. LocalSystem/관리자 실행은 거절한다. DPAPI 등록은 해당 서비스 계정의 소유여야 한다.
+SCM 명령은 `racp-agent.exe service --state-dir <absolute-path>`다. 기존 published service 설정을 유지하는 경우 `service --config <absolute-json-path>`도 지원한다. 서비스 이름은 RACPAgent이며 Session 0과 활성화된 서비스 SID, 비관리자 실행 계정을 확인한 뒤 credential을 연다. LocalSystem/관리자 실행은 거절한다. DPAPI 등록은 해당 서비스 계정의 소유여야 한다.
 
 관리자는 명시적인 SID 목록과 endpoint 경로를 구성한다.
 
@@ -103,7 +103,18 @@ SCM 명령은 racp-agent.exe service --state-dir <absolute-path>다. 서비스 �
 .\racp-agent.exe configure-service-login --state-dir $State --device-id '<registered-device-id>' --agent-sid '<service-account-SID>' --service-sid '<RACPAgent-service-SID>' --login-user '<interactive-user-SID>' --endpoint 'C:\RACP\desktop-login-endpoint.json'
 ```
 
-endpoint 상위 폴더는 지정 사용자가 통과할 수 있어야 한다. 서비스는 허용된 OS 사용자/세션만 등록하고, Broker는 GUI 초기화 전 서비스 소유 Job에 들어간다. 지정 사용자의 로그온 세션에서 racp-agent.exe broker-login --login-endpoint <endpoint-path>로 연결한다. Guardian은 Task Scheduler를 통해 Job 밖에서 실행되며 실제 PID/birth와 release-only 상태를 확인한다.
+endpoint 상위 폴더는 지정 사용자가 통과할 수 있어야 한다. 서비스는 허용된 OS 사용자/세션만 등록하고, Broker는 GUI 초기화 전 서비스 소유 Job에 들어간다. 지정 사용자의 로그온 세션에서 동일한 서비스 Agent 실행 파일의 `broker-login --login-endpoint <endpoint-path>`로 연결한다. 다른 설치의 Agent 실행 파일은 등록을 거절한다. Guardian은 Task Scheduler를 통해 Job 밖에서 실행되며 실제 PID/birth와 release-only 상태를 확인한다.
+
+지정 사용자 계정에서 자동 시작을 등록하거나 제거한다. HKCU에 저장하며 다른 사용자의 등록을 바꾸지 않는다.
+
+```powershell
+.\racp-agent.exe broker-login-install --login-endpoint 'C:\RACP\desktop-login-endpoint.json'
+.\racp-agent.exe broker-login-remove --login-endpoint 'C:\RACP\desktop-login-endpoint.json'
+```
+
+로그온 launcher는 해당 세션의 Broker가 종료되면 다시 등록한다. 실행 lease가 만료되면 소유 Broker/Guardian과 작업 자원을 정리하고, 재연결 뒤 등록과 사용자 세션 Broker를 복구한다. Agent 종료는 등록기를 중지하고 정리 결과를 보고한다. 자동 시작 제거는 다음 로그온의 실행 등록을 제거한다.
+
+SCM 설치는 운영자가 서비스 계정과 정확한 실행 파일 경로를 지정한다. 서비스의 `binPath`에는 위 `service` 명령과 절대 상태 경로를 사용하고, `sc.exe sidtype RACPAgent unrestricted`로 서비스 SID를 활성화한다. 등록 credential은 이 서비스 계정이 직접 생성해야 하며, 사용자에게는 해당 실행 파일과 endpoint의 읽기·실행/통과 권한이 필요하다.
 
 ## 8. 관련 문서
 

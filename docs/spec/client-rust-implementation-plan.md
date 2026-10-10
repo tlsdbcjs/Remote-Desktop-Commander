@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans or superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **Document ID**: `DOC-PLAN-CLIENT-RUST`\
-> **Status**: Active · **Target Version**: v0.1.11 예정 / 기준선 v0.1.10\
+> **Status**: Active · **Target Version**: v0.1.21 / 전환 전 기준선 v0.1.10\
 > **Last Updated**: 2026-10-10 · **Classification**: Architecture Implementation Plan
 
 **Goal:** 기존 client와 내장 Agent를 Rust로 전환하고 기능·등록 상태를 보존한 뒤 client 전용 Python 및 Electron 런타임을 제거한다.
@@ -13,6 +13,9 @@
 **Tech Stack:** Rust 1.90.0, Cargo workspace, Tauri 2, Tokio 1, Serde 1, reqwest/rustls, tokio-tungstenite, rusqlite, Windows API bindings, React/TypeScript/Vite, NSIS.
 
 **Spec:** [승인된 전환 설계](client-rust-migration.md). 2026-10-10 사용자 “진행해”는 이 설계 승인으로 기록한다. 2026-10-10 사용자 “권장 방향으로 끝까지 구현해”로 계획과 Native 실행을 승인했다.
+
+> [!IMPORTANT]
+> 현재 실행 정책은 사용자 후속 지시를 따른다: 테스트 실행·추가만 보류하고 전체 구현, 구 client Python/Electron 제거, `master` 커밋·푸시를 진행한다. Tasks 1~10의 구현과 커밋은 반영했으며 미실행 acceptance는 완료로 표시하지 않는다. 아래 과거 RED/GREEN 기록을 최신 v0.1.21의 검증으로 해석하지 않는다. 현재 빌드·리뷰·보류 항목은 [구현 현황](../quality/implementation-status.md)에 기록한다.
 
 ## 목차
 
@@ -127,9 +130,9 @@
 
 - [ ] **RED:** `isolated_contexts`는 context 간 cookie 공유가 없음을 확인한다. `origin_and_cdp_fences`는 허용되지 않은 origin과 opt-in 없는 attach를 거부한다. `browser_inventory_replay`는 frame/page/event sequence 복구를 확인한다. `browser_cancel_cleanup`은 crash/cancel 뒤 소유한 프로세스·다운로드가 남지 않음을 확인한다.
 - [ ] **Verify RED:** `cargo test -p racp-runtime --test browser`; Windows에서 `uv run pytest tests/rust_agent/test_browser.py -q`.
-- [ ] **Implement:** Rust CDP worker로 기존 browser operation, screenshot, upload/download, evaluate 한도, dialog, expiry, artifact를 이식한다. context=4/page=8 및 기존 sandbox/containment를 보존한다. Python Playwright 실행은 새 구현에 두지 않는다.
+- [x] **Implement:** Rust CDP worker로 기존 browser operation, screenshot, upload/download, evaluate 한도, dialog, expiry, artifact를 이식한다. context=4/page=8 및 기존 sandbox/containment를 보존한다. Python Playwright 실행은 새 구현에 두지 않는다.
 - [ ] **Verify GREEN:** 기존 `test_browser_*` 계약을 Rust Agent fixture에 연결하여 검증한다. screenshot/대용량 다운로드의 artifact digest를 확인한다.
-- [ ] **Commit:** `feat(rust): replace Python browser workers with CDP runtime`.
+- [x] **Commit:** `feat(rust): replace Python browser workers with CDP runtime`.
 
 ## Task 6: Windows Broker·Guardian·서비스
 
@@ -139,9 +142,9 @@
 
 - [ ] **RED:** `pipe_peer_identity`는 다른 SID/session/process를 거부한다. `physical_input_interrupt`는 실제 입력 후 lease가 해제됨을 확인한다. `guardian_crash_release`는 Broker/Agent crash 뒤 키·마우스 눌림을 해제한다. `memory_read_fence`는 보호 PID·부정확한 create time을 거부한다. `service_stop`은 소유한 자원 회수를 확인한다.
 - [ ] **Verify RED:** Windows에서 `cargo test -p racp-agent --test windows_native`; `uv run pytest tests/rust_agent/test_desktop.py -q`.
-- [ ] **Implement:** 기존 ACL/Named Pipe/Job Object/session fencing/UIA/capture/input watch·lease·release와 Win32 memory API를 이식한다. 실제 native 검증 전에 capability를 healthy로 광고하지 않는다.
+- [x] **Implement:** 기존 ACL/Named Pipe/Job Object/session fencing/UIA/capture/input watch·lease·release와 Win32 memory API를 이식한다. 실제 native 검증 전에 capability를 healthy로 광고하지 않는다.
 - [ ] **Verify GREEN:** synthetic owned GUI와 Windows release gate 시나리오를 실행한다. 환경 부족으로 skip된 항목은 미완료로 기록한다.
-- [ ] **Commit:** `feat(rust): port Windows desktop broker guardian and service`.
+- [x] **Commit:** `feat(rust): port Windows desktop broker guardian and service`.
 
 ## Task 7: 리버싱 플러그인
 
@@ -151,9 +154,9 @@
 
 - [ ] **RED:** `plugin_stdio_bounds`는 잘못된 메시지·초과 출력·다른 resource owner를 거부한다. `gdb_mi_stop_sequence`는 중단점·메모리·detach 상태와 순서를 확인한다. `ghidra_database_isolation`은 분석 database/target hash 경계를 확인한다. `plugin_crash_cleanup`은 소유 process tree와 handle을 정리한다.
 - [ ] **Verify RED:** `cargo test -p racp-runtime --test plugins`; Windows native 도구가 설치된 runner에서 `uv run pytest tests/rust_agent/test_reversing.py -q`.
-- [ ] **Implement:** strict plugin protocol·manifest 검증, 설치 hash·whitelist, GDB/MI parser, Ghidra Headless를 이식한다. 필요한 Java bridge를 Rust resource 위치로 옮기고 Python adapter는 대체한다.
+- [x] **Implement:** strict plugin protocol·manifest 검증, 설치 hash·whitelist, GDB/MI parser, Ghidra Headless를 이식한다. 필요한 Java bridge를 Rust resource 위치로 옮기고 Python adapter는 대체한다.
 - [ ] **Verify GREEN:** 기존 synthetic plugin 계약과 native GDB/Ghidra fixture를 Rust Agent로 검증한다.
-- [ ] **Commit:** `feat(rust): port debugger and analysis plugin adapters`.
+- [x] **Commit:** `feat(rust): port debugger and analysis plugin adapters`.
 
 ## Task 8: Tauri UI 호스트
 
@@ -163,9 +166,9 @@
 
 - [ ] **RED:** `adapter_contract`는 기존 API 메서드와 안전한 오류 메시지를 확인한다. `close_hides_full_exit_stops`는 창 닫기와 완전 종료를 구분한다. `failed_cleanup_keeps_window`는 STOPPED/cleanup 확인 실패 때 앱을 유지한다. `connection_selection_owned_by_host`는 renderer의 path/digest 조작을 거부한다. `legacy_user_data`는 기존 Electron userData Agent 경로로 등록 정보를 읽는다.
 - [ ] **Verify RED:** `node --test apps/client/tests/adapter.test.mjs`; Windows에서 `cargo test -p racp-client --test controller`.
-- [ ] **Implement:** 3초 status/activity 갱신, busy/sampling 직렬화, tray 이미지·메뉴, single instance·startup 인자, native dialogs와 host-owned connection selection을 이식한다. CSP와 Tauri capability를 local main window로 제한한다.
+- [x] **Implement:** 3초 status/activity 갱신, busy/sampling 직렬화, tray 이미지·메뉴, single instance·startup 인자, native dialogs와 host-owned connection selection을 이식한다. CSP와 Tauri capability를 local main window로 제한한다.
 - [ ] **Verify GREEN:** adapter 검사, `pnpm --dir apps/client build`, Windows UI E2E에서 기존 enrollment/settings/activity/login/tray/exit 시나리오를 검증한다.
-- [ ] **Commit:** `feat(client): migrate desktop host from Electron to Tauri`.
+- [x] **Commit:** `feat(client): migrate desktop host from Electron to Tauri`.
 
 ## Task 9: 설치·포터블·유지보수
 
@@ -175,9 +178,9 @@
 
 - [ ] **RED:** `manifest_rejects_wrong_target_and_hash`는 잘못된 target/변조/경로 탈출을 거부한다. `maintenance_ownership`은 다른 install/startup/PID 소유권을 거부한다. `backup_preserves_state`는 backup hash와 사용자 데이터 보존을 확인한다. `portable_without_python_or_webview_install`은 Python/Node/WebView2가 없는 Windows fixture에서 bundle로 시작한다. `failed_cleanup_aborts_upgrade`는 cleanup 불명확 상태에서 설치 변경을 막는다.
 - [ ] **Verify RED:** `node --test scripts/tests/client-packaging.test.mjs`; Windows에서 `cargo test -p racp-agent --test maintenance` 및 새 패키지 smoke.
-- [ ] **Implement:** CPython/wheel/Playwright/Electron staging 대신 Rust binary·fixed WebView2·Chromium을 hash 검증해 staging한다. NSIS setup·self-extracting portable EXE·ZIP, Rust maintenance hook와 실패 batch quarantine를 구성한다. CI는 Windows 기본, 다른 플랫폼은 explicit dispatch만 허용한다.
+- [x] **Implement:** CPython/wheel/Playwright/Electron staging 대신 Rust binary·fixed WebView2·Chromium을 hash 검증해 staging한다. NSIS setup·self-extracting portable EXE·ZIP, Rust maintenance hook와 실패 batch quarantine를 구성한다. CI는 Windows 기본, 다른 플랫폼은 explicit dispatch만 허용한다.
 - [ ] **Verify GREEN:** Windows 세 형식의 smoke, native architecture/lock/version/hash 검사, 새 프로필 격리, 설치·업그레이드·제거 데이터 보존을 확인한다. 결과와 checksums를 Implementation Status에 기록한다.
-- [ ] **Commit:** `build(client): package native Rust setup and portable artifacts`.
+- [x] **Commit:** `build(client): package native Rust setup and portable artifacts`.
 
 ## Task 10: Python 제거와 회귀 검증
 
@@ -187,9 +190,9 @@
 
 - [ ] **RED:** `client_has_no_python_runtime`는 client bundle의 python 실행 파일·Python module/wheel과 Python subprocess launch를 거부한다. `gateway_cli_after_agent_removal`은 Agent package 없이 Gateway/CLI가 import되고 연동됨을 확인한다. `operation_parity_complete`는 registry의 모든 operation에 성공/거부·취소 증거가 있음을 확인한다.
 - [ ] **Verify RED:** packaging audit와 `uv run pytest tests/rust_agent -q` 및 기존 테스트를 Rust fixture로 실행한다. 아직 Python launch/Agent import가 있으면 실패해야 한다.
-- [ ] **Implement:** Tasks 1~9의 동작·native 증거가 확보된 뒤 구 코드와 uv dependency·test import를 삭제/대체한다. 공통 서버 Python 패키지는 유지하고 새 client build에 Python fallback을 넣지 않는다. ADR-0023을 새 결정으로 supersede하고 build instructions를 실제 구현에 맞춘다.
+- [x] **Implement:** Tasks 1~9의 동작·native 증거가 확보된 뒤 구 코드와 uv dependency·test import를 삭제/대체한다. 공통 서버 Python 패키지는 유지하고 새 client build에 Python fallback을 넣지 않는다. ADR-0023을 새 결정으로 supersede하고 build instructions를 실제 구현에 맞춘다.
 - [ ] **Verify GREEN:** `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, frontend build/test, Ruff/Mypy/version/schema/서버·CLI 회귀, Windows artifact/upgrade/cleanup 검사. host 제한으로 미실행이면 전환 완료로 표시하지 않는다.
-- [ ] **Commit:** `refactor(client): remove legacy Python and Electron client runtime`.
+- [x] **Commit:** `refactor(client): remove legacy Python and Electron client runtime`.
 
 ## 실행과 검토
 

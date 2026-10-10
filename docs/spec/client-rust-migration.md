@@ -1,21 +1,22 @@
 # Client와 Agent Rust 전환 설계안
 
 > **Document ID**: `DOC-SPEC-CLIENT-RUST`\
-> **Status**: Active · **Target Version**: v0.1.10 기준선 / 구현 배치 v0.1.11 예정\
+> **Status**: Active · **Target Version**: v0.1.21 / 전환 전 기준선 v0.1.10\
 > **Last Updated**: 2026-10-10 · **Classification**: Architecture Specification
 
 ## 개요
 
 사용자 요청은 client app을 Rust로 전환하고 전환 후 기존 Python 코드를 유지하지 않는 것이다.
-현재 client는 Electron/React UI와 Python Agent를 함께 배포한다. 따라서 UI 호스트만 교체하면
+전환 전 client는 Electron/React UI와 Python Agent를 함께 배포했다. 따라서 UI 호스트만 교체하면
 Python 제거 요구를 충족하지 못한다. client에 포함되는 Agent, Broker, Guardian, 플러그인
 어댑터와 설치 유지보수 프로그램까지 Rust 구현으로 대체한다.
 
 > [!NOTE]
 > 2026-10-10 사용자 “진행해”로 Tauri/Rust 호스트·기존 React UI·내장 Agent Rust 전환
 > 설계를 승인했다. Gateway·CLI는 별도 앱으로 유지한다.
-> [구현 계획](client-rust-implementation-plan.md)의 검토 및 실행 방식 선택 단계이며,
-> 코드 전환, Rust 빌드, 기존 코드 삭제는 아직 수행하지 않았다.
+> 후속 지시로 전체 Rust/Tauri 구현과 구 client 코드 제거를 진행하고 테스트만 보류했다.
+> 현재 v0.1.21 구현·빌드·독립 리뷰의 근거와 미실행 acceptance는
+> [구현 현황](../quality/implementation-status.md)을 따른다. 원 설계의 테스트 후 삭제 조건은 이 사용자 지시로 대체됐다.
 
 ## 목차
 

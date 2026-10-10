@@ -1584,3 +1584,33 @@ WebView2 CAB SHA-256: `e8f55a4bde27c7f82512402b56a58539b5ec8928be4e500e077b6f66c
 
 > [!IMPORTANT]
 > 사용자 지시에 따라 테스트만 보류한다. 이 빌드에서는 자동 테스트, GUI smoke, 실제 설치/업데이트/제거 및 2-PC acceptance를 실행하지 않았다. 구현 완료 판단과 테스트 통과를 혼동하지 않는다. 패키지는 unsigned 개발용이며 macOS/Linux 네이티브 빌드는 보류한다. 클라이언트 배포에는 CPython/Node/Electron이 필요 없다. Gateway/CLI 서버 측 Python은 유지한다.
+
+
+<a id="rust-client-implementation-0121"></a>
+## v0.1.21 전체 Rust/Tauri 구현 반영 (2026-10-10)
+
+### 구현 범위와 구 코드 제거
+
+Client와 내장 Agent의 전체 전환 구현을 반영했다. React 화면은 유지하며 호스트는 Tauri/Rust를 사용한다. 기존 100-operation registry, bridge/wire/schema, 보호된 credential과 로컬 정책·워크스페이스·저널·Artifact 계약을 유지한다. 파일·셸·프로세스·메모리·ConPTY·CDP 브라우저, OS 관측, 클립보드·Win32 Broker/UIA/입력·독립 Guardian, SCM·사용자 로그온 등록, GDB/Ghidra/CDB 및 native/proxy carrier를 Rust로 연결했다.
+
+`apps/agent` Python 코드, `apps/client` Electron 호스트와 Python 설치 도우미, Python client build/staging/portable helper, 이 코드에 직접 의존하던 구 테스트를 제거했다. Gateway·CLI·공통 서버 Python 패키지는 유지한다. 서버/CLI의 frozen lock은 66개 패키지로 정리했다. 구 Python in-process Agent fixture는 명시적 보류로 바꾸었으며, 이 skip을 회귀 통과로 계산하지 않는다. 자동 테스트 재개와 새로운 native acceptance 작성·실행은 이번 범위에서 보류한다.
+
+기존 프로필 탐색과 모호한 상태 거절, DPAPI와 소유권 확인, native 연결 파일 선택, 시작 등록, installer maintenance/backup, 포터블 프로필 격리 및 고정 WebView2를 구현했다. [ADR-0030](../adr/ADR-0030-rust-tauri-client-and-native-agent.md)이 구 Electron/Python 배포 결정을 대체한다. 실행·서비스 등록과 빌드는 [Rust Agent 가이드](../guides/rust-agent-guide.md)를 따른다.
+
+### 독립 리뷰와 수정
+
+독립 전체 브랜치 리뷰에서 확인한 두 중요한 오류를 수정했다. SCM callback은 Tokio runtime 내부에서 Agent를 생성한다. 최초 Gateway lease 발급 전에는 자원을 만료시키지 않으며, 만료 시 새 실행을 차단하고 취소된 작업을 기다린 뒤 실행 자원을 회수한다. Desktop 등록기는 Agent 종료까지 유지하되 유효하지 않은 연결에서 새 Broker 등록을 거절한다. 재연결 시 foreground Broker 또는 사용자 로그온 등록을 복구한다. Broker 종료까지 조회 권한을 유지하고, 실제 provider 및 인증된 Broker 상태를 Agent 상태에 반영한다. 클립보드 session 검사에 대한 초기 리뷰 우려는 published schema를 확인한 뒤 철회했다.
+
+테스트는 보류했으므로 이 수정의 실제 SCM 시작·연결 유실·입력 해제 동작이 실기로 검증됐다고 주장하지 않는다.
+
+### production 확인 근거
+
+- 최신 코드 `ae53acab6ac776a85ab9d54847e7077ffeeffa55`: Windows Agent release [38051585594](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38051585594) PASS; Windows frozen dependency/Mypy/server-wheel와 Rust format [38051585556](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38051585556) PASS.
+- 앞선 전체 Windows 패키징 `654a0df` [38039857220](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38039857220) 및 legacy 제거 소스 `51fe4f1` [38040154914](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38040154914) PASS. NSIS setup, portable EXE, ZIP과 파일 해시·소스 기록을 생성했다. 이후 리뷰 수정분의 전체 패키지는 별도 source/build ID로 확인한다.
+- 복구된 Linux 작업 환경: production `cargo check --workspace --bins --locked`, workspace/Tauri `cargo fmt --check`, `uv lock --check`, frozen sync, 전체 Ruff lint, 수정된 Python 7파일 format, Windows 대상 Mypy 95소스 및 React/TypeScript production build PASS. Linux desktop native 패키지는 빌드하지 않았다.
+
+### 실행 정책과 판단 범위
+
+사용자는 테스트만 보류하고 전체 구현·구 코드 제거·`master` 커밋·푸시를 명시했다. 이를 따라 기존 테스트 후 삭제 조건을 대체했다. 단순 build/format/type/packaging 확인을 기능 동등성·100개 RPC 실기 통과로 표기하지 않는다. Gateway 전체 검증을 새로 실행하지 않았다. 루트 Python format의 기존 서버/테스트 20파일 차이와 Linux 기본 Mypy의 Windows-only symbol 5오류는 별도 기준선 문제로 남기고, 수정된 migration 파일과 Windows 대상 검사 결과를 구분한다.
+
+패키지는 unsigned 개발용이다. 자동 테스트, GUI/native smoke, clean install·upgrade/uninstall, 실제 2-PC, macOS/Linux native 빌드는 보류한다. 클라우드 단절 중 로컬 수정은 stash로 보존한 뒤 원격에서 재구성한 커밋을 fast-forward했다. 기존 산출물과 사용자 상태를 유지하며, 재시도에도 버전 0.1.21을 재사용한다.
