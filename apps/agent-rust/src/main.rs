@@ -1,3 +1,5 @@
+#[cfg(windows)]
+mod service;
 use racp_contract::{decode_bridge, RacpError, VERSION};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -34,6 +36,11 @@ async fn main() {
         }
         let state = state.ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
         racp_core::validate_local_path(&state)?;
+        #[cfg(windows)]
+        if action == "service" {
+            service::run(state)?;
+            return Ok(Value::Null);
+        }
         let mut browser = racp_runtime::providers::browser::BrowserConfig::bundled();
         browser.cdp_enabled = args.iter().any(|a| a == "--enable-cdp");
         browser.allow_origins = args

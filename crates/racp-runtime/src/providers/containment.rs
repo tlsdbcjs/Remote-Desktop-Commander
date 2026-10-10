@@ -298,6 +298,19 @@ impl OwnedProcess {
         }
     }
     pub fn spawn(spec: CommandSpec) -> Result<Self, RacpError> {
+        Self::spawn_with_input(spec, false).map(|(child, _)| child)
+    }
+    pub fn spawn_stdio(spec: CommandSpec) -> Result<(Self, File), RacpError> {
+        let (child, input) = Self::spawn_with_input(spec, true)?;
+        Ok((
+            child,
+            input.ok_or_else(|| RacpError::new("EXECUTION_FAILED"))?,
+        ))
+    }
+    fn spawn_with_input(
+        spec: CommandSpec,
+        pipe_input: bool,
+    ) -> Result<(Self, Option<File>), RacpError> {
         use std::os::{
             fd::{AsRawFd, OwnedFd},
             unix::process::CommandExt,
@@ -308,7 +321,11 @@ impl OwnedProcess {
             .args(&spec.argv[1..])
             .env_clear()
             .envs(spec.environment)
-            .stdin(std::process::Stdio::null())
+            .stdin(if pipe_input {
+                std::process::Stdio::piped()
+            } else {
+                std::process::Stdio::null()
+            })
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
         unsafe {
@@ -323,6 +340,10 @@ impl OwnedProcess {
             .spawn()
             .map_err(|_| RacpError::new("EXECUTION_FAILED"))?;
         let pid = child.id();
+        let input = child.stdin.take().map(|f| {
+            let fd: OwnedFd = f.into();
+            File::from(fd)
+        });
         let output: OwnedFd = child.stdout.take().unwrap().into();
         let error: OwnedFd = child.stderr.take().unwrap().into();
         let stdout = File::from(output);
@@ -338,18 +359,21 @@ impl OwnedProcess {
                 return Err(RacpError::new("EXECUTION_FAILED"));
             }
         }
-        Ok(Self {
-            child,
-            pid,
-            stdout: Pipe {
-                file: stdout,
-                eof: false,
+        Ok((
+            Self {
+                child,
+                pid,
+                stdout: Pipe {
+                    file: stdout,
+                    eof: false,
+                },
+                stderr: Pipe {
+                    file: stderr,
+                    eof: false,
+                },
             },
-            stderr: Pipe {
-                file: stderr,
-                eof: false,
-            },
-        })
+            input,
+        ))
     }
     pub fn pid(&self) -> u32 {
         self.pid

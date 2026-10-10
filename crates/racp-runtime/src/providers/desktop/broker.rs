@@ -23,6 +23,7 @@ struct Broker {
     device: String,
     captures: BTreeMap<String, Capture>,
     stopped: bool,
+    pair_path: std::path::PathBuf,
 }
 pub fn run_broker(config_path: &Path) -> Result<(), RacpError> {
     racp_core::validate_local_path(config_path)?;
@@ -58,12 +59,14 @@ pub fn run_broker(config_path: &Path) -> Result<(), RacpError> {
             config.session_id,
             super::hooks::marker(&config.secret),
             guardian,
+            config_path.with_file_name("guardian-status.json"),
         )?,
         automation: super::automation::Automation::new().ok(),
         authority: DesktopState::new(config.session_id),
         device,
         captures: BTreeMap::new(),
         stopped: false,
+        pair_path: config_path.into(),
     };
     let mut server = PipeServer::new(config)?;
     while !broker.stopped {
@@ -167,6 +170,13 @@ impl Broker {
                 json!({"data":base64::engine::general_purpose::STANDARD.encode(&capture.bytes[offset as usize..end as usize]),"offset":offset,"next_offset":end,"eof":end==capture.bytes.len() as u64}),
             );
         }
+        if !op_id
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'_')
+        {
+            return Err(RacpError::new("INVALID_ARGUMENT"));
+        }
+        self.native.cancelled = Some(self.pair_path.with_file_name(format!("cancel-{op_id}")));
         let payload = validate_operation(operation, request["payload"].clone())?;
         if payload["session_id"] != self.native.status()["session_id"] {
             return Err(RacpError::new("PERMISSION_DENIED"));

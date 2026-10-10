@@ -17,6 +17,8 @@ pub(super) struct NativeDesktop {
     pub watch: super::hooks::NativeWatch,
     pub(super) marker: usize,
     guardian: PinnedPeer,
+    guardian_status: std::path::PathBuf,
+    pub(super) cancelled: Option<std::path::PathBuf>,
 }
 fn text(raw: &[u16]) -> String {
     String::from_utf16_lossy(&raw[..raw.iter().position(|v| *v == 0).unwrap_or(raw.len())])
@@ -42,7 +44,7 @@ fn object_name(handle: HANDLE) -> Result<String, RacpError> {
 }
 use std::mem::size_of_val;
 impl NativeDesktop {
-    pub fn new(session: u32, marker: usize, guardian: PinnedPeer) -> Result<Self, RacpError> {
+    pub fn new(session: u32, marker: usize, guardian: PinnedPeer, guardian_status:std::path::PathBuf) -> Result<Self, RacpError> {
         let identity = PinnedPeer::open(std::process::id())?.identity().clone();
         if session == 0 || identity.session != session {
             return Err(RacpError::new("SESSION_UNAVAILABLE"));
@@ -58,10 +60,29 @@ impl NativeDesktop {
             watch: super::hooks::NativeWatch::new(marker, false)?,
             marker,
             guardian,
+            guardian_status,
+            cancelled: None,
         })
     }
     pub fn availability(&self) -> Result<(), RacpError> {
         self.guardian.alive()?;
+        let status: Value =
+            serde_json::from_slice(&racp_core::read_bounded(&self.guardian_status, 4096, true)?)?;
+        let age = status["timestamp"]
+            .as_str()
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+            .map(|time| {
+                chrono::Utc::now()
+                    .signed_duration_since(time)
+                    .num_milliseconds()
+            });
+        if status["pid"] != self.guardian.identity().pid
+            || status["create_time"] != self.guardian.identity().created
+            || status["healthy"] != true
+            || age.is_none_or(|ms| !(0..=1000).contains(&ms))
+        {
+            return Err(RacpError::new("SESSION_UNAVAILABLE"));
+        }
         self.watch.counters()?;
         if object_name(unsafe { GetProcessWindowStation() })? != "WinSta0" {
             return Err(RacpError::new("SESSION_UNAVAILABLE"));

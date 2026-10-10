@@ -266,8 +266,6 @@ impl OwnedProcess {
         }
     }
     pub fn spawn(spec: CommandSpec) -> Result<Self, RacpError> {
-        let (stdout, out_write) = pipe()?;
-        let (stderr, err_write) = pipe()?;
         let sa = SECURITY_ATTRIBUTES {
             nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
             lpSecurityDescriptor: std::ptr::null_mut(),
@@ -285,6 +283,29 @@ impl OwnedProcess {
                 std::ptr::null_mut(),
             )
         })?;
+        Self::spawn_with_input(spec, input)
+    }
+    pub fn spawn_stdio(spec: CommandSpec) -> Result<(Self, File), RacpError> {
+        let (input, write) = pipe()?;
+        if unsafe {
+            SetHandleInformation(
+                input.as_raw_handle(),
+                HANDLE_FLAG_INHERIT,
+                HANDLE_FLAG_INHERIT,
+            )
+        } == 0
+            || unsafe { SetHandleInformation(write.as_raw_handle(), HANDLE_FLAG_INHERIT, 0) } == 0
+        {
+            return Err(RacpError::new("EXECUTION_FAILED"));
+        }
+        Ok((
+            Self::spawn_with_input(spec, input.into())?,
+            File::from(write),
+        ))
+    }
+    fn spawn_with_input(spec: CommandSpec, input: OwnedHandle) -> Result<Self, RacpError> {
+        let (stdout, out_write) = pipe()?;
+        let (stderr, err_write) = pipe()?;
         let handles = [
             input.as_raw_handle(),
             out_write.as_raw_handle(),

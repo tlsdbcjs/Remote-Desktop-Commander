@@ -51,6 +51,9 @@ impl NativeDesktop {
         snapshot: &Snapshot,
         deadline: Instant,
     ) -> Result<(), RacpError> {
+        if self.cancelled.as_ref().is_some_and(|p| p.exists()) {
+            return Err(RacpError::new("CANCELLED"));
+        }
         self.availability()?;
         if Instant::now() >= deadline {
             return Err(RacpError::new("TIMEOUT"));
@@ -82,6 +85,9 @@ impl NativeDesktop {
         deadline: Instant,
     ) -> Result<Value, RacpError> {
         let window = self.window_handle(p["expected_window_id"].as_str().unwrap_or(""))?;
+        if self.cancelled.as_ref().is_some_and(|p| p.exists()) {
+            return Err(RacpError::new("CANCELLED"));
+        }
         self.availability()?;
         if Instant::now() >= deadline {
             return Err(RacpError::new("TIMEOUT"));

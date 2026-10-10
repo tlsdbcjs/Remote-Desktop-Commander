@@ -258,6 +258,13 @@ impl Desktop {
         request: Value,
         cancel: CancellationToken,
     ) -> Result<Value, RacpError> {
+        let deadline = Instant::now()
+            + Duration::from_millis(
+                request["remaining_timeout_ms"]
+                    .as_u64()
+                    .unwrap_or(3000)
+                    .clamp(1, 30000),
+            );
         if cancel.is_cancelled() {
             return Err(RacpError::new("CANCELLED"));
         }
@@ -291,8 +298,16 @@ impl Desktop {
             &child.config,
             &child.peer,
             json!({"operation":"broker.status"}),
-            Duration::from_secs(3),
+            deadline
+                .saturating_duration_since(Instant::now())
+                .min(Duration::from_secs(3)),
         )?;
+        if cancel.is_cancelled() {
+            return Err(RacpError::new("CANCELLED"));
+        }
+        if Instant::now() >= deadline {
+            return Err(RacpError::new("TIMEOUT"));
+        }
         status["broker_running"] = json!(true);
         *self
             .status
@@ -304,18 +319,19 @@ impl Desktop {
         if request["payload"]["session_id"] != child.config.session_id {
             return Err(RacpError::new("SESSION_UNAVAILABLE"));
         }
-        let budget = request["remaining_timeout_ms"]
-            .as_u64()
-            .unwrap_or(3000)
-            .clamp(1, 30000);
-        let deadline = Instant::now() + Duration::from_millis(budget);
+        let budget = deadline
+            .saturating_duration_since(Instant::now())
+            .as_millis()
+            .max(1) as u64;
         let context = json!({"owner_id":request["context"]["principal_id"],"device_id":self.device,"operation_id":request["operation_id"],"timeout_ms":budget});
+        let signal = CancellationSignal::new(&child.path, &request, &cancel)?;
         let mut result = pipe::request(
             &child.config,
             &child.peer,
             json!({"operation":request["operation"],"payload":request["payload"],"context":context}),
             Duration::from_millis(budget),
         )?;
+        drop(signal);
         if request["operation"] == "desktop.screenshot" {
             let op = request["operation_id"]
                 .as_str()
@@ -433,5 +449,56 @@ impl Provider for Desktop {
                 .await
                 .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
         })
+    }
+}
+
+struct CancellationSignal {
+    done: Arc<std::sync::atomic::AtomicBool>,
+    join: Option<std::thread::JoinHandle<()>>,
+    path: PathBuf,
+}
+impl CancellationSignal {
+    fn new(
+        pair: &std::path::Path,
+        r: &Value,
+        cancel: &CancellationToken,
+    ) -> Result<Self, RacpError> {
+        let id = r["operation_id"]
+            .as_str()
+            .filter(|s| {
+                s.starts_with("op_")
+                    && s.len() <= 96
+                    && s.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+            })
+            .ok_or_else(|| RacpError::new("INVALID_ARGUMENT"))?;
+        let path = pair.with_file_name(format!("cancel-{id}"));
+        racp_core::validate_local_path(&path)?;
+        let done = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let thread_done = done.clone();
+        let token = cancel.clone();
+        let output = path.clone();
+        let join = std::thread::spawn(move || {
+            while !thread_done.load(std::sync::atomic::Ordering::Acquire) {
+                if token.is_cancelled() {
+                    let _ = racp_core::atomic_write(&output, b"", false);
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        });
+        Ok(Self {
+            done,
+            join: Some(join),
+            path,
+        })
+    }
+}
+impl Drop for CancellationSignal {
+    fn drop(&mut self) {
+        self.done.store(true, std::sync::atomic::Ordering::Release);
+        if let Some(join) = self.join.take() {
+            let _ = join.join();
+        }
+        let _ = std::fs::remove_file(&self.path);
     }
 }
