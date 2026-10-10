@@ -17,6 +17,18 @@ fn fixture_child() {
                 .write_all(&vec![b'x'; 1024 * 1024])
                 .unwrap();
         }
+        "memory" => {
+            use std::io::Write;
+            let data: Vec<u8> = (0..128 * 1024).map(|index| (index % 256) as u8).collect();
+            println!(
+                "memory_fixture={}",
+                serde_json::json!({"address":format!("0x{:x}",data.as_ptr() as usize),"size_bytes":data.len()})
+            );
+            std::io::stdout().flush().unwrap();
+            let mut input = String::new();
+            let _ = std::io::stdin().read_line(&mut input);
+            std::hint::black_box(&data);
+        }
         "sleep" => {
             println!("started");
             std::thread::sleep(std::time::Duration::from_secs(60));

@@ -7,6 +7,17 @@ fn main() {
             eprintln!("native stderr");
             std::process::exit(7)
         }
+        Some("memory") => {
+            let data: Vec<u8> = (0..128 * 1024).map(|index| (index % 256) as u8).collect();
+            println!(
+                "{}",
+                serde_json::json!({"pid":std::process::id(), "address":format!("0x{:x}",data.as_ptr() as usize), "size_bytes":data.len()})
+            );
+            std::io::stdout().flush().unwrap();
+            let mut input = String::new();
+            let _ = std::io::stdin().read_line(&mut input);
+            std::hint::black_box(&data);
+        }
         Some("sleep") => std::thread::sleep(Duration::from_secs(60)),
         Some("delay") => {
             std::thread::sleep(Duration::from_millis(400));
