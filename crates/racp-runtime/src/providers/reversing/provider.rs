@@ -19,7 +19,6 @@ struct Resource {
     instance: String,
     private_id: String,
     root: PathBuf,
-    target: Option<PathBuf>,
     expires: Instant,
     active: bool,
     revision: u64,
@@ -120,7 +119,8 @@ impl Reversing {
             .resources
             .get_mut(id)
             .ok_or_else(|| RacpError::new("HANDLE_EXPIRED"))?;
-        if resource.handle["owner"] != r["context"]["principal_id"]
+        if resource.handle["workspace_id"] != r["context"]["workspace_id"]
+            || resource.handle["owner"] != r["context"]["principal_id"]
             || resource.handle["device_id"] != r["device_id"]
             || r["device_id"] != self.device
         {
@@ -219,7 +219,9 @@ impl Reversing {
         if observed.directory || observed.size > 1024 * 1024 * 1024 {
             return Err(RacpError::new("RESOURCE_EXHAUSTED"));
         }
+        if self.storage()?.saturating_add(observed.size)>10*1024*1024*1024{return Err(RacpError::new("RESOURCE_EXHAUSTED"));}
         let mut file = parent.open_read(name)?;
+        if racp_core::FileInfo::from_file(&file)?.revision()!=observed.revision(){return Err(RacpError::new("PRECONDITION_FAILED"));}
         let directory = self.root.join(id);
         private_dir(&directory)?;
         let target = directory.join(name);
@@ -243,7 +245,7 @@ impl Reversing {
                 hash.update(&buffer[..n]);
             }
             copied.sync_all()?;
-            if size != observed.size || parent.require_file(name)?.revision() != observed.revision()
+            if size != observed.size || racp_core::FileInfo::from_file(&file)?.revision() != observed.revision() || parent.require_file(name)?.revision() != observed.revision()
             {
                 return Err(RacpError::new("PRECONDITION_FAILED"));
             }
@@ -263,6 +265,36 @@ impl Reversing {
         result?;
         Ok(target)
     }
+
+    fn storage(&self) -> Result<u64, RacpError> {
+        let guards=Workspaces::new(&self.root,&[])?;let mut pending=vec![(self.root.clone(),0usize)];let mut total=0u64;let mut entries=0;
+        while let Some((path,depth))=pending.pop(){if depth>64{return Err(RacpError::new("RESOURCE_EXHAUSTED"));}let directory=guards.directory("default",&path)?;
+            for name in directory.names()?{entries+=1;if entries>20000{return Err(RacpError::new("RESOURCE_EXHAUSTED"));}let info=directory.info(&name)?.ok_or_else(||RacpError::new("PATH_ACCESS_DENIED"))?;
+                if info.link{return Err(RacpError::new("PATH_ACCESS_DENIED"));}if info.directory{pending.push((path.join(name),depth+1));}else{total=total.checked_add(info.size).filter(|n|*n<=10*1024*1024*1024).ok_or_else(||RacpError::new("RESOURCE_EXHAUSTED"))?;}
+            }
+        }Ok(total)
+    }
+    fn remove_resource(&self,path:&Path)->Result<(),RacpError>{
+        if path.parent()!=Some(self.root.as_path()){return Err(RacpError::new("PATH_ACCESS_DENIED"));}
+        if !path.try_exists()?{return Ok(());}
+        let guards=Workspaces::new(&self.root,&[])?;let mut stack=vec![(path.to_path_buf(),false,0usize)];let mut entries=0;
+        while let Some((path,visited,depth))=stack.pop(){if depth>64{return Err(RacpError::new("RESOURCE_EXHAUSTED"));}if visited{let parent=guards.parent("default",&path)?;parent.unlink(path.file_name().and_then(|s|s.to_str()).ok_or_else(||RacpError::new("PATH_ACCESS_DENIED"))?,true)?;continue;}
+            stack.push((path.clone(),true,depth));let directory=guards.directory("default",&path)?;
+            for name in directory.names()?{entries+=1;if entries>20000{return Err(RacpError::new("RESOURCE_EXHAUSTED"));}let info=directory.info(&name)?.ok_or_else(||RacpError::new("PATH_ACCESS_DENIED"))?;if info.link{return Err(RacpError::new("PATH_ACCESS_DENIED"));}if info.directory{stack.push((path.join(name),false,depth+1));}else{directory.unlink(&name,false)?;}}
+        }Ok(())
+    }
+    fn retire(&self,state:&mut State)->Result<(),RacpError>{
+        let expired:Vec<_>=state.resources.iter().filter(|(_,r)|r.active&&r.expires<=Instant::now()).map(|(id,r)|(id.clone(),r.backend.clone(),r.private_id.clone(),r.handle["type"]=="analysis")).collect();
+        for(id,backend,private,analysis)in expired{
+            if let Some(backend)=state.backends.get_mut(&backend){let _=backend.request(if analysis{"re.close"}else{"debugger.close"},if analysis{json!({"analysis_id":private})}else{json!({"debug_id":private})},Instant::now()+Duration::from_secs(2),&CancellationToken::new());}
+            let resource=state.resources.get_mut(&id).unwrap();resource.active=false;resource.handle["state"]=json!("EXPIRED");resource.handle["availability"]=json!("unavailable");resource.cursors.clear();self.remove_resource(&resource.root)?;
+        }
+        Self::events(state);
+        for resource in state.resources.values().filter(|r|!r.active){self.remove_resource(&resource.root)?;}
+        while state.resources.len()>64{let Some(id)=state.resources.iter().find(|(_,r)|!r.active).map(|(id,_)|id.clone())else{break;};state.resources.remove(&id);}
+        self.storage()?;Ok(())
+    }
+
     fn run(
         &self,
         r: Value,
@@ -275,7 +307,7 @@ impl Reversing {
             .lock()
             .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
         budget(deadline, &cancel)?;
-        Self::events(&mut state);
+        self.retire(&mut state)?;
         let op = r["operation"].as_str().unwrap_or("");
         let mut p = r["payload"].clone();
         if matches!(op, "re.backends" | "debugger.backends") {
@@ -301,7 +333,7 @@ impl Reversing {
             }
             let instance = backend.instance.clone();
             let id = new_id(if op == "re.open" { "analysis" } else { "debug" });
-            let target = if op == "debugger.attach" {
+            let _target = if op == "debugger.attach" {
                 let pid = p["pid"].as_u64().unwrap_or(0) as u32;
                 let birth = p["create_time"].as_f64().unwrap_or(0.0);
                 if p["agent_boot_id"] != self.boot
@@ -310,7 +342,7 @@ impl Reversing {
                     return Err(RacpError::new("PRECONDITION_FAILED"));
                 }
                 let system = sysinfo::System::new_all();
-                if crate::identity::provider_protected(&system, pid) {
+                if crate::providers::Processes::protected(&system, pid) {
                     return Err(RacpError::new("PERMISSION_DENIED"));
                 }
                 #[cfg(windows)]
@@ -374,7 +406,6 @@ impl Reversing {
                     instance,
                     private_id,
                     root: self.root.join(&id),
-                    target,
                     expires: Instant::now() + Duration::from_secs(3600),
                     active: true,
                     revision: 1,
@@ -497,6 +528,7 @@ impl Reversing {
         }
         resource.handle["resource_revision"] = json!(resource.revision.to_string());
         value["handle"] = resource.handle.clone();
+        if closing { self.remove_resource(&resource.root)?; }
         if op == "debugger.read_memory" {
             let raw = value["bytes_hex"]
                 .as_str()
@@ -574,6 +606,7 @@ impl Provider for Reversing {
                 for resource in state.resources.values_mut() {
                     resource.active = false;
                     resource.handle["state"] = json!("CLOSED");
+                    provider.remove_resource(&resource.root)?;
                 }
                 Ok(())
             })
