@@ -10,7 +10,7 @@ $Repo = Split-Path $PSScriptRoot -Parent
 Push-Location $Repo
 try {
     $CargoText = Get-Content Cargo.toml -Raw
-    $Version = [regex]::Match($CargoText, '(?m)^version = "([0-9]+\.[0-9]+\.[0-9]+)"$').Groups[1].Value
+    $Version = [regex]::Match($CargoText, '(?m)^version = "([0-9]+\.[0-9]+\.[0-9]+)"\r?$').Groups[1].Value
     if (-not $Version) { throw 'Missing workspace version.' }
     $Batch = Join-Path $Repo "dist/rust-agent/$Version/win-x64/$BuildId"
     if (Test-Path $Batch) { throw "Build output already exists: $Batch" }
