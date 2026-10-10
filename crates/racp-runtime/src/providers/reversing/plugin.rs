@@ -40,7 +40,7 @@ impl Approved{
   if !executable.is_file()||!cwd.is_dir(){return Err(RacpError::new("CAPABILITY_UNAVAILABLE"));}
   let mut operations=BTreeSet::new();for operation in manifest["operations"].as_array().unwrap(){
    let name=operation["name"].as_str().unwrap();let expected=if name.starts_with("re."){"static-analysis"}else if name.starts_with("debugger."){"debugger"}else{return Err(RacpError::new("PLUGIN_PROTOCOL_ERROR"));};
-   if !operations.insert(name)||!racp_contract::registry().contains_key(name)||operation["capability"]!=expected||!manifest["capabilities"].as_array().unwrap().iter().any(|v|v==expected)||!references(&operation["input_schema"])||!references(&operation["output_schema"])||serde_json::to_vec(&operation["input_schema"])?.len()>16384||serde_json::to_vec(&operation["output_schema"])?.len()>16384||!required.contains(operation["permission_scope"].as_str().unwrap()){return Err(RacpError::new("PLUGIN_PROTOCOL_ERROR"));}
+   if !operations.insert(name)||racp_contract::registry().get(name).is_none()||operation["capability"]!=expected||!manifest["capabilities"].as_array().unwrap().iter().any(|v|v==expected)||!references(&operation["input_schema"])||!references(&operation["output_schema"])||serde_json::to_vec(&operation["input_schema"])?.len()>16384||serde_json::to_vec(&operation["output_schema"])?.len()>16384||!required.contains(operation["permission_scope"].as_str().unwrap()){return Err(RacpError::new("PLUGIN_PROTOCOL_ERROR"));}
   }
   Ok(Self{manifest,hash:hash.into(),path:path.into()})
  }
