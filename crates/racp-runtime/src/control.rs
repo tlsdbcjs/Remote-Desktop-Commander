@@ -111,12 +111,18 @@ impl ControlClient {
     pub fn new(state: PathBuf, executable: PathBuf) -> Self {
         Self { state, executable }
     }
-    pub async fn maintenance_stop(&self, install: &Path) -> Result<Value,RacpError> {
-        if let Some(record)=load_record(&self.state)?.filter(matching) {
-            let system=sysinfo::System::new_all();
-            let exe=system.process(sysinfo::Pid::from_u32(record.pid)).and_then(|p|p.exe()).ok_or_else(||RacpError::new("PRECONDITION_FAILED"))?;
+    pub async fn maintenance_stop(&self, install: &Path) -> Result<Value, RacpError> {
+        if let Some(record) = load_record(&self.state)?.filter(matching) {
+            let system = sysinfo::System::new_all();
+            let exe = system
+                .process(sysinfo::Pid::from_u32(record.pid))
+                .and_then(|p| p.exe())
+                .ok_or_else(|| RacpError::new("PRECONDITION_FAILED"))?;
             validate_local_path(exe)?;
-            if exe!=self.executable || !racp_core::path_within(exe,install) || !matching(&record) {return Err(RacpError::new("PERMISSION_DENIED"));}
+            if exe != self.executable || !racp_core::path_within(exe, install) || !matching(&record)
+            {
+                return Err(RacpError::new("PERMISSION_DENIED"));
+            }
         }
         self.stop().await
     }

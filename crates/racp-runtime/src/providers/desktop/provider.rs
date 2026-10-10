@@ -502,7 +502,10 @@ impl Drop for CancellationSignal {
         if let Some(join) = self.join.take() {
             let _ = join.join();
         }
-        if self.confirmed { let _ = std::fs::remove_file(&self.path); }
-        else { let _ = racp_core::atomic_write(&self.path, b"", false); }
+        if self.confirmed {
+            let _ = std::fs::remove_file(&self.path);
+        } else {
+            let _ = racp_core::atomic_write(&self.path, b"", false);
+        }
     }
 }

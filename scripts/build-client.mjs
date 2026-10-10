@@ -1,0 +1,87 @@
+import {readFile,writeFile,mkdir,cp,access,readdir,rename,open,appendFile} from "node:fs/promises";
+import {createReadStream,createWriteStream} from "node:fs";
+import {pipeline} from "node:stream/promises";
+import {spawnSync} from "node:child_process";
+import path from "node:path";
+import {fileURLToPath} from "node:url";
+import {inventory,sha256,amd64,verify} from "./client-manifest.mjs";
+import {stageWebView} from "./stage-webview2.mjs";
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
+const args=process.argv.slice(2);
+const option=(name,fallback)=>{const i=args.indexOf(name);return i<0?fallback:args[i+1];};
+const platform=option("--platform","win"),arch=option("--arch","x64");
+const packageJson=JSON.parse(await readFile(path.join(root,"apps/client/package.json"),"utf8"));
+const version=packageJson.version;
+const batch=option("--build-id",new Date().toISOString().replaceAll(/[:.]/g,"-"));
+if(!/^[A-Za-z0-9_-]{1,80}$/.test(batch)||!/^\d+\.\d+\.\d+$/.test(version))throw Error("Invalid build identity");
+if(!["win","mac","linux"].includes(platform)||!["x64","arm64"].includes(arch))throw Error("Invalid target");
+const output=path.join(root,"dist/client-desktop",version,platform+"-"+arch,batch);
+const agentOutput=path.join(root,"dist/client-agent",version,platform+"-"+arch,batch);
+if(args.includes("--dry-run")){console.log(JSON.stringify({version,platform,architecture:arch,output,agentOutput,targets:platform==="win"?["setup.exe","portable.exe","zip"]:platform==="mac"?["dmg","zip"]:["deb","AppImage"],native_host_required:true,tests:"deferred_by_user",build_executed:false},null,2));process.exit(0);}
+if(platform!=="win"||arch!=="x64"||process.platform!=="win32"||process.arch!=="x64")throw Error("Native Windows x64 packaging only; other platforms are defined/deferred");
+if(process.version!=="v22.23.0")throw Error("Pinned Node 22.23.0 required");
+function run(exe,argv,cwd=root,env={}){const value=spawnSync(exe,argv,{cwd,stdio:"inherit",env:{...process.env,...env}});if(value.error||value.status!==0)throw Error("Build command failed: "+path.basename(exe));}
+async function exists(file){try{await access(file);return true;}catch(e){if(e.code==="ENOENT")return false;throw e;}}
+if(await exists(output)||await exists(agentOutput))throw Error("Batch already exists; preserve prior outputs");
+await mkdir(output,{recursive:true});await mkdir(agentOutput,{recursive:true});
+const staged=path.join(root,"apps/client/src-tauri/staged");
+try{
+ if(await exists(staged))await rename(staged,staged+".preserved-"+batch);
+ await mkdir(staged,{recursive:true});
+ run("cargo",["build","-p","racp-agent","--bins","--release","--locked","--target","x86_64-pc-windows-msvc"]);
+ const native=path.join(root,"target/x86_64-pc-windows-msvc/release");
+ await amd64(path.join(native,"racp-agent.exe"));await amd64(path.join(native,"racp-portable.exe"));
+ await cp(path.join(native,"racp-agent.exe"),path.join(agentOutput,"racp-agent.exe"),{errorOnExist:true,force:false});
+ const downloader=path.join(root,".tools/client-chromium-downloader");
+ const npm=path.join(path.dirname(process.execPath),"node_modules/npm/bin/npm-cli.js");
+ run(process.execPath,[npm,"install","--prefix",downloader,"--ignore-scripts","--no-package-lock","--no-audit","--no-fund","playwright@1.63.0"]);
+ const browsers=JSON.parse(await readFile(path.join(downloader,"node_modules/playwright-core/browsers.json"),"utf8"));
+ const chromium=browsers.browsers.filter(row=>row.name==="chromium");
+ if(chromium.length!==1||chromium[0].revision!=="1243")throw Error("Pinned Chromium revision differs");
+ const cache=path.join(root,".tools/client-browsers");
+ run(process.execPath,[path.join(downloader,"node_modules/playwright/cli.js"),"install","chromium"],root,{PLAYWRIGHT_BROWSERS_PATH:cache});
+ const chrome=path.join(cache,"chromium-1243/chrome-win64");
+ await amd64(path.join(chrome,"chrome.exe"));
+ await cp(chrome,path.join(agentOutput,"chromium"),{recursive:true,errorOnExist:true,force:false});
+ const agentManifest={version,platform,architecture:arch,runtime:"rust",chromium_revision:"1243",files:await inventory(agentOutput)};
+ await verify(agentOutput,agentManifest);
+ await cp(agentOutput,path.join(staged,"agent"),{recursive:true,errorOnExist:true,force:false});
+ await writeFile(path.join(staged,"agent-manifest.json"),JSON.stringify(agentManifest,null,2)+"\n");
+ const webview=await stageWebView();
+ run(process.execPath,[path.join(root,"apps/client/node_modules/@tauri-apps/cli/tauri.js"),"build","--target","x86_64-pc-windows-msvc","--bundles","nsis"],path.join(root,"apps/client"));
+ const release=path.join(root,"apps/client/src-tauri/target/x86_64-pc-windows-msvc/release");
+ const installers=(await readdir(path.join(release,"bundle/nsis"))).filter(name=>name.endsWith(".exe"));
+ if(installers.length!==1)throw Error("Exactly one current NSIS setup required");
+ const stem="RACP-Client-"+version+"-win-x64";
+ await cp(path.join(release,"bundle/nsis",installers[0]),path.join(output,stem+"-setup.exe"));
+ const payload=path.join(output,"win-unpacked");await mkdir(payload);
+ await cp(path.join(release,"racp-client.exe"),path.join(payload,"racp-client.exe"));
+ await cp(path.join(staged,"agent"),path.join(payload,"agent"),{recursive:true});
+ await cp(path.join(staged,"webview2"),path.join(payload,"webview2"),{recursive:true});
+ await cp(path.join(root,"LICENSE"),path.join(payload,"LICENSE"));
+ await amd64(path.join(payload,"racp-client.exe"));
+ const files=await inventory(payload);
+ const manifest={version:1,product_version:version,platform,architecture:arch,files};
+ await verify(payload,manifest);
+ const portable=path.join(output,stem+"-portable.exe");
+ await cp(path.join(native,"racp-portable.exe"),portable);
+ const offset=(await (await import("node:fs/promises")).stat(portable)).size;
+ const header=Buffer.from(JSON.stringify(manifest));const prefix=Buffer.alloc(4);prefix.writeUInt32LE(header.length);
+ await appendFile(portable,prefix);await appendFile(portable,header);
+ for(const row of files)await pipeline(createReadStream(path.join(payload,row.path)),createWriteStream(portable,{flags:"a"}));
+ const digest=(await import("node:crypto")).createHash("sha256");
+ for await(const chunk of createReadStream(portable,{start:offset}))digest.update(chunk);
+ const footer=Buffer.alloc(88);footer.writeBigUInt64LE(BigInt(offset));footer.write("RACPPORTABLE0001",8,"ascii");footer.write(digest.digest("hex"),24,"ascii");await appendFile(portable,footer);
+ run("pwsh",["-NoProfile","-NonInteractive","-Command","Compress-Archive -Path (Join-Path $env:RACP_PACKAGE_PAYLOAD '*') -DestinationPath $env:RACP_PACKAGE_ZIP -CompressionLevel Optimal"],root,{RACP_PACKAGE_PAYLOAD:payload,RACP_PACKAGE_ZIP:path.join(output,stem+".zip")});
+ const artifacts=[];for(const name of [stem+"-setup.exe",stem+"-portable.exe",stem+".zip"]){const file=path.join(output,name);artifacts.push({file:name,size_bytes:(await (await import("node:fs/promises")).stat(file)).size,sha256:await sha256(file)});}
+ const source=spawnSync("git",["rev-parse","HEAD"],{cwd:root,encoding:"utf8"});if(source.status!==0)throw Error("Source revision unavailable");
+ const evidence={version,platform,architecture:arch,source_commit:source.stdout.trim(),build_id:batch,kind:"development-desktop",signed:false,runtime:"tauri-rust",python_required:false,node_required:false,webview2_version:webview.version,webview2_cab_sha256:webview.sha256,chromium_revision:"1243",tests:"deferred_by_user",locks:{cargo:await sha256(path.join(root,"Cargo.lock")),tauri:await sha256(path.join(root,"apps/client/src-tauri/Cargo.lock")),pnpm:await sha256(path.join(root,"pnpm-lock.yaml"))},artifacts,payload:manifest};
+ await writeFile(path.join(output,"build-manifest.json"),JSON.stringify(evidence,null,2)+"\n");
+ await writeFile(path.join(output,"SHA256SUMS"),artifacts.map(row=>row.sha256+"  "+row.file).join("\n")+"\n");
+ console.log("CLIENT_PACKAGE_EVIDENCE "+JSON.stringify({...evidence,payload:undefined}));
+}catch(error){
+ await writeFile(path.join(output,"build-failure.json"),JSON.stringify({version,build_id:batch,status:"failed",tests:"deferred_by_user"})+"\n");
+ await rename(output,output+".quarantine");
+ throw error;
+}
+

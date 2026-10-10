@@ -1,10 +1,11 @@
 !include "LogicLib.nsh"
+!define RACP_MAINTENANCE_SOURCE "${__FILEDIR__}\staged\agent\racp-agent.exe"
 !macro RACP_PREPARE MODE
   IfFileExists "$INSTDIR\racp-client.exe" racp_present_${MODE} 0
   IfFileExists "$INSTDIR\RACP Client.exe" racp_present_${MODE} racp_done_${MODE}
   racp_present_${MODE}:
     InitPluginsDir
-    File /oname=$PLUGINSDIR\racp-maintenance.exe "${__FILEDIR__}\staged\agent\racp-agent.exe"
+    File /oname=$PLUGINSDIR\racp-maintenance.exe "${RACP_MAINTENANCE_SOURCE}"
     nsExec::ExecToStack /TIMEOUT=60000 '"$PLUGINSDIR\racp-maintenance.exe" maintenance --install-dir "$INSTDIR" --state-dir "$APPDATA\@racp\client\agent" --executable-name "racp-client.exe" --login-name "app.racp.client" --mode "${MODE}"'
     Pop $R0
     Pop $R1

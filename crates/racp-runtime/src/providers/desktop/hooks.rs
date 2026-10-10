@@ -205,7 +205,9 @@ impl NativeWatch {
                                 s.healthy = false;
                             }
                         } else if let Ok(mut s) = shared.lock() {
-                            if s.held.snapshot().is_empty() && s.counter.healthy() { s.healthy = true; }
+                            if s.held.snapshot().is_empty() && s.counter.healthy() {
+                                s.healthy = true;
+                            }
                         }
                     }
                     MsgWaitForMultipleObjectsEx(

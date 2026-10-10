@@ -17,7 +17,10 @@ fn navigation(url: &tauri::Url) -> bool {
             && url.host_str() == Some("localhost")
             && url.port() == Some(5173)
 }
-struct TrayItems { start: MenuItem<tauri::Wry>, stop: MenuItem<tauri::Wry> }
+struct TrayItems {
+    start: MenuItem<tauri::Wry>,
+    stop: MenuItem<tauri::Wry>,
+}
 fn tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "현황 창 열기", true, None::<&str>)?;
     let start = MenuItem::with_id(app, "start", "Agent 시작", true, None::<&str>)?;
@@ -104,10 +107,19 @@ fn refresh_tray(app: &tauri::AppHandle, state: &Controller) {
 fn fatal() -> ! {
     #[cfg(windows)]
     unsafe {
-        use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_OK, MB_ICONERROR};
-        let text: Vec<u16> = "RACP Client를 시작할 수 없습니다. 설치 파일과 사용자 상태 폴더를 확인해 주세요.".encode_utf16().chain(Some(0)).collect();
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+        let text: Vec<u16> =
+            "RACP Client를 시작할 수 없습니다. 설치 파일과 사용자 상태 폴더를 확인해 주세요."
+                .encode_utf16()
+                .chain(Some(0))
+                .collect();
         let title: Vec<u16> = "RACP Client".encode_utf16().chain(Some(0)).collect();
-        MessageBoxW(std::ptr::null_mut(),text.as_ptr(),title.as_ptr(),MB_OK|MB_ICONERROR);
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text.as_ptr(),
+            title.as_ptr(),
+            MB_OK | MB_ICONERROR,
+        );
     }
     std::process::exit(4)
 }
@@ -124,7 +136,9 @@ fn main() {
             }
         }
     }
-    if !cfg!(debug_assertions) && std::env::var_os("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER").is_none() { fatal(); }
+    if !cfg!(debug_assertions) && std::env::var_os("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER").is_none() {
+        fatal();
+    }
     let controller = match Controller::new() {
         Ok(state) => Arc::new(state),
         Err(_) => {
@@ -153,7 +167,11 @@ fn main() {
             let login_launch = std::env::args().any(|arg| arg == login::ARGUMENT);
             let window =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                    .data_directory(app.state::<Arc<Controller>>().state_dir.join("webview-cache"))
+                    .data_directory(
+                        app.state::<Arc<Controller>>()
+                            .state_dir
+                            .join("webview-cache"),
+                    )
                     .title("RACP Client")
                     .inner_size(860.0, 760.0)
                     .min_inner_size(620.0, 620.0)

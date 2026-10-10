@@ -28,7 +28,8 @@
       "../assets/app.png"
     ],
     "resources": {
-      "staged/agent/": "agent/"
+      "staged/agent/": "agent/",
+      "staged/webview2/": "webview2/"
     },
     "windows": {
       "webviewInstallMode": {

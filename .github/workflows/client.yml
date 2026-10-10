@@ -1,8 +1,7 @@
 name: rust-client
 on:
   push:
-    paths: ["apps/client/**", "crates/**", "Cargo.*", "pnpm-lock.yaml", ".github/workflows/client.yml", "scripts/*client*.mjs"]
-  pull_request:
+    branches: [master, codex/client-rust-migration]
     paths: ["apps/client/**", "crates/**", "Cargo.*", "pnpm-lock.yaml", ".github/workflows/client.yml", "scripts/*client*.mjs"]
   workflow_dispatch:
 concurrency:
@@ -31,12 +30,15 @@ jobs:
             apps/client/src-tauri -> target
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir apps/client build
-      - name: Stage pinned fixed WebView2
-        run: node scripts/stage-webview2.mjs 
-      - name: Compile Windows host (tests deferred)
-        run: cargo build --release --locked --manifest-path apps/client/src-tauri/Cargo.toml --target x86_64-pc-windows-msvc
+      - name: Build Windows setup and portable artifacts (tests deferred)
+        run: node scripts/build-client.mjs --build-id "${{ github.run_id }}-${{ github.run_attempt }}"
       - uses: actions/upload-artifact@v4
         with:
           name: racp-client-win-x64-${{ github.sha }}
-          path: apps/client/src-tauri/target/x86_64-pc-windows-msvc/release/racp-client.exe
+          path: |
+            dist/client-desktop/**/RACP-Client-*.exe
+            dist/client-desktop/**/*.zip
+            dist/client-desktop/**/build-manifest.json
+            dist/client-desktop/**/SHA256SUMS
           if-no-files-found: error
+          compression-level: 0

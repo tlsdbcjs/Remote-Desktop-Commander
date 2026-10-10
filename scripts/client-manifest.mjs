@@ -1,0 +1,9 @@
+import {createHash} from "node:crypto";
+import {createReadStream} from "node:fs";
+import {readdir,lstat,readFile} from "node:fs/promises";
+import path from "node:path";
+export async function sha256(file){const hash=createHash("sha256");for await(const chunk of createReadStream(file))hash.update(chunk);return hash.digest("hex");}
+export async function inventory(root){const result=[];const seen=new Set();async function walk(folder,depth){if(depth>32)throw Error("Payload nesting limit");for(const name of await readdir(folder)){const file=path.join(folder,name);const stat=await lstat(file);if(stat.isSymbolicLink())throw Error("Linked payload component");if(stat.isDirectory())await walk(file,depth+1);else if(stat.isFile()){const relative=path.relative(root,file).replaceAll("\\","/");if(result.length>=20000||stat.size>512*1024*1024||seen.has(relative.toLowerCase()))throw Error("Payload inventory limit/collision");if(/(^|\/)(python[^/]*\.exe|node\.exe|credential\.bin|settings\.json)$|\.(py|pyc|whl)$/i.test(relative))throw Error("Forbidden client runtime/state");seen.add(relative.toLowerCase());result.push({path:relative,size:stat.size,sha256:await sha256(file)});}else throw Error("Non-file payload component");}}await walk(root,0);return result.sort((a,b)=>a.path.localeCompare(b.path));}
+export async function amd64(file){const bytes=await readFile(file);const pe=bytes.readUInt32LE(60);if(bytes.subarray(0,2).toString()!=="MZ"||pe+6>bytes.length||bytes.subarray(pe,pe+4).toString("hex")!=="50450000"||bytes.readUInt16LE(pe+4)!==0x8664)throw Error("Native Windows AMD64 executable required");}
+export async function verify(root,manifest){if(manifest.platform!=="win"||manifest.architecture!=="x64")throw Error("Payload target differs");const actual=await inventory(root);if(JSON.stringify(actual)!==JSON.stringify(manifest.files))throw Error("Payload hashes/inventory differ");return actual;}
+

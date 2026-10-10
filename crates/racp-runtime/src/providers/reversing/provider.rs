@@ -219,9 +219,13 @@ impl Reversing {
         if observed.directory || observed.size > 1024 * 1024 * 1024 {
             return Err(RacpError::new("RESOURCE_EXHAUSTED"));
         }
-        if self.storage()?.saturating_add(observed.size)>10*1024*1024*1024{return Err(RacpError::new("RESOURCE_EXHAUSTED"));}
+        if self.storage()?.saturating_add(observed.size) > 10 * 1024 * 1024 * 1024 {
+            return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+        }
         let mut file = parent.open_read(name)?;
-        if racp_core::FileInfo::from_file(&file)?.revision()!=observed.revision(){return Err(RacpError::new("PRECONDITION_FAILED"));}
+        if racp_core::FileInfo::from_file(&file)?.revision() != observed.revision() {
+            return Err(RacpError::new("PRECONDITION_FAILED"));
+        }
         let directory = self.root.join(id);
         private_dir(&directory)?;
         let target = directory.join(name);
@@ -245,7 +249,9 @@ impl Reversing {
                 hash.update(&buffer[..n]);
             }
             copied.sync_all()?;
-            if size != observed.size || racp_core::FileInfo::from_file(&file)?.revision() != observed.revision() || parent.require_file(name)?.revision() != observed.revision()
+            if size != observed.size
+                || racp_core::FileInfo::from_file(&file)?.revision() != observed.revision()
+                || parent.require_file(name)?.revision() != observed.revision()
             {
                 return Err(RacpError::new("PRECONDITION_FAILED"));
             }
@@ -267,32 +273,139 @@ impl Reversing {
     }
 
     fn storage(&self) -> Result<u64, RacpError> {
-        let guards=Workspaces::new(&self.root,&[])?;let mut pending=vec![(self.root.clone(),0usize)];let mut total=0u64;let mut entries=0;
-        while let Some((path,depth))=pending.pop(){if depth>64{return Err(RacpError::new("RESOURCE_EXHAUSTED"));}let directory=guards.directory("default",&path)?;
-            for name in directory.names()?{entries+=1;if entries>20000{return Err(RacpError::new("RESOURCE_EXHAUSTED"));}let info=directory.info(&name)?.ok_or_else(||RacpError::new("PATH_ACCESS_DENIED"))?;
-                if info.link{return Err(RacpError::new("PATH_ACCESS_DENIED"));}if info.directory{pending.push((path.join(name),depth+1));}else{total=total.checked_add(info.size).filter(|n|*n<=10*1024*1024*1024).ok_or_else(||RacpError::new("RESOURCE_EXHAUSTED"))?;}
+        let guards = Workspaces::new(&self.root, &[])?;
+        let mut pending = vec![(self.root.clone(), 0usize)];
+        let mut total = 0u64;
+        let mut entries = 0;
+        while let Some((path, depth)) = pending.pop() {
+            if depth > 64 {
+                return Err(RacpError::new("RESOURCE_EXHAUSTED"));
             }
-        }Ok(total)
+            let directory = guards.directory("default", &path)?;
+            for name in directory.names()? {
+                entries += 1;
+                if entries > 20000 {
+                    return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+                }
+                let info = directory
+                    .info(&name)?
+                    .ok_or_else(|| RacpError::new("PATH_ACCESS_DENIED"))?;
+                if info.link {
+                    return Err(RacpError::new("PATH_ACCESS_DENIED"));
+                }
+                if info.directory {
+                    pending.push((path.join(name), depth + 1));
+                } else {
+                    total = total
+                        .checked_add(info.size)
+                        .filter(|n| *n <= 10 * 1024 * 1024 * 1024)
+                        .ok_or_else(|| RacpError::new("RESOURCE_EXHAUSTED"))?;
+                }
+            }
+        }
+        Ok(total)
     }
-    fn remove_resource(&self,path:&Path)->Result<(),RacpError>{
-        if path.parent()!=Some(self.root.as_path()){return Err(RacpError::new("PATH_ACCESS_DENIED"));}
-        if !path.try_exists()?{return Ok(());}
-        let guards=Workspaces::new(&self.root,&[])?;let mut stack=vec![(path.to_path_buf(),false,0usize)];let mut entries=0;
-        while let Some((path,visited,depth))=stack.pop(){if depth>64{return Err(RacpError::new("RESOURCE_EXHAUSTED"));}if visited{let parent=guards.parent("default",&path)?;parent.unlink(path.file_name().and_then(|s|s.to_str()).ok_or_else(||RacpError::new("PATH_ACCESS_DENIED"))?,true)?;continue;}
-            stack.push((path.clone(),true,depth));let directory=guards.directory("default",&path)?;
-            for name in directory.names()?{entries+=1;if entries>20000{return Err(RacpError::new("RESOURCE_EXHAUSTED"));}let info=directory.info(&name)?.ok_or_else(||RacpError::new("PATH_ACCESS_DENIED"))?;if info.link{return Err(RacpError::new("PATH_ACCESS_DENIED"));}if info.directory{stack.push((path.join(name),false,depth+1));}else{directory.unlink(&name,false)?;}}
-        }Ok(())
+    fn remove_resource(&self, path: &Path) -> Result<(), RacpError> {
+        if path.parent() != Some(self.root.as_path()) {
+            return Err(RacpError::new("PATH_ACCESS_DENIED"));
+        }
+        if !path.try_exists()? {
+            return Ok(());
+        }
+        let guards = Workspaces::new(&self.root, &[])?;
+        let mut stack = vec![(path.to_path_buf(), false, 0usize)];
+        let mut entries = 0;
+        while let Some((path, visited, depth)) = stack.pop() {
+            if depth > 64 {
+                return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+            }
+            if visited {
+                let parent = guards.parent("default", &path)?;
+                parent.unlink(
+                    path.file_name()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| RacpError::new("PATH_ACCESS_DENIED"))?,
+                    true,
+                )?;
+                continue;
+            }
+            stack.push((path.clone(), true, depth));
+            let directory = guards.directory("default", &path)?;
+            for name in directory.names()? {
+                entries += 1;
+                if entries > 20000 {
+                    return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+                }
+                let info = directory
+                    .info(&name)?
+                    .ok_or_else(|| RacpError::new("PATH_ACCESS_DENIED"))?;
+                if info.link {
+                    return Err(RacpError::new("PATH_ACCESS_DENIED"));
+                }
+                if info.directory {
+                    stack.push((path.join(name), false, depth + 1));
+                } else {
+                    directory.unlink(&name, false)?;
+                }
+            }
+        }
+        Ok(())
     }
-    fn retire(&self,state:&mut State)->Result<(),RacpError>{
-        let expired:Vec<_>=state.resources.iter().filter(|(_,r)|r.active&&r.expires<=Instant::now()).map(|(id,r)|(id.clone(),r.backend.clone(),r.private_id.clone(),r.handle["type"]=="analysis")).collect();
-        for(id,backend,private,analysis)in expired{
-            if let Some(backend)=state.backends.get_mut(&backend){let _=backend.request(if analysis{"re.close"}else{"debugger.close"},if analysis{json!({"analysis_id":private})}else{json!({"debug_id":private})},Instant::now()+Duration::from_secs(2),&CancellationToken::new());}
-            let resource=state.resources.get_mut(&id).unwrap();resource.active=false;resource.handle["state"]=json!("EXPIRED");resource.handle["availability"]=json!("unavailable");resource.cursors.clear();self.remove_resource(&resource.root)?;
+    fn retire(&self, state: &mut State) -> Result<(), RacpError> {
+        let expired: Vec<_> = state
+            .resources
+            .iter()
+            .filter(|(_, r)| r.active && r.expires <= Instant::now())
+            .map(|(id, r)| {
+                (
+                    id.clone(),
+                    r.backend.clone(),
+                    r.private_id.clone(),
+                    r.handle["type"] == "analysis",
+                )
+            })
+            .collect();
+        for (id, backend, private, analysis) in expired {
+            if let Some(backend) = state.backends.get_mut(&backend) {
+                let _ = backend.request(
+                    if analysis {
+                        "re.close"
+                    } else {
+                        "debugger.close"
+                    },
+                    if analysis {
+                        json!({"analysis_id":private})
+                    } else {
+                        json!({"debug_id":private})
+                    },
+                    Instant::now() + Duration::from_secs(2),
+                    &CancellationToken::new(),
+                );
+            }
+            let resource = state.resources.get_mut(&id).unwrap();
+            resource.active = false;
+            resource.handle["state"] = json!("EXPIRED");
+            resource.handle["availability"] = json!("unavailable");
+            resource.cursors.clear();
+            self.remove_resource(&resource.root)?;
         }
         Self::events(state);
-        for resource in state.resources.values().filter(|r|!r.active){self.remove_resource(&resource.root)?;}
-        while state.resources.len()>64{let Some(id)=state.resources.iter().find(|(_,r)|!r.active).map(|(id,_)|id.clone())else{break;};state.resources.remove(&id);}
-        self.storage()?;Ok(())
+        for resource in state.resources.values().filter(|r| !r.active) {
+            self.remove_resource(&resource.root)?;
+        }
+        while state.resources.len() > 64 {
+            let Some(id) = state
+                .resources
+                .iter()
+                .find(|(_, r)| !r.active)
+                .map(|(id, _)| id.clone())
+            else {
+                break;
+            };
+            state.resources.remove(&id);
+        }
+        self.storage()?;
+        Ok(())
     }
 
     fn run(
@@ -528,7 +641,9 @@ impl Reversing {
         }
         resource.handle["resource_revision"] = json!(resource.revision.to_string());
         value["handle"] = resource.handle.clone();
-        if closing { self.remove_resource(&resource.root)?; }
+        if closing {
+            self.remove_resource(&resource.root)?;
+        }
         if op == "debugger.read_memory" {
             let raw = value["bytes_hex"]
                 .as_str()

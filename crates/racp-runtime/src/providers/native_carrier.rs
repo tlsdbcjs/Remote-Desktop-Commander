@@ -315,12 +315,23 @@ impl Session {
         }
         let f = &m["frame"];
         let fields = match f["type"].as_str() {
-            Some("native.open") => &["type","scope_fingerprint","channel_id"][..],
-            Some("native.data") => &["type","scope_fingerprint","channel_id","byte_offset","data_base64"][..],
-            Some("native.ack" | "native.end") => &["type","scope_fingerprint","channel_id","byte_offset"][..],
+            Some("native.open") => &["type", "scope_fingerprint", "channel_id"][..],
+            Some("native.data") => &[
+                "type",
+                "scope_fingerprint",
+                "channel_id",
+                "byte_offset",
+                "data_base64",
+            ][..],
+            Some("native.ack" | "native.end") => {
+                &["type", "scope_fingerprint", "channel_id", "byte_offset"][..]
+            }
             _ => return Err(RacpError::new("REQUEST_INVALID")),
         };
-        if !f.as_object().is_some_and(|o| o.len()==fields.len() && fields.iter().all(|k|o.contains_key(*k))) {
+        if !f
+            .as_object()
+            .is_some_and(|o| o.len() == fields.len() && fields.iter().all(|k| o.contains_key(*k)))
+        {
             return Err(RacpError::new("REQUEST_INVALID"));
         }
         if f["scope_fingerprint"] != self.fingerprint {
@@ -592,17 +603,28 @@ impl Provider for NativeCarrier {
         let Ok(mut incoming) = self.incoming.lock() else {
             return vec![];
         };
-        let Ok(sessions) = self.state.try_lock() else { return vec![]; };
+        let Ok(sessions) = self.state.try_lock() else {
+            return vec![];
+        };
         let mut result = vec![];
         for _ in 0..32 {
             match incoming.try_recv() {
                 Ok(v) => {
-                    let allowed = v["handle_id"].as_str().and_then(|id|sessions.get(id)).is_some_and(|session| {
-                        let live = session.connection.lock().is_ok_and(|c| c.is_some_and(|(epoch,lease)| v["connection_epoch"]==epoch && Instant::now()<lease));
-                        live && (session.check().is_ok() || v["type"]=="native_stopped")
-                    });
-                    if allowed { result.push(v); }
-                },
+                    let allowed = v["handle_id"]
+                        .as_str()
+                        .and_then(|id| sessions.get(id))
+                        .is_some_and(|session| {
+                            let live = session.connection.lock().is_ok_and(|c| {
+                                c.is_some_and(|(epoch, lease)| {
+                                    v["connection_epoch"] == epoch && Instant::now() < lease
+                                })
+                            });
+                            live && (session.check().is_ok() || v["type"] == "native_stopped")
+                        });
+                    if allowed {
+                        result.push(v);
+                    }
+                }
                 Err(_) => break,
             }
         }

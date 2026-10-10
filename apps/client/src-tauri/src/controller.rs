@@ -20,6 +20,19 @@ pub struct Controller {
     serial: tokio::sync::Mutex<()>,
 }
 fn legacy_state() -> Result<PathBuf, RacpError> {
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(pair) = args.windows(2).find(|p| p[0] == "--portable-state") {
+        let requested = PathBuf::from(&pair[1]);
+        let allowed = PathBuf::from(
+            std::env::var_os("LOCALAPPDATA").ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?,
+        )
+        .join("RACP/portable-state");
+        let path = racp_core::validate_local_path(&requested)?;
+        if !racp_core::path_within(&path, &allowed) || path == allowed {
+            return Err(RacpError::new("LOCAL_STATE_FAILED"));
+        }
+        return Ok(path);
+    }
     #[cfg(windows)]
     {
         let roaming = PathBuf::from(
@@ -59,6 +72,7 @@ impl Controller {
     pub fn new() -> Result<Self, RacpError> {
         let state_dir = legacy_state()?;
         racp_core::private_dir(&state_dir)?;
+        racp_core::private_dir(&state_dir.join("webview-cache"))?;
         let current = std::env::current_exe()?;
         let executable = current
             .parent()
