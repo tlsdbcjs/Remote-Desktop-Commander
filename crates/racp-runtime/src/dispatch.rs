@@ -21,7 +21,100 @@ fn allowed(operation: &str, profile: &str) -> bool {
             && !["process.memory_read", "process.memory_regions"].contains(&operation))
 }
 impl Agent {
+    pub(crate) fn authorize_record(&self, record: &Record) -> Result<(), RacpError> {
+        let permissions = self
+            .settings
+            .permissions
+            .clone()
+            .unwrap_or_else(|| racp_core::legacy_permissions(self.settings.desktop_enabled));
+        racp_core::authorize(
+            &permissions,
+            &record.request,
+            self.providers.owns_process(&record.request),
+        )?;
+        let operation = record.request["operation"].as_str().unwrap_or("");
+        if !allowed(operation, &self.settings.profile) {
+            return Err(RacpError::new("PERMISSION_DENIED"));
+        }
+        let outputs = self.outputs.descriptors(&record.id)?;
+        let ceiling = permissions["constraints"]["max_output_bytes"]
+            .as_u64()
+            .unwrap_or(1073741824);
+        let mut total = 0u64;
+        for output in &outputs {
+            total = total
+                .checked_add(
+                    output["size_bytes"]
+                        .as_u64()
+                        .ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?,
+                )
+                .filter(|n| *n <= ceiling)
+                .ok_or_else(|| RacpError::new("PERMISSION_DENIED"))?;
+        }
+        if !outputs.is_empty()
+            && (!racp_core::permission_allows_field(&permissions, "artifacts.export")
+                || matches!(
+                    operation,
+                    "process.inspect" | "process.list" | "process.tree"
+                ) && !racp_core::permission_allows_field(&permissions, "process.arguments.read"))
+        {
+            return Err(RacpError::new("PERMISSION_DENIED"));
+        }
+        if serde_json::to_vec(&record.result)?.len() as u64 > ceiling {
+            return Err(RacpError::new("PERMISSION_DENIED"));
+        }
+        Ok(())
+    }
+    fn redact_arguments(&self, value: &mut Value) {
+        let permissions = self
+            .settings
+            .permissions
+            .clone()
+            .unwrap_or_else(|| racp_core::legacy_permissions(self.settings.desktop_enabled));
+        if racp_core::permission_allows_field(&permissions, "process.arguments.read") {
+            return;
+        }
+        fn visit(value: &mut Value) {
+            match value {
+                Value::Object(map) => {
+                    if map.contains_key("cmdline") {
+                        map.insert("cmdline".into(), json!([]));
+                        map.insert("arguments_included".into(), json!(false));
+                    }
+                    for child in map.values_mut() {
+                        visit(child);
+                    }
+                }
+                Value::Array(items) => {
+                    for child in items {
+                        visit(child);
+                    }
+                }
+                _ => (),
+            }
+        }
+        visit(value);
+    }
     pub(crate) async fn outcome(&self, record: Record) -> Result<Value, RacpError> {
+        let permissions = self
+            .settings
+            .permissions
+            .clone()
+            .unwrap_or_else(|| racp_core::legacy_permissions(self.settings.desktop_enabled));
+        let operation = record.request["operation"].as_str().unwrap_or("");
+        let authorization = self.authorize_record(&record);
+        if authorization.is_err() || !allowed(operation, &self.settings.profile) {
+            let mut value = self.base("error").await;
+            for key in ["request_id", "trace_id"] {
+                value[key] = record.request[key].clone();
+            }
+            value["operation_id"] = json!(record.id);
+            value["code"] = json!(authorization
+                .err()
+                .map(|e| e.code.0)
+                .unwrap_or("PERMISSION_DENIED"));
+            return Ok(value);
+        }
         let mut value = self
             .base(if record.outcome_available {
                 "result"
@@ -36,6 +129,12 @@ impl Agent {
         if record.outcome_available {
             value["state"] = json!(record.state);
             value["result"] = json!(record.result);
+            if matches!(
+                operation,
+                "process.list" | "process.inspect" | "process.tree"
+            ) {
+                self.redact_arguments(&mut value["result"]);
+            }
             value["error"] = json!(record.error);
             value["outputs"] = json!(self.outputs.descriptors(&record.id)?);
         } else {
@@ -204,6 +303,12 @@ impl Agent {
                     outcome["error"] =
                         error_value("TIMEOUT", "execution budget elapsed", "unknown");
                 }
+                if matches!(
+                    op.as_str(),
+                    "process.list" | "process.inspect" | "process.tree"
+                ) {
+                    self.redact_arguments(&mut outcome["result"]);
+                }
                 self.promote_output(&id, &mut outcome).await?;
                 self.journal.transition(
                     &id,
@@ -251,6 +356,43 @@ impl Agent {
         Ok(())
     }
     async fn promote_output(&self, id: &str, outcome: &mut Value) -> Result<(), RacpError> {
+        let permissions = self
+            .settings
+            .permissions
+            .clone()
+            .unwrap_or_else(|| racp_core::legacy_permissions(self.settings.desktop_enabled));
+        let limit = permissions["constraints"]["max_output_bytes"]
+            .as_u64()
+            .unwrap_or(1073741824);
+        let mut total = 0u64;
+        let mut exporting = false;
+        for pointer in [
+            "/result/spool_path",
+            "/result/preview/spool_path",
+            "/error/details/report_spool_path",
+        ] {
+            if let Some(path) = outcome.pointer(pointer).and_then(Value::as_str) {
+                let path = std::path::Path::new(path);
+                if !racp_core::path_within(path, self.outputs.root()) {
+                    return Err(RacpError::new("PATH_ACCESS_DENIED"));
+                }
+                let file = racp_core::secure_read_file(path)?;
+                total = total
+                    .checked_add(file.metadata()?.len())
+                    .filter(|n| *n <= limit)
+                    .ok_or_else(|| RacpError::new("RESOURCE_EXHAUSTED"))?;
+                exporting = true;
+            }
+        }
+        let inline = serde_json::to_vec(&outcome["result"])?;
+        if inline.len() as u64 > limit {
+            return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+        }
+        if (exporting || inline.len() > 65536)
+            && !racp_core::permission_allows_field(&permissions, "artifacts.export")
+        {
+            return Err(RacpError::new("PERMISSION_DENIED"));
+        }
         if let Some(report) = outcome["error"]["details"]["report_spool_path"]
             .as_str()
             .map(std::path::PathBuf::from)

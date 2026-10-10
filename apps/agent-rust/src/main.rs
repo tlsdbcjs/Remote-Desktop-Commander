@@ -44,6 +44,9 @@ async fn main() {
         }
         let state = state.ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
         racp_core::validate_local_path(&state)?;
+        if matches!(action, "provision-gdb" | "provision-ghidra") {
+            return racp_runtime::providers::reversing::provision(action, &args, &state);
+        }
         #[cfg(windows)]
         if action == "service" {
             service::run(state)?;

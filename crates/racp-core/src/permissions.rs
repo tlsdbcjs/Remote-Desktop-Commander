@@ -91,7 +91,7 @@ pub fn desktop_enabled(value: &Value) -> bool {
     CATALOG.as_array().unwrap().iter().any(|i| {
         i["id"]
             .as_str()
-            .is_some_and(|id| id.starts_with("desktop."))
+            .is_some_and(|id| id.starts_with("desktop.") || id.starts_with("clipboard."))
             && i["implementation"] == "rpc"
             && leaf(value, i["id"].as_str().unwrap()) == "allow"
     })
@@ -155,7 +155,22 @@ pub fn authorize(permissions: &Value, request: &Value, owned: bool) -> Result<()
                 &p["argv"][0]
             };
             let text = path.as_str().unwrap_or("");
-            let normalize = |s: &str| s.replace('/', "\\").to_lowercase();
+            let normalize = |s: &str| {
+                let mut normalized = std::path::PathBuf::new();
+                for part in std::path::Path::new(s).components() {
+                    match part {
+                        std::path::Component::ParentDir => {
+                            normalized.pop();
+                        }
+                        std::path::Component::CurDir => (),
+                        _ => normalized.push(part.as_os_str()),
+                    }
+                }
+                normalized
+                    .to_string_lossy()
+                    .replace('/', "\\")
+                    .to_lowercase()
+            };
             if p["mode"] == "shell"
                 || !std::path::Path::new(text).is_absolute()
                 || deny.is_some_and(|a| {

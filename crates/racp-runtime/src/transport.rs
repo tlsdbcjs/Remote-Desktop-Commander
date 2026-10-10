@@ -296,6 +296,10 @@ impl Agent {
                             continue;
                         }
                     }
+                    if retry_agent.authorize_record(&record).is_err() {
+                        retry_agent.outputs.failed(id, "PERMISSION_DENIED")?;
+                        continue;
+                    }
                     let result = tokio::select! {_=retry_shutdown.cancelled()=>return Ok::<(),RacpError>(()),v=retry_agent.artifacts.upload(&output,&retry_agent.outputs)=>v};
                     match result {
                         Ok(_) => {

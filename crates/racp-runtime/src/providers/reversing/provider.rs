@@ -600,11 +600,46 @@ impl Reversing {
                 self.handle(&mut state, &id, &r, false)?;
             }
         }
-        let mut value = state
-            .backends
-            .get_mut(&backend_name)
-            .ok_or_else(|| RacpError::new("HANDLE_EXPIRED"))?
-            .request(op, p, deadline, &cancel)?;
+        let mut value = if op == "debugger.read_memory" {
+            let requested = p["size_bytes"].as_u64().unwrap_or(4096);
+            let text = p["address"]
+                .as_str()
+                .ok_or_else(|| RacpError::new("INVALID_ARGUMENT"))?;
+            let address = u64::from_str_radix(text.trim_start_matches("0x"), 16)
+                .map_err(|_| RacpError::new("INVALID_ARGUMENT"))?;
+            address
+                .checked_add(requested)
+                .ok_or_else(|| RacpError::new("INVALID_ARGUMENT"))?;
+            let mut combined = String::with_capacity(requested as usize * 2);
+            let mut offset = 0u64;
+            while offset < requested {
+                budget(deadline, &cancel)?;
+                let length = (requested - offset).min(16384);
+                let mut chunk = p.clone();
+                chunk["size_bytes"] = json!(length);
+                chunk["address"] = json!(format!("0x{:x}", address + offset));
+                let result = state
+                    .backends
+                    .get_mut(&backend_name)
+                    .ok_or_else(|| RacpError::new("HANDLE_EXPIRED"))?
+                    .request(op, chunk, deadline, &cancel)?;
+                let bytes = result["bytes_hex"]
+                    .as_str()
+                    .filter(|s| {
+                        s.len() == length as usize * 2 && s.bytes().all(|b| b.is_ascii_hexdigit())
+                    })
+                    .ok_or_else(|| RacpError::new("PLUGIN_PROTOCOL_ERROR"))?;
+                combined.push_str(bytes);
+                offset += length;
+            }
+            json!({"bytes_hex":combined,"address":text,"size_bytes":requested})
+        } else {
+            state
+                .backends
+                .get_mut(&backend_name)
+                .ok_or_else(|| RacpError::new("HANDLE_EXPIRED"))?
+                .request(op, p, deadline, &cancel)?
+        };
         Self::events(&mut state);
         let resource = self.handle(&mut state, &id, &r, closing)?;
         if let Some(next) = value["next_cursor"].as_str() {

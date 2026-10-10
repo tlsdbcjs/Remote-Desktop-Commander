@@ -6,3 +6,5 @@ mod provider;
 pub use provider::Reversing;
 mod worker;
 pub use worker::run_native_plugin;
+mod provision;
+pub use provision::provision;
