@@ -266,8 +266,6 @@ impl OwnedProcess {
         }
     }
     pub fn spawn(spec: CommandSpec) -> Result<Self, RacpError> {
-        let (stdout, out_write) = pipe()?;
-        let (stderr, err_write) = pipe()?;
         let sa = SECURITY_ATTRIBUTES {
             nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
             lpSecurityDescriptor: std::ptr::null_mut(),
@@ -285,6 +283,16 @@ impl OwnedProcess {
                 std::ptr::null_mut(),
             )
         })?;
+        Self::spawn_with_input(spec,input)
+    }
+    pub fn spawn_stdio(spec:CommandSpec)->Result<(Self,File),RacpError>{
+        let (input,write)=pipe()?;
+        if unsafe{SetHandleInformation(input.as_raw_handle(),HANDLE_FLAG_INHERIT,HANDLE_FLAG_INHERIT)}==0 || unsafe{SetHandleInformation(write.as_raw_handle(),HANDLE_FLAG_INHERIT,0)}==0 {return Err(RacpError::new("EXECUTION_FAILED"));}
+        Ok((Self::spawn_with_input(spec,input.into())?,File::from(write)))
+    }
+    fn spawn_with_input(spec:CommandSpec,input:OwnedHandle)->Result<Self,RacpError>{
+        let (stdout,out_write)=pipe()?;
+        let (stderr,err_write)=pipe()?;
         let handles = [
             input.as_raw_handle(),
             out_write.as_raw_handle(),
@@ -431,6 +439,11 @@ impl OwnedProcess {
             return Err(RacpError::new("CLEANUP_FAILED"));
         }
         Ok(info.ActiveProcesses == 0)
+    }
+    pub fn limit_memory(&self,bytes:u64)->Result<(),RacpError>{
+        if !(64*1024*1024..=8*1024*1024*1024).contains(&bytes){return Err(RacpError::new("INVALID_ARGUMENT"));}
+        let mut limits=JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();limits.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE|JOB_OBJECT_LIMIT_JOB_MEMORY;limits.JobMemoryLimit=bytes as usize;
+        if unsafe{SetInformationJobObject(self.job.as_raw_handle(),JobObjectExtendedLimitInformation,(&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),std::mem::size_of_val(&limits) as u32)}==0{return Err(RacpError::new("CAPABILITY_UNAVAILABLE"));}Ok(())
     }
     pub fn poll(&mut self) -> Result<Option<i64>, RacpError> {
         match unsafe { WaitForSingleObject(self.process.as_raw_handle(), 0) } {
