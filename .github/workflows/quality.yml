@@ -25,6 +25,22 @@ jobs:
         run: uv run --frozen python -m compileall -q apps/gateway apps/cli packages scripts
       - run: uv run --frozen mypy
       - run: uv run --frozen python scripts/build.py
+  rust-format:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+      - name: Normalize Rust sources for final review
+        shell: pwsh
+        run: |
+          cargo fmt --all
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo fmt --manifest-path apps/client/src-tauri/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($file in (git diff --name-only -- '*.rs')) {
+            $record = @{ path = $file; content = [IO.File]::ReadAllText((Join-Path $PWD $file)) }
+            Write-Output ('RUST_FORMATTED_FILE ' + ($record | ConvertTo-Json -Compress -Depth 4))
+          }
   python:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_tests }}
     strategy:
