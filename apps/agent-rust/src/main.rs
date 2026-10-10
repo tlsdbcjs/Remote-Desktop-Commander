@@ -18,6 +18,7 @@ async fn main() {
         .find(|a| a[0] == "--state-dir")
         .map(|a| PathBuf::from(&a[1]));
     let result = async {
+        if matches!(action,"plugin-gdb"|"plugin-ghidra") {racp_runtime::providers::reversing::run_native_plugin(action,&args)?;return Ok(Value::Null);}
         #[cfg(windows)]
         if action == "broker" || action == "guardian" {
             let path = args
@@ -118,12 +119,12 @@ async fn main() {
     .await;
     match result {
         Ok(value) => {
-            if !matches!(action, "serve" | "run" | "broker") {
+            if !matches!(action, "serve" | "run" | "broker" | "plugin-gdb" | "plugin-ghidra") {
                 println!("{}", json!({"ok":true,"result":value}));
             }
         }
         Err(error) => {
-            if !matches!(action, "serve" | "run" | "broker") {
+            if !matches!(action, "serve" | "run" | "broker" | "plugin-gdb" | "plugin-ghidra") {
                 println!("{}", json!({"ok":false,"code":error.code}));
             } else {
                 eprintln!("{}", error.code.0);

@@ -71,6 +71,7 @@ impl Gdb {
   self.command("-exec-run --start",deadline,cancel)?;
   while self.pid.is_none()||self.state!="STOPPED"{self.pump(deadline,cancel,None)?;std::thread::sleep(Duration::from_millis(3));}Ok(())
  }
+ pub fn observe_pending(&mut self,deadline:Instant,cancel:&CancellationToken)->Result<(),RacpError>{self.pump(deadline,cancel,None).map(|_|())}
  pub fn info(&self)->Value{json!({"debugger_state":self.state,"stop_sequence":self.sequence.to_string(),"stop_reason":self.reason,"pid":self.pid,"create_time":self.birth,"utf8_arguments_supported":self.utf8})}
  pub fn execute(&mut self,operation:&str,p:&Value,deadline:Instant,cancel:&CancellationToken)->Result<Value,RacpError>{
   self.pump(deadline,cancel,None)?;
