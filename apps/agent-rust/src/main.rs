@@ -4,6 +4,10 @@ use std::path::PathBuf;
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
+        println!("racp-agent {VERSION}\n\nUsage: racp-agent <command> --state-dir <absolute-path>\n\nCommands:\n  run       Run the registered Agent in the foreground (Ctrl+C stops it)\n  start     Start the registered Agent in the background\n  status    Show background Agent state as JSON\n  stop      Stop the background Agent and report cleanup\n  info      Show enrollment and execution identity (no credentials)\n  settings  Show editable settings and revision\n  activity  Show recent operation activity\n  bridge    Read one bounded JSON request from stdin and write a JSON result\n\nForeground options: --enable-cdp, --browser-allow-origin <origin> (repeatable)\nRegistration/settings updates use bridge JSON on stdin; do not put secrets in arguments.\nThe state directory is explicit so a manual run cannot silently select an existing profile.");
+        return;
+    }
     if args.iter().any(|a| a == "--version") {
         println!("racp-agent {VERSION}");
         return;
@@ -24,6 +28,21 @@ async fn main() {
             .map(|a| a[1].clone())
             .collect();
         match action {
+            "info" => racp_core::information(&state),
+            "settings" => racp_core::editable_settings(&state),
+            "activity" => racp_runtime::activity(&state),
+            "start" | "status" | "stop" => {
+                if browser.cdp_enabled || !browser.allow_origins.is_empty() {
+                    return Err(RacpError::new("REQUEST_INVALID"));
+                }
+                let control =
+                    racp_runtime::ControlClient::new(state.clone(), std::env::current_exe()?);
+                match action {
+                    "start" => control.start().await,
+                    "status" => control.status().await,
+                    _ => control.stop().await,
+                }
+            }
             "serve" => {
                 racp_runtime::serve_with_browser(&state, browser).await?;
                 Ok(Value::Null)
@@ -85,12 +104,12 @@ async fn main() {
     .await;
     match result {
         Ok(value) => {
-            if action == "bridge" {
+            if !matches!(action, "serve" | "run") {
                 println!("{}", json!({"ok":true,"result":value}));
             }
         }
         Err(error) => {
-            if action == "bridge" {
+            if !matches!(action, "serve" | "run") {
                 println!("{}", json!({"ok":false,"code":error.code}));
             } else {
                 eprintln!("{}", error.code.0);

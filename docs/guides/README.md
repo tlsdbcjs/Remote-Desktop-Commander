@@ -17,6 +17,7 @@
 | 가이드명 | 대상 독자 | 핵심 내용 |
 | :--- | :--- | :--- |
 | [데스크톱 클라이언트 가이드](desktop-client-guide.md) | 엔드유저 / 관리자 | Electron 데스크톱 앱 실행, 연결 파일(`.racp`) 등록, 시스템 트레이 운용, 설정 수정 및 완전 종료 |
+| [Rust Agent 실행 가이드](rust-agent-guide.md) | 개발자 / 실기 검증 담당자 | Python 없는 Windows Agent ZIP, 명시적 상태 폴더와 등록·실행·종료, 테스트 보류 중 빌드 절차 |
 | [PC 등록 및 온보딩 가이드](pc-connect-guide.md) | 장비 관리자 | Gateway Console 토큰 발급, `racp-connect` CLI를 통한 초기 기기 등록 및 인증서 저장 |
 | [다중 작업 폴더 격리 가이드](named-workspaces-guide.md) | 보안 / 운영자 | 최대 15개 허용 워크스페이스 등록, `workspace_id` 기반 파일/프로세스 경로 격리 |
 | [백그라운드 에이전트 가이드](background-agent-guide.md) | 시스템 엔지니어 | `racp-agentctl`을 통한 백그라운드 데몬 수명주기(`start`, `status`, `stop`) 및 프로세스 락 제어 |

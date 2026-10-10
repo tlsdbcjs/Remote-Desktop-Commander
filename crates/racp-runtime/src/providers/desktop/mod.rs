@@ -7,3 +7,5 @@ mod pairing;
 pub use pairing::{PairConfig, PeerIdentity};
 mod wire;
 pub use wire::{decode_pipe_message, encode_pipe_message, MAX_PIPE_MESSAGE};
+#[cfg(windows)]
+pub mod native_identity;
