@@ -1,0 +1,9 @@
+{
+  "identifier": "main",
+  "description": "Only local main window invokes host-owned RACP commands.",
+  "windows": [
+    "main"
+  ],
+  "permissions": []
+}
+

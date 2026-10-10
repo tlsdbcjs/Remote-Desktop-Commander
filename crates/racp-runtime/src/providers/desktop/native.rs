@@ -44,7 +44,12 @@ fn object_name(handle: HANDLE) -> Result<String, RacpError> {
 }
 use std::mem::size_of_val;
 impl NativeDesktop {
-    pub fn new(session: u32, marker: usize, guardian: PinnedPeer, guardian_status:std::path::PathBuf) -> Result<Self, RacpError> {
+    pub fn new(
+        session: u32,
+        marker: usize,
+        guardian: PinnedPeer,
+        guardian_status: std::path::PathBuf,
+    ) -> Result<Self, RacpError> {
         let identity = PinnedPeer::open(std::process::id())?.identity().clone();
         if session == 0 || identity.session != session {
             return Err(RacpError::new("SESSION_UNAVAILABLE"));

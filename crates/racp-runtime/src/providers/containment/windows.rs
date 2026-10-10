@@ -453,6 +453,27 @@ impl OwnedProcess {
         }
         Ok(info.ActiveProcesses == 0)
     }
+    pub fn limit_memory(&self, bytes: u64) -> Result<(), RacpError> {
+        if !(64 * 1024 * 1024..=8 * 1024 * 1024 * 1024).contains(&bytes) {
+            return Err(RacpError::new("INVALID_ARGUMENT"));
+        }
+        let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        limits.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_JOB_MEMORY;
+        limits.JobMemoryLimit = bytes as usize;
+        if unsafe {
+            SetInformationJobObject(
+                self.job.as_raw_handle(),
+                JobObjectExtendedLimitInformation,
+                (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                std::mem::size_of_val(&limits) as u32,
+            )
+        } == 0
+        {
+            return Err(RacpError::new("CAPABILITY_UNAVAILABLE"));
+        }
+        Ok(())
+    }
     pub fn poll(&mut self) -> Result<Option<i64>, RacpError> {
         match unsafe { WaitForSingleObject(self.process.as_raw_handle(), 0) } {
             WAIT_TIMEOUT => Ok(None),

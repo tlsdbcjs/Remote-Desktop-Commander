@@ -54,7 +54,7 @@ TARGET_PACKAGE_JSONS = [
     ROOT / "apps/client/src-tauri/tauri.conf.json",
 ]
 
-TARGET_CARGO = [ROOT / "Cargo.toml"]
+TARGET_CARGO = [ROOT / "Cargo.toml", ROOT / "apps/client/src-tauri/Cargo.toml"]
 
 TARGET_CODE_FILES = [
     VERSION_FILE,

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import { clientApi } from "./tauri-adapter";
 import messages from "../messages.json";
 import { PermissionsEditor } from "./PermissionsEditor";
 import {
@@ -127,6 +128,7 @@ declare global {
     racpClient: API;
   }
 }
+window.racpClient = clientApi as API;
 function Client() {
   const [editing, setEditing] = useState(false);
   const [info, setInfo] = useState<Info | null>(null),

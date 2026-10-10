@@ -1,23 +1,19 @@
-name: desktop-client
+name: rust-client
 on:
-  workflow_dispatch:
-    inputs:
-      include_deferred_platforms:
-        description: "Explicitly enable native macOS/Linux builds (deferred by default)"
-        type: boolean
-        default: false
   push:
-    paths: ["apps/client/**", "apps/agent/**", "packages/**", "scripts/**", "uv.lock", "pnpm-lock.yaml", ".github/workflows/client.yml"]
+    paths: ["apps/client/**", "crates/**", "Cargo.*", "pnpm-lock.yaml", ".github/workflows/client.yml", "scripts/*client*.mjs"]
   pull_request:
-    paths: ["apps/client/**", "apps/agent/**", "packages/**", "scripts/**", "uv.lock", "pnpm-lock.yaml", ".github/workflows/client.yml"]
+    paths: ["apps/client/**", "crates/**", "Cargo.*", "pnpm-lock.yaml", ".github/workflows/client.yml", "scripts/*client*.mjs"]
+  workflow_dispatch:
+concurrency:
+  group: rust-client-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
 jobs:
-  native-client:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.include_deferred_platforms }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(inputs.include_deferred_platforms == true && '[{"os":"windows-latest","target":"win","arch":"x64"},{"os":"macos-14","target":"mac","arch":"arm64"},{"os":"ubuntu-24.04","target":"linux","arch":"x64"}]' || '[{"os":"windows-latest","target":"win","arch":"x64"}]') }}
-    runs-on: ${{ matrix.os }}
+  windows-client:
+    runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,22 +22,18 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: "11.19.0"
-      - uses: astral-sh/setup-uv@v6
+      - run: rustup toolchain install 1.90.0 --profile minimal
+      - uses: Swatinem/rust-cache@v2
         with:
-          version: "0.12.11"
-      - run: uv python install 3.12.11
-      - run: uv sync --all-packages --frozen
-      - run: uv run python scripts/build_client.py --platform ${{ matrix.target }} --arch ${{ matrix.arch }}
-      - run: uv run pytest -q tests/unit/test_desktop_control.py
-      - if: runner.os != 'Linux'
-        shell: bash
-        run: uv run python scripts/client_e2e.py --node "$(which node)"
-      - if: runner.os == 'Linux'
-        run: xvfb-run -a uv run python scripts/client_e2e.py --node "$(which node)"
+          workspaces: |
+            . -> target
+            apps/client/src-tauri -> target
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir apps/client build
+      - name: Compile Windows host (tests deferred)
+        run: cargo build --release --locked --manifest-path apps/client/src-tauri/Cargo.toml --target x86_64-pc-windows-msvc
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: unsigned-client-${{ matrix.target }}-${{ matrix.arch }}
-          path: |
-            dist/client-desktop/**
-            dist/client-desktop-e2e.png
+          name: racp-client-win-x64-${{ github.sha }}
+          path: apps/client/src-tauri/target/x86_64-pc-windows-msvc/release/racp-client.exe
+          if-no-files-found: error

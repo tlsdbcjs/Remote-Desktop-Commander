@@ -1,6 +1,7 @@
 [workspace]
 members = ["crates/racp-contract", "crates/racp-core", "crates/racp-runtime", "apps/agent-rust"]
 resolver = "2"
+exclude = ["apps/client/src-tauri"]
 
 [workspace.package]
 version = "0.1.21"

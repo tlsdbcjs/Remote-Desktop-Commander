@@ -1,0 +1,25 @@
+[package]
+name = "racp-client"
+version = "0.1.21"
+edition = "2021"
+rust-version = "1.90"
+license = "MIT"
+
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-dialog = "2"
+tokio = { version = "1", features = ["sync", "time", "rt-multi-thread"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+chrono = "0.4"
+racp-core = { path = "../../../crates/racp-core" }
+racp-contract = { path = "../../../crates/racp-contract" }
+racp-runtime = { path = "../../../crates/racp-runtime" }
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Registry"] }
+
