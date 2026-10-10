@@ -1614,3 +1614,45 @@ Client와 내장 Agent의 전체 전환 구현을 반영했다. React 화면은 
 사용자는 테스트만 보류하고 전체 구현·구 코드 제거·`master` 커밋·푸시를 명시했다. 이를 따라 기존 테스트 후 삭제 조건을 대체했다. 단순 build/format/type/packaging 확인을 기능 동등성·100개 RPC 실기 통과로 표기하지 않는다. Gateway 전체 검증을 새로 실행하지 않았다. 루트 Python format의 기존 서버/테스트 20파일 차이와 Linux 기본 Mypy의 Windows-only symbol 5오류는 별도 기준선 문제로 남기고, 수정된 migration 파일과 Windows 대상 검사 결과를 구분한다.
 
 패키지는 unsigned 개발용이다. 자동 테스트, GUI/native smoke, clean install·upgrade/uninstall, 실제 2-PC, macOS/Linux native 빌드는 보류한다. 클라우드 단절 중 로컬 수정은 stash로 보존한 뒤 원격에서 재구성한 커밋을 fast-forward했다. 기존 산출물과 사용자 상태를 유지하며, 재시도에도 버전 0.1.21을 재사용한다.
+
+
+<a id="rust-client-master-build-0121"></a>
+## v0.1.21 master 최종 빌드와 전달 (2026-10-10)
+
+전체 구현과 legacy 제거, 독립 리뷰 수정 및 동시 변경 보존을 완료하고 `master`에 fast-forward로 커밋·푸시했다. 실제 빌드 소스는 `df533e2861df6f69c41c11f825b7e478d5abd52f`다. 아래 후속 기록은 문서만 변경하며 실행 코드·lock·버전은 그대로다.
+
+| 확인 | 실행 | 결과 |
+| :--- | :--- | :--- |
+| Windows Client production/NSIS/portable/ZIP | [38051887473](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38051887473), build ID `38051887473-1` | PASS, 18분 31초 |
+| Windows Rust Agent release/Chromium ZIP | [38051887491](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38051887491) | PASS |
+| Windows frozen dependency/Mypy/server wheel/Rust format | [38051887485](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38051887485) | PASS |
+
+[Client 설치형·포터블 패키지 다운로드](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38051887473/artifacts/11670720903)에는 다음 세 산출물과 `build-manifest.json`이 들어 있다.
+
+| 산출물 | 바이트 | SHA-256 |
+| :--- | ---: | :--- |
+| `RACP-Client-0.1.21-win-x64-setup.exe` | 395658589 | `8f6f309a6d758d15d38f40cec90dee75a2fa74adca9f8d766e01377f0fd1a9db` |
+| `RACP-Client-0.1.21-win-x64-portable.exe` | 1194465545 | `55f899e3bbed3a4ad6b235752c03766efb471979f917619624fb48e958dfb865` |
+| `RACP-Client-0.1.21-win-x64.zip` | 543463885 | `4598f9ffe80b6e26de91aabc13b8a3962baf46e436a9edb2452774f7eb22cf93` |
+
+[Windows Agent 다운로드](https://github.com/tlsdbcjs/Remote-Desktop-Commander/actions/runs/38051887491/artifacts/11669564667)에서 브라우저 기능까지 실행하려면 Chromium을 포함한 내부 `racp-agent-0.1.21-win-x64.zip`을 사용한다. 내부 ZIP SHA-256은 `c8c92e00ed30a17550038d0967f600f8e0c46edbf2f0c4efa612a8518e589080`이다. Actions 외부 archive SHA-256과 구분한다: Agent 외부 archive `14ccd525a8e050a8a10dd8bd955c608357fe924ee9eb974e74ac16c28f9993a0`, Client 외부 archive `ac0b0d4cfa4dff0f4db0f44caf4a50f4e8e1c838cf9b7e9c8c247451611399b9`.
+
+최종 Client manifest는 Tauri/Rust, CPython·Node 불필요, unsigned 개발용, Chromium revision `1243`, fixed WebView2 `154.0.4258.62`를 기록한다. CAB SHA-256은 `e8f55a4bde27c7f82512402b56a58539b5ec8928be4e500e077b6f66c9ef4668`이다. Cargo/타우리/pnpm lock SHA-256도 manifest에 포함되어 있다.
+
+사용자 지시에 따라 자동 테스트·native/GUI smoke·실제 설치/업데이트/제거·2-PC acceptance는 실행하지 않았다. 테스트 job은 SKIPPED이며 이 빌드를 기능 동등성 통과로 판정하지 않는다. 실제 Agent 실행 절차는 [Rust Agent 가이드](../guides/rust-agent-guide.md)를 따른다.
+
+### 구현 중 결정 원장
+
+완료한 계획의 임시 원장을 정리하기 전에 `Ruling:` 항목을 발생 순서대로 보존했다. 초기 결정을 대체한 사용자 지시도 함께 남긴다. 실행 중 독립 리뷰의 Minor 보류 항목은 없었다.
+
+1. Ruling: Use the task's dedicated managed /workspace checkout on non-main branch work — no shared user checkout or main branch exists here — cost if wrong: branch isolation only.
+2. Ruling: Cloud skill scripts are not filesystem-backed; use equivalent git-ignored ledger and task briefs from approved plan — no dependency on inaccessible bundled scripts — cost if wrong: bookkeeping only.
+3. Task 1: Ruling: Keep validated serde_json Values at protocol boundaries rather than hand-duplicating 78 typed payload enums — published schemas plus strict integer and relational validators prevent drift — cost if wrong: compile-time payload checks are replaced by runtime boundary validation.
+4. Task 1: Ruling: Fixture output must use validate_payload, not bare model_dump — filesystem copy/move intentionally remove a null destination workspace — no protocol change.
+5. Ruling: Create a draft PR to obtain the required Windows native evidence using repository WRITE permission — Linux cannot establish DPAPI correctness — cost if wrong: reversible remote review branch and CI runs, no merge/publish.
+6. Task 3: Ruling: Use a per-process retention-clock identity and Instant; legacy clocks are conservatively reset for a full interval instead of assuming Python/Rust monotonic epochs match — preserves minimum retention across upgrades — cost if wrong: retention may be extended on restart, never shortened.
+7. Ruling: User explicitly defers all test execution/addition and prioritizes Agent Rust implementation plus an actual Windows Agent build. Continue implementation and production-target compilation, defer automated/native acceptance (including CI tests); do not claim tested parity or delete legacy providers until real acceptance later. Existing v0.1.11 batch version is reused.
+8. Ruling: Latest user requires ALL migration implementation and legacy removal while deferring tests; this overrides prior test-before-deletion gate. Implement and compile every provider/host/package, remove client Python once references are migrated; acceptance remains deferred, never claim tested parity.
+9. Ruling: Final integration/push target is existing master per user correction, not main. Preserve concurrent master c0fe694 changes via merge, including 100-operation registry and granular permissions. Incoming SSOT 0.1.20 supersedes previous 0.1.11; unified integration batch is 0.1.21, reused for all build retries.
+10. Ruling: During cloud outage, preserve local dirty source and reconstruct authorized updates through GitHub commits/Windows CI. On recovery, stash local edits and fast-forward to4fc1256; reconstructed source contains the changes plus ownership safeguards. Cost if wrong: retained stash supports recovery.
+11. Ruling: Native Windows is the supported production build target; Linux default Mypy reports5 existing Windows-only symbol errors, while --platform win32 and WindowsCI pass95sources. Root Python format reports20 preexisting retained server/test formatting differences; changed migration Python7files are formatted. Do not expand this migration into unrelated Gateway formatting or test work. Cost if wrong: preexisting Linux lint/format limitations remain visible.
