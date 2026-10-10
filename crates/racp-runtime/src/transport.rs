@@ -202,7 +202,7 @@ impl Agent {
    let ack=tokio::select!{_=shutdown.cancelled()=>return Ok(()),v=receive(&mut stream)=>v?};if ack["type"]!="heartbeat"||ack["connection_epoch"]!=epoch||ack["device_id"]!=self.settings.device_id||ack["agent_boot_id"]!=self.boot_id{return Err(RacpError::new("REQUEST_INVALID"));}
    let lease_ms=welcome["execution_lease_ttl_ms"].as_u64().filter(|n|*n>0&&*n<=86400000).ok_or_else(||RacpError::new("REQUEST_INVALID"))?;
    let interval_ms=welcome["heartbeat_interval_ms"].as_u64().filter(|n|*n>0&&*n<=60000).ok_or_else(||RacpError::new("REQUEST_INVALID"))?;
-   *self.lease.lock().await=tokio::time::Instant::now()+Duration::from_millis(lease_ms);self.phase("ready").await;self.status.write().await["connected"]=json!(true);
+   *self.lease.lock().await=tokio::time::Instant::now()+Duration::from_millis(lease_ms);self.providers.connection(epoch,Duration::from_millis(lease_ms));self.phase("ready").await;self.status.write().await["connected"]=json!(true);
    self.log("agent_connected",json!({"connection_epoch":epoch}));
    let mut timer=tokio::time::interval(Duration::from_millis(interval_ms));timer.tick().await;
    let mut browser_timer=tokio::time::interval(Duration::from_millis(50));let mut browser_sequence=0;
@@ -210,15 +210,16 @@ impl Agent {
     tokio::select!{
      _=shutdown.cancelled()=>break,
      _=timer.tick()=>self.heartbeat().await?,
-     _=browser_timer.tick()=>self.browser_event(&mut browser_sequence).await?,
+     _=browser_timer.tick()=>{self.browser_event(&mut browser_sequence).await?;for frame in self.providers.native_frames(){self.send(frame).await?;}},
      incoming=stream.next()=>{
       let Some(Ok(frame))=incoming else{break};
       let raw=match frame{Frame::Text(s)=>s.as_bytes().to_vec(),Frame::Close(_)=>break,Frame::Ping(_)|Frame::Pong(_)=>continue,_=>return Err(RacpError::new("REQUEST_INVALID"))};
       let message=decode_message(&raw)?;
       if message["device_id"]!=self.settings.device_id||message["agent_boot_id"]!=self.boot_id||message["connection_epoch"]!=epoch{return Err(RacpError::new("STALE_CONNECTION"));}
-      if message["type"]=="heartbeat"{*self.lease.lock().await=tokio::time::Instant::now()+Duration::from_millis(lease_ms);}
+      if message["type"]=="heartbeat"{*self.lease.lock().await=tokio::time::Instant::now()+Duration::from_millis(lease_ms);self.providers.connection(epoch,Duration::from_millis(lease_ms));}
       else if message["type"]=="request"{self.dispatch(message).await?;}
       else if message["type"]=="cancel"{self.cancel_execution(message["target_operation_id"].as_str().ok_or_else(||RacpError::new("REQUEST_INVALID"))?,message["reason"].as_str().unwrap_or("requested")).await?;}
+      else if matches!(message["type"].as_str(),Some("native_subscribe"|"native_packet"|"native_unsubscribe")){self.providers.native_message(message).await?;}
       else if message["type"]=="stream_open"{streams.subscribe(message).await?;}
       else if message["type"]=="stream_ack"{streams.ack(&message).await?;}
       else if message["type"]=="stream_unsubscribe"{streams.unsubscribe(&message).await?;}
@@ -228,6 +229,7 @@ impl Agent {
     }
    }Ok(())
   }.await;
+        self.providers.connection(0, Duration::ZERO);
         cancel.cancel();
         streams.close().await;
         if let Some(peer) = self.peer.write().await.take() {

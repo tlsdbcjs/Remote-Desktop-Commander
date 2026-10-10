@@ -256,3 +256,7 @@ pub fn run_worker() -> Result<(), RacpError> {
         Err(RacpError::new("CAPABILITY_UNAVAILABLE"))
     }
 }
+#[cfg(windows)]
+pub(super) fn validate_target(payload: &Value) -> Result<(), RacpError> {
+    windows::validate_target(payload)
+}

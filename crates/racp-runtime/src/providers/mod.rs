@@ -5,6 +5,13 @@ use tokio_util::sync::CancellationToken;
 
 /// Providers must finish resource cleanup before returning after cancellation.
 pub trait Provider: Send + Sync {
+    fn connection(&self, _: u64, _: std::time::Duration) {}
+    fn native_frames(&self) -> Vec<Value> {
+        vec![]
+    }
+    fn native_message(&self, _: Value) -> BoxFuture<'_, Result<(), RacpError>> {
+        Box::pin(async { Err(RacpError::new("CAPABILITY_UNAVAILABLE")) })
+    }
     fn capabilities(&self) -> Vec<Value>;
     fn execute(
         &self,
@@ -50,6 +57,7 @@ impl Provider for EmptyProvider {
     }
 }
 mod filesystem;
+mod native_carrier;
 mod os_observation;
 pub mod recipes;
 pub use filesystem::Filesystem;
@@ -82,6 +90,7 @@ impl NativeProviders {
             Arc::new(Filesystem::new(settings)?),
             Arc::new(os_observation::OSObservation::new(settings, boot)),
             Arc::new(recipes::Recipes::new(settings, boot)?),
+            Arc::new(native_carrier::NativeCarrier::new(settings, boot)?),
             Arc::new(Shell::new(settings)?),
             Arc::new(Processes::new(settings, boot)?),
             Arc::new(Terminal::new(settings, boot)?),
@@ -98,6 +107,27 @@ impl NativeProviders {
     }
 }
 impl Provider for NativeProviders {
+    fn connection(&self, epoch: u64, ttl: std::time::Duration) {
+        for p in &self.providers {
+            p.connection(epoch, ttl);
+        }
+    }
+    fn native_frames(&self) -> Vec<Value> {
+        self.providers
+            .iter()
+            .flat_map(|p| p.native_frames())
+            .collect()
+    }
+    fn native_message(&self, message: Value) -> BoxFuture<'_, Result<(), RacpError>> {
+        match self
+            .providers
+            .iter()
+            .find(|p| p.capabilities().iter().any(|c| c["name"] == "native"))
+        {
+            Some(p) => p.native_message(message),
+            None => Box::pin(async { Err(RacpError::new("CAPABILITY_UNAVAILABLE")) }),
+        }
+    }
     fn owns_process(&self, r: &Value) -> bool {
         self.providers.iter().any(|p| p.owns_process(r))
     }
