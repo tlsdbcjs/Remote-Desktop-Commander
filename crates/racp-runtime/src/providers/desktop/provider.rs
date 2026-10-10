@@ -1,0 +1,380 @@
+use super::{native_identity::PinnedPeer, pipe, PairConfig, PeerIdentity};
+use crate::{
+    identity::ProtectedProcess,
+    providers::{
+        containment::{self, CommandSpec, OwnedProcess},
+        Provider,
+    },
+};
+use futures_util::future::BoxFuture;
+use racp_contract::{new_id, RacpError};
+use racp_core::{private_dir, AgentSettings, SecretStore, Workspaces};
+use serde_json::{json, Value};
+use std::{
+    collections::BTreeMap,
+    io::Write,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
+use tokio_util::sync::CancellationToken;
+
+struct Child {
+    process: OwnedProcess,
+    _protection: ProtectedProcess,
+    peer: PeerIdentity,
+    config: PairConfig,
+    path: PathBuf,
+}
+#[derive(Clone)]
+pub struct Desktop {
+    child: Arc<Mutex<Option<Child>>>,
+    status: Arc<Mutex<Value>>,
+    spool: PathBuf,
+    device: String,
+    enabled: bool,
+}
+impl Desktop {
+    pub fn new(settings: &AgentSettings) -> Result<Self, RacpError> {
+        let spool = settings.data_dir.join("spool");
+        private_dir(&spool)?;
+        let provider = Self {
+            child: Arc::new(Mutex::new(None)),
+            status: Arc::new(Mutex::new(
+                json!({"available":false,"error_code":if settings.desktop_enabled { "SESSION_UNAVAILABLE" } else { "DESKTOP_NOT_CONFIGURED" }}),
+            )),
+            spool,
+            device: settings.device_id.clone(),
+            enabled: settings.desktop_enabled,
+        };
+        if provider.enabled {
+            if let Ok(child) = Self::launch(settings) {
+                let state = pipe::request(
+                    &child.config,
+                    &child.peer,
+                    json!({"operation":"broker.status"}),
+                    Duration::from_secs(3),
+                );
+                if let Ok(mut state) = state {
+                    state["broker_running"] = json!(true);
+                    *provider
+                        .status
+                        .lock()
+                        .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = state;
+                    *provider
+                        .child
+                        .lock()
+                        .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = Some(child);
+                } else {
+                    let mut child = child;
+                    let _ = child.process.kill_tree();
+                    let _ = std::fs::remove_file(child.path);
+                }
+            }
+        }
+        Ok(provider)
+    }
+    fn launch(settings: &AgentSettings) -> Result<Child, RacpError> {
+        let actor = PinnedPeer::open(std::process::id())?.identity().clone();
+        if actor.session == 0 {
+            return Err(RacpError::new("SESSION_UNAVAILABLE"));
+        }
+        let pair_id = new_id("pair").trim_start_matches("pair_").to_owned();
+        let root = settings.data_dir.join("desktop").join(&pair_id);
+        private_dir(&root)?;
+        let path = root.join("pair.bin");
+        use base64::Engine;
+        let random: [u8; 32] = rand::random();
+        let config = PairConfig {
+            version: 1,
+            pair_id,
+            session_id: actor.session,
+            user_sid: actor.sid.clone(),
+            agent_sid: actor.sid,
+            agent_service_sid: None,
+            agent_pid: actor.pid,
+            agent_created: actor.created,
+            agent_session: actor.session,
+            secret: base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(random),
+            job_name: None,
+        };
+        config.validate()?;
+        SecretStore::new(path.clone()).save(
+            &BTreeMap::from([
+                ("pair".into(), serde_json::to_string(&config)?),
+                ("device_id".into(), settings.device_id.clone()),
+            ]),
+            false,
+        )?;
+        let guards = Workspaces::new(&root, &[])?;
+        let spawn = OwnedProcess::spawn(CommandSpec {
+            argv: vec![
+                std::env::current_exe()?.to_string_lossy().into_owned(),
+                "broker".into(),
+                "--pair-config".into(),
+                path.to_string_lossy().into_owned(),
+            ],
+            environment: containment::environment(&Value::Null)?,
+            cwd: guards.directory("default", &root)?,
+        });
+        let process = match spawn {
+            Ok(process) => process,
+            Err(e) => {
+                let _ = std::fs::remove_file(&path);
+                return Err(e);
+            }
+        };
+        let protection = ProtectedProcess::register(process.pid())?;
+        let peer = PinnedPeer::open(process.pid())?.identity().clone();
+        config.require_broker(&peer)?;
+        Ok(Child {
+            process,
+            _protection: protection,
+            peer,
+            config,
+            path,
+        })
+    }
+    fn materialize(
+        &self,
+        child: &Child,
+        descriptor: &Value,
+        path: &std::path::Path,
+        context: &Value,
+        deadline: Instant,
+        cancel: &CancellationToken,
+        maximum: u64,
+    ) -> Result<(), RacpError> {
+        let size = descriptor["size_bytes"]
+            .as_u64()
+            .filter(|n| *n > 0 && *n <= maximum)
+            .ok_or_else(|| RacpError::new("EXECUTION_UNKNOWN"))?;
+        if descriptor["media_type"] != "image/png" {
+            return Err(RacpError::new("EXECUTION_UNKNOWN"));
+        }
+        let mut file = racp_core::secure_create_file(path)?;
+        use sha2::{Digest, Sha256};
+        let mut hash = Sha256::new();
+        let copied = (|| {
+            let mut offset = 0;
+            while offset < size {
+                if cancel.is_cancelled() {
+                    return Err(RacpError::new("CANCELLED"));
+                }
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Err(RacpError::new("TIMEOUT"));
+                }
+                let length = (size - offset).min(32768);
+                let result = pipe::request(
+                    &child.config,
+                    &child.peer,
+                    json!({"operation":"broker.capture_read","payload":{"capture_id":descriptor["capture_id"],"offset":offset,"length":length},"context":context}),
+                    remaining,
+                )?;
+                use base64::Engine;
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(result["data"].as_str().unwrap_or(""))
+                    .map_err(|_| RacpError::new("EXECUTION_UNKNOWN"))?;
+                if bytes.is_empty()
+                    || bytes.len() as u64 > length
+                    || result["offset"] != offset
+                    || result["next_offset"] != offset + bytes.len() as u64
+                    || result["eof"] != (offset + bytes.len() as u64 == size)
+                    || (offset == 0 && !bytes.starts_with(b"\x89PNG\r\n\x1a\n"))
+                {
+                    return Err(RacpError::new("PRECONDITION_FAILED"));
+                }
+                file.write_all(&bytes)?;
+                hash.update(&bytes);
+                offset += bytes.len() as u64;
+            }
+            file.sync_all()?;
+            if descriptor["sha256"] != format!("{:x}", hash.finalize()) {
+                return Err(RacpError::new("PRECONDITION_FAILED"));
+            }
+            Ok(())
+        })();
+        drop(file);
+        let _ = pipe::request(
+            &child.config,
+            &child.peer,
+            json!({"operation":"broker.capture_release","payload":{"capture_id":descriptor["capture_id"]},"context":context}),
+            Duration::from_millis(500),
+        );
+        if copied.is_err() {
+            let _ = std::fs::remove_file(path);
+        }
+        copied
+    }
+    fn execute_native(
+        &self,
+        request: Value,
+        cancel: CancellationToken,
+    ) -> Result<Value, RacpError> {
+        if cancel.is_cancelled() {
+            return Err(RacpError::new("CANCELLED"));
+        }
+        let mut guard = self
+            .child
+            .lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+        let Some(child) = guard.as_mut() else {
+            if request["operation"] == "desktop.sessions" {
+                return Ok(json!({"sessions":[],"configured":self.enabled}));
+            }
+            return Err(RacpError::new("SESSION_UNAVAILABLE"));
+        };
+        if child.process.poll()?.is_some() {
+            *self
+                .status
+                .lock()
+                .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = json!({"available":false,"broker_running":false,"error_code":"SESSION_UNAVAILABLE"});
+            return Err(RacpError::new("SESSION_UNAVAILABLE"));
+        }
+        let mut buffer = [0u8; 4096];
+        for pipe in [&mut child.process.stdout, &mut child.process.stderr] {
+            for _ in 0..16 {
+                match pipe.read_available(&mut buffer) {
+                    Ok(Some(n)) if n > 0 => (),
+                    _ => break,
+                }
+            }
+        }
+        let mut status = pipe::request(
+            &child.config,
+            &child.peer,
+            json!({"operation":"broker.status"}),
+            Duration::from_secs(3),
+        )?;
+        status["broker_running"] = json!(true);
+        *self
+            .status
+            .lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = status.clone();
+        if request["operation"] == "desktop.sessions" {
+            return Ok(json!({"sessions":[status]}));
+        }
+        if request["payload"]["session_id"] != child.config.session_id {
+            return Err(RacpError::new("SESSION_UNAVAILABLE"));
+        }
+        let budget = request["remaining_timeout_ms"]
+            .as_u64()
+            .unwrap_or(3000)
+            .clamp(1, 30000);
+        let deadline = Instant::now() + Duration::from_millis(budget);
+        let context = json!({"owner_id":request["context"]["principal_id"],"device_id":self.device,"operation_id":request["operation_id"],"timeout_ms":budget});
+        let mut result = pipe::request(
+            &child.config,
+            &child.peer,
+            json!({"operation":request["operation"],"payload":request["payload"],"context":context}),
+            Duration::from_millis(budget),
+        )?;
+        if request["operation"] == "desktop.screenshot" {
+            let op = request["operation_id"]
+                .as_str()
+                .filter(|s| {
+                    s.starts_with("op_")
+                        && s.len() <= 96
+                        && s.bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+                })
+                .ok_or_else(|| RacpError::new("INVALID_ARGUMENT"))?;
+            let original = self.spool.join(format!("{op}.png"));
+            let descriptor = result
+                .as_object_mut()
+                .unwrap()
+                .remove("capture")
+                .ok_or_else(|| RacpError::new("EXECUTION_UNKNOWN"))?;
+            self.materialize(
+                child,
+                &descriptor,
+                &original,
+                &context,
+                deadline,
+                &cancel,
+                32 * 1024 * 1024,
+            )?;
+            result["spool_path"] = json!(original);
+            result["artifact_media_type"] = json!("image/png");
+            result["artifact_id"] = Value::Null;
+            if result["preview"].is_object() {
+                let path = self.spool.join(format!("{op}.preview.png"));
+                let descriptor = result["preview"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("capture")
+                    .ok_or_else(|| RacpError::new("EXECUTION_UNKNOWN"))?;
+                if let Err(e) = self.materialize(
+                    child,
+                    &descriptor,
+                    &path,
+                    &context,
+                    deadline,
+                    &cancel,
+                    2 * 1024 * 1024,
+                ) {
+                    let _ = std::fs::remove_file(&original);
+                    return Err(e);
+                }
+                result["preview"]["spool_path"] = json!(path);
+                result["preview"]["artifact_media_type"] = json!("image/png");
+                result["preview"]["artifact_id"] = Value::Null;
+            }
+        }
+        Ok(result)
+    }
+    fn shutdown(&self) -> Result<(), RacpError> {
+        let mut guard = self
+            .child
+            .lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+        if let Some(child) = guard.as_mut() {
+            let _ = pipe::request(
+                &child.config,
+                &child.peer,
+                json!({"operation":"broker.stop"}),
+                Duration::from_millis(500),
+            );
+            child.process.kill_tree()?;
+            if !child.process.tree_empty()? {
+                return Err(RacpError::new("CLEANUP_FAILED"));
+            }
+            let _ = std::fs::remove_file(&child.path);
+            *guard = None;
+        }
+        Ok(())
+    }
+}
+impl Provider for Desktop {
+    fn capabilities(&self) -> Vec<Value> {
+        let status = self
+            .status
+            .lock()
+            .map(|s| s.clone())
+            .unwrap_or_else(|_| json!({"available":false}));
+        vec![
+            json!({"name":"desktop","version":"1.0.0","supported":true,"enabled":self.enabled,"healthy":status["broker_running"]==true,"unavailable_reason":status["error_code"],"operations":["desktop.sessions","desktop.monitors","desktop.windows","desktop.foreground","desktop.screenshot"],"attributes":{"backend":"rust-windows-local-session-broker","sessions":[status],"input_guardian_available":false,"capture":"visible_rectangle","service_cross_session_launch":false}}),
+        ]
+    }
+    fn execute(
+        &self,
+        request: Value,
+        cancel: CancellationToken,
+    ) -> BoxFuture<'_, Result<Value, RacpError>> {
+        let provider = self.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || provider.execute_native(request, cancel))
+                .await
+                .map_err(|_| RacpError::new("EXECUTION_UNKNOWN"))?
+        })
+    }
+    fn cleanup(&self) -> BoxFuture<'_, Result<(), RacpError>> {
+        let provider = self.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || provider.shutdown())
+                .await
+                .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
+        })
+    }
+}

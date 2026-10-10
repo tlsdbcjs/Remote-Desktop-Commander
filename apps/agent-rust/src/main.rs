@@ -18,6 +18,16 @@ async fn main() {
         .find(|a| a[0] == "--state-dir")
         .map(|a| PathBuf::from(&a[1]));
     let result = async {
+        #[cfg(windows)]
+        if action == "broker" {
+            let path = args
+                .windows(2)
+                .find(|a| a[0] == "--pair-config")
+                .map(|a| PathBuf::from(&a[1]))
+                .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
+            racp_runtime::providers::desktop::run_broker(&path)?;
+            return Ok(Value::Null);
+        }
         let state = state.ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
         racp_core::validate_local_path(&state)?;
         let mut browser = racp_runtime::providers::browser::BrowserConfig::bundled();
@@ -104,12 +114,12 @@ async fn main() {
     .await;
     match result {
         Ok(value) => {
-            if !matches!(action, "serve" | "run") {
+            if !matches!(action, "serve" | "run" | "broker") {
                 println!("{}", json!({"ok":true,"result":value}));
             }
         }
         Err(error) => {
-            if !matches!(action, "serve" | "run") {
+            if !matches!(action, "serve" | "run" | "broker") {
                 println!("{}", json!({"ok":false,"code":error.code}));
             } else {
                 eprintln!("{}", error.code.0);

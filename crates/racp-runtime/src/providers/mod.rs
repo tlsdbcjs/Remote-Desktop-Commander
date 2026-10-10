@@ -73,15 +73,20 @@ impl NativeProviders {
         boot: &str,
         config: browser::BrowserConfig,
     ) -> Result<Self, RacpError> {
-        Ok(Self {
-            providers: vec![
-                Arc::new(Filesystem::new(settings)?),
-                Arc::new(Shell::new(settings)?),
-                Arc::new(Processes::new(settings, boot)?),
-                Arc::new(Terminal::new(settings, boot)?),
-                Arc::new(browser::Browser::new(settings, boot, config)?),
-            ],
-        })
+        let providers: Vec<Arc<dyn Provider>> = vec![
+            Arc::new(Filesystem::new(settings)?),
+            Arc::new(Shell::new(settings)?),
+            Arc::new(Processes::new(settings, boot)?),
+            Arc::new(Terminal::new(settings, boot)?),
+            Arc::new(browser::Browser::new(settings, boot, config)?),
+        ];
+        #[cfg(windows)]
+        let providers = {
+            let mut providers = providers;
+            providers.push(Arc::new(desktop::Desktop::new(settings)?));
+            providers
+        };
+        Ok(Self { providers })
     }
 }
 impl Provider for NativeProviders {

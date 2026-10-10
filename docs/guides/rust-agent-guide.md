@@ -8,7 +8,7 @@
 
 Windows x64 개발용 ZIP을 풀면 `racp-agent.exe`, `chromium/`, `build-manifest.json`이 들어 있다. Python·Node 설치 없이 Agent를 실행한다. Chromium 디렉터리는 실행 파일 옆에 유지한다. Node는 빌드 중 고정된 Chromium을 내려받을 때만 사용하며 패키지에 포함하지 않는다.
 
-현재 이식된 기능은 등록·설정, HTTPS/WSS 연결, 작업 저널과 Artifact, 파일, 셸, 프로세스, 메모리 읽기, 터미널 및 브라우저다. Windows 데스크톱 Broker/Guardian과 리버싱 backend 이식은 진행 중이다. 설치형 클라이언트의 Tauri 전환도 별도 잔여 작업이다. 최신 구현·빌드 근거는 [구현 현황](../quality/implementation-status.md#client-rust-design)에 기록한다.
+현재 이식된 기능은 등록·설정, HTTPS/WSS 연결, 작업 저널과 Artifact, 파일, 셸, 프로세스, 메모리 읽기, 터미널 및 브라우저다. Windows desktop 읽기 Broker에는 세션·모니터·창·foreground 조회와 PNG 캡처를 추가했다. Guardian과 입력·UIA·서비스 세션, 리버싱 backend 이식은 진행 중이다. 설치형 클라이언트의 Tauri 전환도 별도 잔여 작업이다. 최신 구현·빌드 근거는 [구현 현황](../quality/implementation-status.md#client-rust-design)에 기록한다.
 
 ## 2. 명시적인 상태 디렉터리
 
@@ -66,6 +66,8 @@ New-Item -ItemType Directory -Force $State | Out-Null
 ```
 
 외부 CDP를 사용하려면 `--enable-cdp`를 추가한다. 백그라운드 `start`에는 이 옵션을 전달하지 않는다.
+
+`desktop_enabled=true`인 설정에서는 현재 사용자 세션의 Rust Broker가 별도 process/Job으로 시작된다. Gateway에서 `desktop.sessions`로 세션 ID를 확인하고 `desktop.monitors`, `desktop.windows`, `desktop.foreground`, `desktop.screenshot`을 호출한다. 잠금·비활성 세션·다른 사용자 로그인·secure desktop에서는 캡처를 거부한다. 캡처와 선택적 preview는 PNG Artifact로 전달된다. 세션 0에서 다른 사용자의 Broker를 시작하는 서비스 기능과 desktop 입력은 아직 활성화하지 않았다.
 
 ## 5. 빌드와 검증 보류
 

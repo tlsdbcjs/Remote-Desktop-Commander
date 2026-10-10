@@ -276,19 +276,26 @@ impl Agent {
             racp_core::atomic_write(&path, &serde_json::to_vec(result)?, true)?;
             *result = json!({"artifact_id":null,"spool_path":path,"artifact_media_type":"application/json","truncated":true});
         }
-        if let Some(path) = result["spool_path"].as_str().map(std::path::PathBuf::from) {
-            let outputs = self.outputs.clone();
-            let id = id.to_string();
-            let media = result["artifact_media_type"]
-                .as_str()
-                .unwrap_or("application/vnd.racp.output-stream")
-                .to_string();
-            let output = tokio::task::spawn_blocking(move || outputs.register(&path, &id, &media))
-                .await
-                .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))??;
-            result.as_object_mut().unwrap().remove("spool_path");
-            result["output_id"] = output["id"].clone();
-            result["artifact_upload_status"] = json!("pending");
+        // A desktop capture can have an independently uploaded PNG preview.
+        for pointer in ["", "/preview"] {
+            let Some(result) = result.pointer_mut(pointer) else {
+                continue;
+            };
+            if let Some(path) = result["spool_path"].as_str().map(std::path::PathBuf::from) {
+                let outputs = self.outputs.clone();
+                let id = id.to_string();
+                let media = result["artifact_media_type"]
+                    .as_str()
+                    .unwrap_or("application/vnd.racp.output-stream")
+                    .to_string();
+                let output =
+                    tokio::task::spawn_blocking(move || outputs.register(&path, &id, &media))
+                        .await
+                        .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))??;
+                result.as_object_mut().unwrap().remove("spool_path");
+                result["output_id"] = output["id"].clone();
+                result["artifact_upload_status"] = json!("pending");
+            }
         }
         if outcome["error"]["details"]["partial_result"].is_object() {
             outcome["error"]["details"]["partial_result"] = outcome["result"].clone();
