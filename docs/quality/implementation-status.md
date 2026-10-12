@@ -2563,6 +2563,19 @@ USB 동글의 용도는 사용자가 **원격 PC에 연결된 외장 장치/동�
    - `src/app.rs`: 500줄 이상의 인라인 모놀리식 뷰 코드를 `views::*`로 위임. 네비게이션 탭 하이라이트 및 실시간 대기 승인 건수 배지, 하단 글로벌 툴바/오류 알림 스트림 완벽 유지.
    - `cargo test -p racp-client-native`: 신규 컴포넌트, 다국어 팩, 5개 뷰 렌더링 무결성 등 6개 단위 테스트 **100% 통과 (6 PASS / 0 FAIL)**.
    - `cargo check --workspace`: 워크스페이스 전역 컴파일 에러 0건.
-   - `cargo clippy -p racp-client-native`: 신규 UI 및 뷰 모듈 클리피 경고 0건.
    - Oracle MCP 2차 아키텍처 및 릴리즈 게이트 자문 완료.
+
+6. **제품 배포 빌드 (`dist/`) 및 산출물 (Build ID: `gui-20261013-a`)**:
+   - `xtask stage`: Release 프로파일 최적화 바이너리 컴파일 및 스테이징 완료.
+   - `xtask verify-staging`: 4개 페이로드 파일 및 대상 아키텍처(x86_64-pc-windows-msvc) 정적 검증 PASS.
+   - `xtask stage-agent` & `verify-agent`: Standalone Agent 바이너리 스테이징 및 정적 검증 PASS.
+   - 빌드 산출물 일람:
+     | 구분 | 경로 | 크기 / SHA-256 해시 |
+     |---|---|---|
+     | **Client Release 바이너리** | [`dist/client/0.1.26/win-x64/gui-20261013-a/staging/payload/racp-client.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-a/staging/payload/racp-client.exe) | 15,789,056 bytes<br>`df9d051473d214dc0b26b7851a3351825c0f41bb91ae5a426a62b2e05ba123fb` |
+     | **Companion Agent** | [`dist/client/0.1.26/win-x64/gui-20261013-a/staging/payload/racp-agent.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-a/staging/payload/racp-agent.exe) | 21,947,392 bytes |
+     | **Portable 배포 EXE** | [`dist/client/0.1.26/win-x64/gui-20261013-a/packages/RACP-Native-0.1.26-win-x64-portable.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-a/packages/RACP-Native-0.1.26-win-x64-portable.exe) | 40,571,992 bytes<br>`551128c8ac0f73b34b8dbdf300b82a90cef06d88c58253aebc552ca953bb15f8` |
+     | **Native 배포 ZIP** | [`dist/client/0.1.26/win-x64/gui-20261013-a/packages/RACP-Native-0.1.26-win-x64.zip`](../../dist/client/0.1.26/win-x64/gui-20261013-a/packages/RACP-Native-0.1.26-win-x64.zip) | 37,937,682 bytes<br>`afa3f47c48b84211c54fd98f8c11fe307104c5686584a7a466785048c410f242` |
+     | **Standalone Agent** | [`dist/agent/0.1.26/win-x64/gui-20261013-a/build/racp-agent.exe`](../../dist/agent/0.1.26/win-x64/gui-20261013-a/build/racp-agent.exe) | 21,947,392 bytes |
+
 
