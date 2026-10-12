@@ -18,7 +18,7 @@
 > **[Client 영역 전체 Rust 전환 작업 계획서](spec/rust-client-migration-plan.md)** — GUI·상주 Agent·OS 제어·Client 배포를 Rust로 재작성하고 구 Client를 제거하는 현재 실행 기준이다. Gateway는 Python을 유지한다.
 
 > [!IMPORTANT]
-> **[Agent 서비스 구현 및 검증 작업 계획](spec/agent-service-implementation-and-test-plan.md)** — GUI 재구성을 제외한 현재 후속 작업 기준이다. Agent 단독 서비스 배포·관리/승인·원격 실행·SCM·계정/복구와 시험을 정의한다. 실제 설치 금지를 유지하며 계획서만으로 구현·테스트를 자동 실행하지 않는다.
+> **[Agent 서비스 구현 및 검증 작업 계획](spec/agent-service-implementation-and-test-plan.md)** — GUI 재구성을 제외한 현재 후속 기준이다. Agent 단독 서비스·원격 실행·SCM/계정/복구에 플랫폼별 구조와 원격 USB·동글·외장 장치의 정적 분석용 접근을 포함한다. Windows만 우선하며 macOS/Linux 서비스·장치 어댑터는 미구현이다. 실제 설치 금지를 유지하고 계획서만으로 구현·테스트를 자동 실행하지 않는다.
 
 > [!IMPORTANT]
 > **[Windows 작업 및 테스트 계획서 바로 열기](spec/windows-engineering-plan.md)** — 공식 위치는 `docs/spec/windows-engineering-plan.md`다. 이전 한글 파일 경로 대신 이 링크를 사용한다.

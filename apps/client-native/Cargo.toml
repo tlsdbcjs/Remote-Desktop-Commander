@@ -15,10 +15,11 @@ software-renderer = []
 gpu-renderer = ["iced/wgpu"]
 
 [dependencies]
-iced = { workspace = true, features = ["advanced"] }
+iced = { workspace = true, features = ["advanced", "svg"] }
 racp-contract = { path = "../../crates/racp-contract" }
 racp-core = { path = "../../crates/racp-core" }
 serde.workspace = true
+chrono = { workspace = true }
 tokio.workspace = true
 serde_json.workspace = true
 image = { version = "=0.25.9", default-features = false, features = ["png"] }

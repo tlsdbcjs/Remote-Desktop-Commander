@@ -1,14 +1,12 @@
-use crate::controls::{
-    button, checkbox, constraint_editor, profile_picklist, scrollable, text, text_input,
-};
+use crate::controls::{button, custom_button, text};
+use crate::i18n::{tr, TextKey};
 use crate::ui_model::UiModel;
 use iced::{
     widget::{column, container, row, text_editor},
-    Element, Length, Task,
+    Alignment, Element, Length, Padding, Task,
 };
 use racp_contract::local_ipc::{
-    AvailabilityState, ControlCommand, ControlReply, ControlResult, Grant, PolicyChanges,
-    StateChange,
+    ControlCommand, ControlReply, ControlResult, Grant, PolicyChanges, StateChange,
 };
 use racp_contract::service_scope::ControllerRole;
 
@@ -48,39 +46,40 @@ fn completion_summary(receipt: &racp_contract::local_ipc::ControlCompletion) -> 
 }
 
 pub struct App {
-    model: UiModel,
-    constraints: crate::constraints::Draft,
-    page: Page,
-    error: Option<String>,
-    workspace_draft: String,
-    named_workspaces: Vec<racp_core::WorkspaceSpec>,
-    local: Option<crate::onboarding::LocalInfo>,
-    connection_path: String,
-    connection_hash: String,
-    connection_preview: Option<serde_json::Value>,
-    profile: String,
-    runtime_manifest: String,
-    runtime_hash: String,
-    runtime_source: String,
-    chromium_hash: String,
-    cdb_hash: String,
-    gdb_hash: String,
-    analysis_hash: String,
-    browser_origins: String,
-    external_cdp: bool,
-    local_cancel: Option<tokio_util::sync::CancellationToken>,
-    desktop_cancel: Option<tokio_util::sync::CancellationToken>,
-    desktop_cleanup_failed: bool,
-    receipts: std::collections::BTreeMap<String, String>,
+    pub(crate) model: UiModel,
+    pub(crate) constraints: crate::constraints::Draft,
+    pub(crate) page: Page,
+    pub(crate) error: Option<String>,
+    pub(crate) workspace_draft: String,
+    pub(crate) named_workspaces: Vec<racp_core::WorkspaceSpec>,
+    pub(crate) local: Option<crate::onboarding::LocalInfo>,
+    pub(crate) connection_path: String,
+    pub(crate) connection_hash: String,
+    pub(crate) connection_preview: Option<serde_json::Value>,
+    pub(crate) profile: String,
+    pub(crate) runtime_manifest: String,
+    pub(crate) runtime_hash: String,
+    pub(crate) runtime_source: String,
+    pub(crate) chromium_hash: String,
+    pub(crate) cdb_hash: String,
+    pub(crate) gdb_hash: String,
+    pub(crate) analysis_hash: String,
+    pub(crate) browser_origins: String,
+    pub(crate) external_cdp: bool,
+    pub(crate) local_cancel: Option<tokio_util::sync::CancellationToken>,
+    pub(crate) desktop_cancel: Option<tokio_util::sync::CancellationToken>,
+    pub(crate) desktop_cleanup_failed: bool,
+    pub(crate) receipts: std::collections::BTreeMap<String, String>,
     #[cfg(windows)]
-    shell: Option<std::sync::Arc<crate::native::Shell>>,
-    can_hide: bool,
-    quitting: bool,
-    starting: bool,
-    auto_start: bool,
-    role: Option<ControllerRole>,
-    accessibility_attempts: u8,
-    window_ready: bool,
+    pub(crate) shell: Option<std::sync::Arc<crate::native::Shell>>,
+    pub(crate) can_hide: bool,
+    pub(crate) quitting: bool,
+    pub(crate) starting: bool,
+    pub(crate) auto_start: bool,
+    pub(crate) role: Option<ControllerRole>,
+    pub(crate) accessibility_attempts: u8,
+    pub(crate) window_ready: bool,
+    pub lang: crate::i18n::Language,
 }
 #[derive(Clone, Copy, Debug)]
 pub enum Page {
@@ -94,6 +93,8 @@ pub enum Page {
 pub enum Message {
     Navigate(Page),
     EditGrant(String, Grant),
+    BatchCategoryGrant(String, Grant),
+    SetLanguage(crate::i18n::Language),
     Snapshot(racp_contract::local_ipc::StateSnapshot, ControllerRole),
     Event(racp_contract::local_ipc::StateEvent),
     Disconnected,
@@ -188,6 +189,7 @@ impl App {
                 role: None,
                 accessibility_attempts: 0,
                 window_ready: !cfg!(windows),
+                lang: crate::i18n::detect_os_language(),
             },
             Task::batch([
                 crate::onboarding::refresh(),
@@ -206,7 +208,7 @@ impl App {
             racp_contract::VERSION
         )
     }
-    fn can_control(&self) -> bool {
+    pub(crate) fn can_control(&self) -> bool {
         !crate::control_target::service()
             || !self.model.needs_resync && self.role == Some(ControllerRole::Controller)
     }
@@ -256,6 +258,7 @@ impl App {
                     | Message::CancelOperation(_, _, _)
                     | Message::Stop
                     | Message::EditGrant(_, _)
+                    | Message::BatchCategoryGrant(_, _)
                     | Message::CategoryChoice(_, _)
                     | Message::EditConstraint(_, _)
                     | Message::EditConstraintList(_, _)
@@ -709,6 +712,24 @@ impl App {
                     .err()
                     .map(|e| e.to_string())
             }
+            Message::BatchCategoryGrant(category, grant) => {
+                let ids: Vec<String> = self
+                    .model
+                    .catalog
+                    .iter()
+                    .filter(|item| (category == "*" || item.category == category) && item.implementation == "rpc")
+                    .map(|item| item.id.clone())
+                    .collect();
+                for id in ids {
+                    if let Err(e) = self.model.edit_grant(&id, grant) {
+                        self.error = Some(e.to_string());
+                        break;
+                    }
+                }
+            }
+            Message::SetLanguage(lang) => {
+                self.lang = lang;
+            }
             Message::Snapshot(snapshot, role) => {
                 self.role = Some(role);
                 if self
@@ -992,433 +1013,170 @@ impl App {
     }
     pub fn view(&self) -> Element<'_, Message> {
         crate::accessibility::begin(self.title());
-        let navigation = row![
-            button("상태").on_press(Message::Navigate(Page::Status)),
-            button("권한").on_press(Message::Navigate(Page::Permissions)),
-            button("설정").on_press_maybe(
-                (!crate::control_target::service()).then_some(Message::Navigate(Page::Settings))
-            ),
-            button("선택 런타임").on_press_maybe(
-                (!crate::control_target::service()).then_some(Message::Navigate(Page::Runtime))
-            ),
-            button(format!(
-                "승인 ({})",
-                self.model
-                    .snapshot
-                    .as_ref()
-                    .map_or(0, |snapshot| snapshot.pending_approvals.len())
-            ))
-            .accessibility_label("승인 요청")
-            .on_press(Message::Navigate(Page::Approvals)),
-            button("종료").on_press(Message::Quit)
-        ]
-        .spacing(16);
-        let header = column![text(self.title()).size(24), navigation].spacing(12);
-        let body: Element<'_, Message> = match self.page {
-            Page::Settings | Page::Runtime if crate::control_target::service() => text("서비스 설정은 서비스 관리 절차에서 변경합니다.").into(),
-            Page::Permissions if !self.can_control() => {
-                let mut list = column![text("권한 조회 — 관찰 전용").size(24)];
-                if let Some(policy) = self.model.snapshot.as_ref().and_then(|s| s.policy.as_ref()) {
-                    list = list.push(text(format!("정책 revision {} · 최대 실행 시간 {} ms · 최대 출력 {} bytes", policy.revision, policy.constraints.max_timeout_ms, policy.constraints.max_output_bytes)));
-                    for item in self.model.catalog.iter().filter(|item| {
-                        item.implementation == "rpc"
-                            && self.model.availability(&item.id) != AvailabilityState::NotImplemented
-                    }) {
-                        list = list.push(text(format!("{} · {:?}{}", item.label, policy.grants.get(&item.id).unwrap_or(&Grant::Deny), if policy.disabled_categories.contains(&item.category) { " · 분류 꺼짐" } else { "" })));
-                    }
-                } else { list = list.push(text("서비스 연결 후 현재 권한을 조회할 수 있습니다.")); }
-                scrollable(list.spacing(12)).height(Length::Fill).into()
-            }
-            Page::Settings => {
-                let mut list=column![text("Agent 종료 후 적용하는 설정").size(24),
-                    text("저장 후 Agent를 다시 시작하세요. 권한 변경은 권한 탭에서 별도로 저장합니다."),
-                    text("기본 작업 폴더 (절대 경로)"),text_input("기본 작업 폴더",&self.workspace_draft).on_input(Message::WorkspaceDraft),
-                    text("실행 프로필"),profile_picklist(&self.profile),
-                    text("추가 작업 폴더: 이름과 절대 경로")].spacing(12);
-                for (index, workspace) in self.named_workspaces.iter().enumerate() {
-                    let path = workspace.path.to_string_lossy().into_owned();
-                    list = list.push(
-                        row![
-                            text_input("작업 영역 이름", &workspace.id)
-                                .on_input(move |value| Message::WorkspaceId(index, value)),
-                            text_input("절대 경로", &path)
-                                .on_input(move |value| Message::WorkspacePath(index, value)),
-                            button("제거").on_press(Message::RemoveWorkspace(index))
-                        ]
-                        .spacing(8),
-                    );
-                }
-                list = list.push(button("작업 폴더 추가").on_press_maybe(
-                    (self.named_workspaces.len() < 15).then_some(Message::AddWorkspace),
-                ));
-                if let Some(state) = self.local.as_ref().and_then(|info| info.state.as_ref()) {
-                    list=list.push(text(format!("저장한 설정 revision: {}",state.settings_revision)))
-                        .push(text(format!("등록 Gateway: {} · Device: {}",state.gateway,state.device_id)))
-                        .push(text("Gateway·Device·인증서는 새 등록의 신뢰 정보입니다. 이 화면에서 변경하거나 기존 credential을 옮기지 않습니다."))
-                        .push(button("설정 저장").on_press_maybe((self.model.needs_resync&&!self.starting&&self.local_cancel.is_none()).then_some(Message::SaveSettings)));
-                } else {
-                    list = list.push(text(
-                        "추가 작업 폴더와 프로필은 상태 탭의 새 등록에도 사용됩니다.",
-                    ));
-                }
-                list = list
-                    .push(button("현재 저장된 설정 다시 불러오기").on_press(Message::RefreshLocal));
-                list = list.push(text("현재 사용자 로그인 시작").size(20));
-                if let Some(login) = self.local.as_ref().and_then(|info| info.login.as_ref()) {
-                    if let Some(error) = login["error"].as_str() {
-                        list = list.push(text(format!(
-                            "로그인 시작 상태를 확인하지 못했습니다: {error}"
-                        )));
-                    } else {
-                        list = list.push(text(format!(
-                            "등록값 존재: {} · 소유 확인: {} · 미확정 변경: {}",
-                            login["enabled"], login["owned"], login["pending"]
-                        )));
-                        if login["pending"] == true {
-                            list = list.push(
-                                button("미확정 등록 결과 다시 확인")
-                                    .on_press(Message::ReconcileLogin),
-                            );
-                        } else if login["owned"] == true {
-                            list = list.push(
-                                button(if login["enabled"] == true {
-                                    "로그인 시작 해제"
-                                } else {
-                                    "로그인 시 Client와 Agent 시작"
-                                })
-                                .on_press(Message::ConfigureLogin(login["enabled"] != true)),
-                            );
-                            if login["enabled"] == true {
-                                list = list.push(
-                                    button("현재 Client로 로그인 등록 갱신")
-                                        .on_press(Message::ConfigureLogin(true)),
-                                );
-                            }
-                        }
-                    }
-                    list=list.push(text("설치/포터블 payload의 고정 Client만 등록합니다. 다른 로그인 항목을 덮어쓰거나 실행 중인 앱을 종료하지 않습니다."));
-                } else {
-                    list = list.push(text("새 등록 후 로그인 시작을 설정할 수 있습니다."));
-                }
-                scrollable(list).height(Length::Fill).into()
-            }
-            Page::Approvals => self.approval_view(),
-            Page::Status => {
-                let root = crate::control_target::root()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_else(|e| e.to_string());
-                let status = if self.model.needs_resync {
-                    if crate::control_target::service() {
-                        "서비스 제어 연결 대기 — 관리자에게 서비스 등록 또는 시작을 요청하세요.".to_owned()
-                    } else {
-                        "Agent 연결 대기 — 새 등록 또는 Agent 시작이 필요합니다.".to_owned()
-                    }
-                } else {
-                    format!(
-                        "Agent 상태: {:?}",
-                        self.model.snapshot.as_ref().map(|s| s.status)
-                    )
-                };
-                let mut status_view = column![
-                    text(status).size(24),
-                    text(if crate::control_target::service() { "서비스 제어 연결" } else { "기존 Client 설정과 credential을 자동으로 가져오지 않습니다." }),
-                    text(format!("{}: {root}", if crate::control_target::service() { "서비스 제어 경로" } else { "새 상태 경로" })),
-                    button("로컬 상태 새로 확인").on_press_maybe((!crate::control_target::service()).then_some(Message::RefreshLocal))
-                ]
-                .spacing(16);
-                if crate::control_target::service() {
-                    status_view=status_view
-                        .push(text("현재 로그인한 사용자의 화면을 연결합니다. 권한 정책과 요청별 승인은 그대로 적용됩니다."))
-                        .push(button("현재 사용자 화면 연결").on_press_maybe(
-                            (self.can_control() && self.desktop_cancel.is_none() && !self.quitting
-                                && !self.desktop_cleanup_failed).then_some(Message::ConnectDesktop)))
-                        .push(button("현재 사용자 화면 연결 해제").on_press_maybe(
-                            self.desktop_cancel.as_ref().filter(|token|!token.is_cancelled())
-                                .map(|_|Message::DisconnectDesktop)));
-                }
-                if let Some(snapshot) = &self.model.snapshot {
-                    status_view = status_view.push(
-                        text(if self.model.needs_resync {
-                            "마지막으로 확인한 작업 상태 (연결 중단)"
-                        } else {
-                            "작업 상태"
-                        })
-                        .size(20),
-                    );
-                    for activity in snapshot.activity.iter().rev() {
-                        let cancellable = self.can_control() && !self.model.needs_resync && !self.quitting
-                            && !activity.operation_id.is_empty() && !activity.request_id.is_empty()
-                            && !matches!(snapshot.status, racp_contract::local_ipc::AgentStatus::Draining | racp_contract::local_ipc::AgentStatus::Stopped | racp_contract::local_ipc::AgentStatus::Failed)
-                            && matches!(activity.state.as_str(), "ACCEPTED" | "DISPATCHED" | "RUNNING" | "RECONCILING");
-                        status_view = status_view.push(row![text(format!(
-                            "{} · {} · {} · 요청 {}",
-                            activity.operation_id,
-                            activity.operation,
-                            activity.state,
-                            activity.request_id
-                        )).width(Length::Fill), button("작업 취소").on_press_maybe(cancellable.then(|| Message::CancelOperation(
-                            snapshot.boot_id.clone(), activity.operation_id.clone(), activity.request_id.clone(),
-                        )))].spacing(12));
-                    }
-                    status_view = status_view.push(text("취소 접수와 작업 종료는 별개입니다. 작업 상태와 정리 결과를 각각 확인하세요."));
-                    status_view = status_view.push(text("최근 제어 결과").size(20));
-                    for receipt in snapshot.recent_control_results.iter().rev() {
-                        let (id, summary) = completion_summary(receipt);
-                        status_view = status_view.push(text(format!("{id}: {summary}")));
-                    }
-                    status_view = status_view.push(text("최근 최대 16개를 표시합니다. 연결 중단·Agent 재시작·기록 누락은 정리 성공을 뜻하지 않습니다."));
-                }
-                if crate::control_target::service() {
-                    status_view = status_view.push(text(match self.role {
-                        Some(ControllerRole::Controller) => "서비스 제어 권한",
-                        Some(ControllerRole::Observer) => "서비스 관찰 권한 — 변경 요청 불가",
-                        None => "서비스 연결과 권한 확인을 기다립니다.",
-                    }));
-                    if let Some(identity) = self.model.snapshot.as_ref().and_then(|s| s.identity.as_ref()) {
-                        status_view = status_view.push(text(format!("Device: {} · Gateway: {}", identity.device_id, identity.gateway_origin)));
-                    }
-                    status_view = status_view.push(text("앱을 종료해도 공유 서비스는 계속 실행됩니다. 서비스 Agent 종료는 별도 제어 요청입니다."));
-                } else if let Some(state) = self.local.as_ref().and_then(|info| info.state.as_ref()) {
-                    status_view = status_view.push(text(format!(
-                        "Device: {} · Gateway: {} · Workspace: {} · Profile: {}",
-                        state.device_id,
-                        state.gateway,
-                        state.workspace.display(),
-                        state.profile
-                    )));
-                    status_view = status_view.push(
-                        button("Agent 시작").on_press_maybe(
-                            (self.model.needs_resync
-                                && !self.starting
-                                && self.local_cancel.is_none())
-                            .then_some(Message::StartAgent),
-                        ),
-                    );
-                } else {
-                    status_view=status_view.push(text_input("새 연결 파일 경로",&self.connection_path).on_input(Message::ConnectionPath)).push(button("연결 파일 확인").on_press(Message::InspectConnection)).push(text_input("확인한 연결 파일 SHA-256",&self.connection_hash).on_input(Message::ConnectionHash)).push(text_input("새 작업 폴더의 절대 경로",&self.workspace_draft).on_input(Message::WorkspaceDraft)).push(profile_picklist(&self.profile)).push(text("등록에는 권한 탭의 현재 선택을 사용합니다. 초기 선택은 모두 거부입니다."));
-                    if let Some(info) = &self.connection_preview {
-                        status_view = status_view.push(text(format!(
-                            "Gateway: {} · 만료: {} · CA hash: {}",
-                            info["gateway"].as_str().unwrap_or(""),
-                            info["expires_at"].as_str().unwrap_or(""),
-                            info["ca_sha256"].as_str().unwrap_or("없음")
-                        )));
-                    }
-                    let pending = self
-                        .local
-                        .as_ref()
-                        .is_some_and(|info| info.registration_pending);
-                    if pending {
-                        status_view=status_view.push(text("이전 등록 결과가 불확실합니다. 기존 pending 상태를 확인하기 전 새 등록을 재시도하지 않습니다."));
-                    }
-                    status_view =
-                        status_view.push(button("확인한 연결 파일로 새 등록").on_press_maybe(
-                            (!pending && self.local_cancel.is_none()).then_some(Message::Enroll),
-                        ));
-                }
-                scrollable(status_view).height(Length::Fill).into()
-            }
-            Page::Runtime => scrollable(
-                column![
-                    text("선택 런타임 — Agent 종료 상태에서 저장").size(24),
-                    text_input("신뢰한 manifest 파일 경로", &self.runtime_manifest)
-                        .on_input(Message::RuntimeManifest),
-                    text_input("manifest SHA-256", &self.runtime_hash)
-                        .on_input(Message::RuntimeHash),
-                    text_input(
-                        "manifest에 대응하는 로컬 파일 묶음 폴더",
-                        &self.runtime_source
-                    )
-                    .on_input(Message::RuntimeSource),
-                    button("manifest와 모든 파일 검증 후 승인").on_press_maybe(
-                        self.local_cancel.is_none().then_some(Message::AdmitRuntime)
-                    ),
-                    text_input(
-                        "사용할 Chromium manifest hash — 비우면 기본 기능만",
-                        &self.chromium_hash
-                    )
-                    .on_input(Message::ChromiumHash),
-                    text_input("허용할 HTTP(S) origin — 쉼표로 구분", &self.browser_origins)
-                        .on_input(Message::BrowserOrigins),
-                    checkbox("외부 loopback CDP 연결을 허용", self.external_cdp)
-                        .on_toggle(Message::ExternalCdp),
-                    text("CDB manifest SHA-256 (선택하지 않으면 비움)"),
-                    text_input("CDB SHA-256",&self.cdb_hash).on_input(Message::CdbHash),
-                    text("GDB manifest SHA-256 (선택하지 않으면 비움)"),
-                    text_input("GDB SHA-256",&self.gdb_hash).on_input(Message::GdbHash),
-                    text("Native 분석 host manifest SHA-256 (선택하지 않으면 비움)"),
-                    text_input("분석 host SHA-256",&self.analysis_hash).on_input(Message::AnalysisHash),
-                    text("분석 host는 고정 native stdio protocol을 사용합니다. Java 실행 파일이나 기존 분석 설정을 가져오지 않습니다."),
-                    button("런타임 실행 선택 저장").on_press_maybe(
-                        self.local_cancel
-                            .is_none()
-                            .then_some(Message::ConfigureRuntime)
-                    ),
-                    text("기존 Chrome·프로필·분석 도구를 자동으로 검색하거나 가져오지 않습니다.")
-                ]
-                .spacing(16),
+
+        let lang = self.lang;
+
+        // Navigation Tabs with Active Highlighting & Badges
+        let is_status = matches!(self.page, Page::Status);
+        let is_permissions = matches!(self.page, Page::Permissions);
+        let is_settings = matches!(self.page, Page::Settings);
+        let is_runtime = matches!(self.page, Page::Runtime);
+        let is_approvals = matches!(self.page, Page::Approvals);
+
+        let pending_count = self
+            .model
+            .snapshot
+            .as_ref()
+            .map_or(0, |s| s.pending_approvals.len());
+
+        let tab_status = custom_button(
+            text(tr(lang, TextKey::NavStatus)).size(13),
+            tr(lang, TextKey::NavStatus),
+        )
+        .padding(Padding::from([8, 16]))
+        .style(crate::theme::styles::nav_tab_button(is_status))
+        .on_press(Message::Navigate(Page::Status));
+
+        let tab_permissions = custom_button(
+            text(tr(lang, TextKey::NavPermissions)).size(13),
+            tr(lang, TextKey::NavPermissions),
+        )
+        .padding(Padding::from([8, 16]))
+        .style(crate::theme::styles::nav_tab_button(is_permissions))
+        .on_press(Message::Navigate(Page::Permissions));
+
+        let tab_approvals = {
+            let label = if pending_count > 0 {
+                format!("{} ({})", tr(lang, TextKey::NavApprovals), pending_count)
+            } else {
+                tr(lang, TextKey::NavApprovals).to_string()
+            };
+            custom_button(
+                text(label).size(13),
+                tr(lang, TextKey::NavApprovals),
             )
-            .height(Length::Fill)
-            .into(),
-            Page::Permissions => {
-                let mut list = column![text(
-                    "권한 선택 초안 — Agent에 저장되지 않은 로컬 편집입니다."
-                ),
-                    text("작업 제약").size(20),
-                    text("허용 작업 영역 ID (한 줄에 하나, 비워 두면 작업 영역 ID 추가 제한 없음)"),
-                    constraint_editor("허용 작업 영역 ID", &self.constraints.workspaces, crate::constraints::Field::Workspaces, 80.0),
-                    text("최대 실행 시간 (밀리초)"),
-                    text_input("밀리초", &self.constraints.timeout).on_input(|value|
-                        Message::EditConstraint(crate::constraints::Field::Timeout, value)),
-                    text("최대 출력 크기 (바이트)"),
-                    text_input("바이트", &self.constraints.output).on_input(|value|
-                        Message::EditConstraint(crate::constraints::Field::Output, value)),
-                    text("실행 파일 허용 목록 (한 줄에 절대 경로 하나, 비워 두면 허용 목록 제한 없음)"),
-                    constraint_editor("실행 파일 허용 목록", &self.constraints.allow, crate::constraints::Field::AllowExecutables, 100.0),
-                    text("실행 파일 차단 목록 (한 줄에 절대 경로 하나)"),
-                    constraint_editor("실행 파일 차단 목록", &self.constraints.deny, crate::constraints::Field::DenyExecutables, 100.0),
-                    text("작업 제약과 별도로 각 기능의 사용 권한을 선택하세요."),
-                    text("실행 파일 목록은 시작 실행 파일을 제한합니다. 셸·터미널에 허용한 명령 전체를 개별 OS 권한으로 분리하거나 격리하지 않습니다."),
-                    button("제약 초안을 현재 정책으로 되돌리기").on_press(Message::ReloadConstraints),
-                ]
-                .spacing(12);
-                let mut categories = std::collections::BTreeSet::new();
-                for item in &self.model.catalog {
-                    if item.implementation != "rpc"
-                        || self.model.availability(&item.id) == AvailabilityState::NotImplemented
-                    {
-                        continue;
-                    }
-                    if categories.insert(item.category.clone()) {
-                        let enabled = !self.model.disabled_categories.contains(&item.category);
-                        list = list.push(
-                            row![
-                                text(&item.category_label).size(20),
-                                button(if enabled {
-                                    "카테고리 끄기"
-                                } else {
-                                    "카테고리 켜기"
-                                })
-                                .accessibility_label(format!("{} · 카테고리 {}", item.category_label, if enabled { "끄기" } else { "켜기" }))
-                                .on_press(Message::CategoryChoice(item.category.clone(), !enabled))
-                            ]
-                            .spacing(12),
-                        );
-                    }
-                    let availability = match self.model.availability(&item.id) {
-                        AvailabilityState::NotImplemented
-                        | AvailabilityState::Supported
-                        | AvailabilityState::Unverified => None,
-                        AvailabilityState::NeedsRuntime => Some("추가 도구 설정 필요"),
-                        AvailabilityState::NeedsPermission => Some("OS 권한 필요"),
-                        AvailabilityState::UnsupportedOs => Some("이 운영체제에서 사용할 수 없음"),
-                        AvailabilityState::UnsupportedProtectedTarget => Some("보호된 대상에 사용할 수 없음"),
-                    };
-                    let mut controls =
-                        row![button("거부")
-                            .accessibility_label(format!("{} · {} · 거부", item.label, item.id))
-                            .on_press(Message::EditGrant(item.id.clone(), Grant::Deny))]
-                        .spacing(8);
-                    if item.implementation == "rpc" {
-                        controls = controls
-                            .push(
-                                button("허용")
-                                    .accessibility_label(format!("{} · {} · 허용", item.label, item.id))
-                                    .on_press(Message::EditGrant(item.id.clone(), Grant::Allow)),
-                            )
-                            .push(button("승인 필요").accessibility_label(format!("{} · {} · 승인 필요", item.label, item.id)).on_press(Message::EditGrant(
-                                item.id.clone(),
-                                Grant::RequireApproval,
-                            )));
-                    }
-                    list = list.push(
-                        column![
-                            text(format!(
-                                "{} · {}{}",
-                                item.category_label, item.label,
-                                availability.map(|label| format!(" [{label}]")).unwrap_or_default()
-                            )),
-                            text(format!("{} · {:?}", item.id, self.model.grants[&item.id]))
-                                .size(14),
-                            controls
-                        ]
-                        .spacing(6),
-                    );
-                }
-                scrollable(list).height(Length::Fill).into()
-            }
+            .padding(Padding::from([8, 16]))
+            .style(crate::theme::styles::nav_tab_button(is_approvals))
+            .on_press(Message::Navigate(Page::Approvals))
         };
-        let mut content = column![header, body].spacing(24);
+
+        let tab_runtime = custom_button(
+            text(tr(lang, TextKey::NavRuntime)).size(13),
+            tr(lang, TextKey::NavRuntime),
+        )
+        .padding(Padding::from([8, 16]))
+        .style(crate::theme::styles::nav_tab_button(is_runtime))
+        .on_press_maybe((!crate::control_target::service()).then_some(Message::Navigate(Page::Runtime)));
+
+        let tab_settings = custom_button(
+            text(tr(lang, TextKey::NavSettings)).size(13),
+            tr(lang, TextKey::NavSettings),
+        )
+        .padding(Padding::from([8, 16]))
+        .style(crate::theme::styles::nav_tab_button(is_settings))
+        .on_press_maybe((!crate::control_target::service()).then_some(Message::Navigate(Page::Settings)));
+
+        let tab_quit = custom_button(
+            text(tr(lang, TextKey::NavQuit)).size(13),
+            tr(lang, TextKey::NavQuit),
+        )
+        .padding(Padding::from([8, 16]))
+        .style(crate::theme::styles::danger_button)
+        .on_press(Message::Quit);
+
+        let mut nav_row = row![tab_status, tab_permissions, tab_approvals];
+        if !crate::control_target::service() {
+            nav_row = nav_row.push(tab_runtime).push(tab_settings);
+        }
+        nav_row = nav_row.push(tab_quit).spacing(8).align_y(Alignment::Center);
+
+        // Header Top Row: Brand & Title
+        let header_top = row![
+            text(self.title()).size(22),
+            container(text(format!("v{}", racp_contract::VERSION)).size(11))
+                .padding(Padding::from([2, 6]))
+                .style(|_theme| container::Style {
+                    background: Some(iced::Background::Color(iced::Color::from_rgba(0.388, 0.400, 0.945, 0.15))),
+                    border: iced::Border {
+                        color: iced::Color::from_rgba(0.388, 0.400, 0.945, 0.3),
+                        width: 1.0,
+                        radius: 4.0.into(),
+                    },
+                    text_color: Some(crate::theme::ACCENT_INDIGO),
+                    shadow: iced::Shadow::default(),
+                }),
+        ]
+        .spacing(10)
+        .align_y(Alignment::Center);
+
+        let header = container(
+            column![header_top, nav_row].spacing(12).width(Length::Fill),
+        )
+        .style(crate::theme::styles::card_container)
+        .padding(Padding::from(16))
+        .width(Length::Fill);
+
+        let body: Element<'_, Message> = match self.page {
+            Page::Status => crate::views::status::view(self),
+            Page::Permissions => crate::views::permissions::view(self),
+            Page::Approvals => crate::views::approvals::view(self),
+            Page::Runtime => crate::views::runtime::view(self),
+            Page::Settings => crate::views::settings::view(self),
+        };
+
+        let mut content = column![header, body].spacing(16);
+
+        // Bottom action toolbar (if active & can control)
         if !self.model.needs_resync && self.can_control() {
             content = content.push(
                 row![
-                    button("권한 저장").on_press(Message::SavePolicy),
-                    button("Agent 완전 종료").on_press(Message::Stop)
+                    button("권한 저장").style(crate::theme::styles::primary_button).on_press(Message::SavePolicy),
+                    button("Agent 완전 종료").style(crate::theme::styles::danger_button).on_press(Message::Stop)
                 ]
                 .spacing(12),
             );
         }
+
+        // Error message banner
         if let Some(error) = &self.error {
-            content = content.push(text(error));
+            let err_box = container(text(error).size(12))
+                .padding(Padding::from([8, 12]))
+                .style(|_theme| container::Style {
+                    background: Some(iced::Background::Color(iced::Color::from_rgba(0.937, 0.267, 0.267, 0.15))),
+                    border: iced::Border {
+                        color: iced::Color::from_rgba(0.937, 0.267, 0.267, 0.4),
+                        width: 1.0,
+                        radius: 6.0.into(),
+                    },
+                    text_color: Some(crate::theme::ACCENT_ROSE),
+                    shadow: iced::Shadow::default(),
+                });
+            content = content.push(err_box);
         }
+
         if self.local_cancel.is_some() {
-            content = content.push(button("로컬 요청 취소").on_press(Message::CancelLocal));
+            content = content.push(
+                button("로컬 요청 취소")
+                    .style(crate::theme::styles::secondary_button)
+                    .on_press(Message::CancelLocal),
+            );
         }
+
         if self.quitting && self.local_cancel.is_none() {
-            content =
-                content.push(button("정리 요청 없이 앱만 종료").on_press(Message::ExitAnyway));
+            content = content.push(
+                button("정리 요청 없이 앱만 종료")
+                    .style(crate::theme::styles::danger_button)
+                    .on_press(Message::ExitAnyway),
+            );
         }
+
         crate::controls::surface(
             container(content)
-                .padding(24)
+                .padding(20)
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .into(),
         )
-    }
-    fn approval_view(&self) -> Element<'_, Message> {
-        let mut list = column![text("이번 요청의 대상과 범위를 확인하세요.").size(24)].spacing(16);
-        if let Some(snapshot) = &self.model.snapshot {
-            for prompt in &snapshot.pending_approvals {
-                list = list.push(
-                    column![
-                        text(format!("{} · {}", prompt.operation, prompt.request_id)),
-                        text(&prompt.target_summary),
-                        text(format!(
-                            "대상 hash: {} · 만료: {}",
-                            prompt.target_digest, prompt.expires_at
-                        ))
-                        .size(12),
-                        row![
-                            button("이번 요청 허용")
-                                .accessibility_label(format!(
-                                    "{} · 요청 {} · 이번 요청 허용",
-                                    prompt.operation, prompt.request_id
-                                ))
-                                .on_press_maybe(
-                                    (self.can_control() && !self.model.needs_resync)
-                                        .then(|| Message::Decide(prompt.nonce.clone(), true))
-                                ),
-                            button("거부")
-                                .accessibility_label(format!(
-                                    "{} · 요청 {} · 거부",
-                                    prompt.operation, prompt.request_id
-                                ))
-                                .on_press_maybe(
-                                    (self.can_control() && !self.model.needs_resync)
-                                        .then(|| Message::Decide(prompt.nonce.clone(), false))
-                                )
-                        ]
-                        .spacing(12)
-                    ]
-                    .spacing(8),
-                );
-            }
-            if snapshot.pending_approvals.is_empty() {
-                list = list.push(text("대기 중인 승인 요청이 없습니다."));
-            }
-        }
-        scrollable(list).height(Length::Fill).into()
     }
 }
 fn show_window() -> Task<Message> {

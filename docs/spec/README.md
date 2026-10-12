@@ -16,7 +16,7 @@
 
 | 문서명 | 문서 ID | 상태 | 설명 |
 | :--- | :--- | :--- | :--- |
-| [Rust Agent 서비스 구현 및 검증 계획](agent-service-implementation-and-test-plan.md) | `DOC-PLAN-AGENT-SERVICE` | **Active** | GUI 제외, Agent 단독 서비스 payload·관리/승인·원격 실행·SCM·identity/복구. AS01–AS14 작업·AST01–AST21 시험, 실제 설치 금지 |
+| [Rust Agent 서비스 구현 및 검증 계획](agent-service-implementation-and-test-plan.md) | `DOC-PLAN-AGENT-SERVICE` | **Active** | GUI 제외. 공통/Windows/macOS/Linux 경계·Windows 우선·원격 USB/동글/외장 장치 정적 수집 추가. AS01–AS18·AST01–AST26, 실제 설치 금지 |
 | [이전 Native Client·Agent 통합 검증 계획](native-client-completion-and-test-plan.md) | `DOC-PLAN-NATIVE-COMPLETION` | **Superseded** | 과거 GUI 포함 범위 참조. 현재 Agent 서비스 작업은 별도 서비스 계획으로 대체; GUI는 재구성 예정으로 제외 |
 | [Client 영역 전체 Rust 전환 작업 계획서](rust-client-migration-plan.md) | `DOC-PLAN-RUST-CLIENT` | **Active** | 공통 Rust 전환 설계 기준. 현재 실행 범위는 GUI를 제외한 Agent 서비스 계획에서 관리 |
 | [Agent 세부 권한 및 원격 OS 기능 아키텍처](agent-permissions-and-capabilities.md) | `DOC-SPEC-AGENT-PERMISSIONS` | **Draft** | Client 세부 권한·Agent 검사·18개 기능 분류·host MCP 결합·향후 중앙 정책 경계. Server→Client 정책 배포는 현재 미구현 |

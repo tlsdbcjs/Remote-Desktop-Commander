@@ -29,6 +29,8 @@ This document defines repository instructions, operational principles, and seman
   - Node / Web workspace (`pnpm` workspace): `apps/console` (React + Vite) only
 - **Current Baseline Version**: Read `packages/domain/src/racp_domain/version.py` (SSOT).
 
+The active Agent service/platform roadmap is [Agent Service Plan](docs/spec/agent-service-implementation-and-test-plan.md). Common contracts/policy and OS backends must be separated within their existing crate responsibilities; Windows is the only initial implementation target, while macOS/Linux service and hardware adapters remain unimplemented. Planned folder trees are not current source paths. The requested USB/dongle feature concerns remote access to attached hardware and static-analysis data collection, not Agent licensing or authentication keys. GUI redesign remains outside this Agent scope. Do not access devices, alter drivers, install or register services merely because a plan describes those actions.
+
 ---
 
 ## 2. Version Management Policy (SemVer & Auto-Increment)

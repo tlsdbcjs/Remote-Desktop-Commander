@@ -4,6 +4,10 @@ mod app;
 mod constraints;
 mod control_target;
 mod controls;
+pub mod i18n;
+pub mod theme;
+pub mod components;
+pub mod views;
 #[cfg(windows)]
 mod native;
 mod onboarding;

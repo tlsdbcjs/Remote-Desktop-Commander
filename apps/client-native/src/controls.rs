@@ -352,6 +352,14 @@ pub fn button<'a>(label: impl Into<String>) -> Button<'a> {
         press: None,
     }
 }
+pub fn custom_button<'a>(content: impl Into<Element<'a, Message>>, label: impl Into<String>) -> Button<'a> {
+    let label = label.into();
+    Button {
+        inner: iced::widget::button(content.into()),
+        label,
+        press: None,
+    }
+}
 impl<'a> Button<'a> {
     pub fn on_press(mut self, message: Message) -> Self {
         self.inner = self.inner.on_press(message.clone());
@@ -365,6 +373,17 @@ impl<'a> Button<'a> {
     }
     pub fn width(mut self, value: impl Into<Length>) -> Self {
         self.inner = self.inner.width(value);
+        self
+    }
+    pub fn padding(mut self, padding: impl Into<iced::Padding>) -> Self {
+        self.inner = self.inner.padding(padding);
+        self
+    }
+    pub fn style(
+        mut self,
+        style: impl Fn(&Theme, iced::widget::button::Status) -> iced::widget::button::Style + 'a,
+    ) -> Self {
+        self.inner = self.inner.style(style);
         self
     }
     pub fn accessibility_label(mut self, label: impl Into<String>) -> Self {

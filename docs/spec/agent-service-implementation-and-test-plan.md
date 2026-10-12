@@ -8,6 +8,8 @@
 
 GUI `apps/client-native`의 재구성은 이 계획에서 제외한다. 대상은 **Rust Agent 자체의 Windows 서비스화와 원격 실행의 신뢰성**이다. 호출자→Gateway→WSS→Agent→실제 작업→결과 반환을 중심으로, 서비스 수명주기·권한·등록·취소·복구·배포 경계의 미완성 작업과 시험을 정리한다.
 
+후속 사용자 요구에 따라 **원격 PC에 연결된 USB·USB 동글·외장 장치의 접근/연결과 정적 분석용 데이터 수집**, **Windows/macOS/Linux 플랫폼 경계 정리**를 포함한다. 동글을 Agent 인증·라이선스 키로 사용하는 요구가 아니다. Windows만 먼저 구현하고 macOS/Linux의 Agent 서비스·외장 장치 어댑터는 미구현 상태로 둔다.
+
 Agent 서비스의 현재 후속 작업은 이 문서가 SSOT다. [Rust 전환 계획](rust-client-migration-plan.md)은 공통 설계 기준, [기존 Client·Agent 통합 계획](native-client-completion-and-test-plan.md)은 이전 범위의 참조로 유지한다. 실제 실행 결과·실패·artifact hash는 [구현 현황](../quality/implementation-status.md)에만 기록한다.
 
 > [!IMPORTANT]
@@ -30,8 +32,10 @@ Agent 서비스의 현재 후속 작업은 이 문서가 SSOT다. [Rust 전환 �
 
 | 구분 | 범위 |
 |---|---|
-| 서비스 실행 | `apps/agent-rust`, Windows SCM host, startup/readiness/stop/shutdown, 자동 시작·장애 복구 정책 |
+| 서비스 실행 | 목표 경로 `apps/agent`(현재 `apps/agent-rust`), Windows SCM host, startup/readiness/stop/shutdown, 자동 시작·장애 복구 정책 |
 | 원격 실행 | Gateway/WSS 연결, 파일·artifact·명령·프로세스·터미널·원격 화면/입력, 작업 상태·취소·정리 |
+| 외장 장치/USB 분석 | 원격 대상에 실제 연결된 USB·동글·외장 장치의 탐색/식별·기존 driver 기반 접근·remote handle·지원 데이터 수집·정적 분석 artifact |
+| 플랫폼 구조 | 공통 계약/정책/원격 orchestration과 OS adapter 분리. Windows 우선, macOS/Linux 서비스·장치 adapter 미구현 명시 |
 | 권한·관리 | 로컬 권한 상한, 현지 승인 계약, observer/controller IPC, 설정 revision, service SID/account·ACL |
 | 등록·상태 | 서비스 계정의 enrollment/bootstrap, credential 보호, durable journal, 재연결·재시작·부분 실패 복구 |
 | 배포 | GUI 없는 Agent service payload/manifest·SBOM, 설치/등록/등록 입력의 단계 구분, CI 정적 검사 |
@@ -41,6 +45,8 @@ Agent 서비스의 현재 후속 작업은 이 문서가 SSOT다. [Rust 전환 �
 여기서 **Agent 서비스**는 RACP Agent를 Windows SCM으로 관리하는 것을 뜻한다. 원격으로 다른 Windows 서비스를 관리하는 `services.control` 같은 API 확장과 구분한다. GUI 화면이 없어도 관리·승인 계약과 권한 검사는 유지해야 한다.
 
 원격 desktop 기능의 **사용자 세션 Broker/Guardian**은 Agent의 실행 구성 요소이므로 포함한다. Session 0의 서비스가 사용자 화면을 직접 조작하거나 `client-native` GUI를 상시 실행하는 구조를 전제로 하지 않는다. Gateway/Console은 기존 요청·결과 계약의 통합 시험 대상으로만 사용한다.
+
+첨부된 GUI 재설계 문서는 플랫폼 공통 계층과 OS adapter 분리 원칙을 참고한다. GUI 구현·SVG/i18n/화면 분해 지시를 Agent 작업으로 가져오지 않으며, 첨부 문서의 완료 체크나 크로스 플랫폼 목표를 현재 저장소의 완료 증거로 인정하지 않는다.
 
 <a id="section-02"></a>
 
@@ -58,6 +64,9 @@ Agent 서비스의 현재 후속 작업은 이 문서가 SSOT다. [Rust 전환 �
 | 머신 설치 recipe | [native-machine-installer.nsi](../../xtask/native-machine-installer.nsi)는 Agent와 Client를 함께 복사하고 Client shortcut을 생성 | **GUI 없는 Agent 서비스 배포 정의 미완성**. 새 역할의 admission/installer 정의 필요 |
 | 시작/장애 정책 | provision/restore의 SCM 생성·복구 경로는 `SERVICE_DEMAND_START` 사용 | 자동 시작·failure actions와 retry 정책을 제품 운영 기준으로 확정하고 검증할 필요 |
 | desktop 세션 | [service_session.rs](../../crates/racp-runtime/src/providers/desktop/service_session.rs)·[session_ledger.rs](../../crates/racp-runtime/src/providers/desktop/session_ledger.rs) 및 recovery 경로 존재 | 사용자 세션 등록과 자동 세션 launch를 구별. 코드 존재를 로그인/잠금/세션 전환 합격으로 해석하지 않음 |
+| USB/외장 장치 접근 | 현재 Agent/core/runtime와 공개 계약에서 USB·동글 탐색/연결/정적 수집 Provider를 확인하지 못함 | **미구현**. 파일 읽기·process memory·PCAP이 USB 장치의 protocol/firmware 접근을 대신하지 않음 |
+| OS 코드 배치 | Agent 앱 루트의 Windows service/setup 파일, core/runtime의 cfg 분기와 일부 기능별 windows.rs 존재 | 부분 분리 상태. 앱 서비스와 shared OS backend의 역할별 플랫폼 경계를 정리할 필요 |
+| macOS/Linux | 일부 POSIX terminal/process 코드는 있으나 Windows service와 같은 독립 서비스/IPC/장치 adapter의 완료 증거 없음 | 이 계획의 service/device adapter는 **미구현·보류**. 공통 코드 존재나 디렉터리 생성만으로 지원 완료 표시 금지 |
 
 > [!NOTE]
 > `crates/racp-runtime/src/native_client.rs`라는 파일명은 기존 backend 모듈명이며 GUI 앱 자체가 아니다. 필요한 공통 runtime은 재사용하되 `apps/client-native` 실행 파일을 서비스 시작/등록/원격 작업의 필수 dependency로 두지 않는다. 폴더 이름 변경이나 새로운 crate 분할 자체를 목표로 삼지 않는다.
@@ -96,6 +105,81 @@ SCM의 RUNNING, 로컬 runtime/IPC READY, Gateway ONLINE을 서로 다른 상태
 
 설치 파일 배치→서비스 provision→서비스 계정 등록/bootstrap→READY/ONLINE은 구분된 단계다. 각 단계의 실패/미확정 상태를 기록하고 재시도 가능 여부를 정의한다. 부분 실패를 신규 등록 재시도나 기존 service 강제 덮어쓰기로 해결하지 않는다.
 
+### 3.4 플랫폼별 폴더·파일 구조 개선
+
+아래는 **목표 구조**이며 이번 문서 작업에서 폴더/파일을 이동하거나 stub를 구현하지 않는다. 공통과 OS adapter를 현재 crate 책임 안에서 구분한다. OS마다 Agent 앱이나 동일 정책 엔진을 복제하지 않는다.
+
+Agent 앱 디렉터리는 구현 언어 대신 제품 역할을 나타내는 **`apps/agent`**로 통일한다. 현재 `apps/agent-rust`는 전환 기간의 경로이며 AS15에서 변경한다. 언어와 dependency는 `Cargo.toml`과 `.rs` 파일로 식별한다. Cargo package 이름과 실행 파일 이름 `racp-agent`는 유지하고 공유 라이브러리는 기존 `crates/racp-*`에 둔다.
+
+경로 변경 시 root Cargo workspace member와 path dependency, 빌드/패키징·version 도구·migration inventory, CI, 검사 스크립트, AGENTS 및 활성 문서의 source 링크를 함께 갱신한다. 현재 구현 근거인 §2의 링크는 실제 이동 전까지 `apps/agent-rust`를 가리킨다. 과거 검증 기록의 source 경로·기존 artifact manifest/hash는 당시 증거로 보존하며 배포 출력 `dist/agent`는 유지한다.
+
+```text
+apps/agent/src/
+├── main.rs                          # entry point 및 mode 선택
+├── cli/                             # 인수/schema 검증과 command dispatch
+├── application/                     # 등록·실행·관리 orchestration
+└── platform/
+    ├── mod.rs                       # cfg 선택과 구현 상태 노출
+    ├── windows/
+    │   ├── mod.rs
+    │   ├── service/                 # SCM host/provision/admin/restore
+    │   └── setup/                   # image 보호·SYSTEM handoff
+    ├── macos/                       # 미구현·후순위 서비스 adapter
+    └── linux/                       # 미구현·후순위 서비스 adapter
+
+crates/racp-runtime/src/
+├── agent/                           # 공통 원격 실행·등록·수명주기
+├── providers/
+│   └── hardware/                    # 공통 remote device session/수집 orchestration
+└── platform/
+    ├── windows/                     # IPC·process·ConPTY·desktop·USB backend
+    │   └── hardware/                # enumeration/driver/HID/WinUSB/vendor adapter
+    ├── macos/                       # 서비스/장치 backend 미구현
+    └── linux/                       # 서비스/장치 backend 미구현
+
+crates/racp-core/src/
+├── policy.rs / approval.rs          # 공통 정책·승인
+├── journal* / state_schema.rs       # 공통 기록·상태 계약
+└── platform/
+    ├── windows/                     # credential/ACL/file identity/service state backend
+    ├── macos/                       # 서비스용 저장·identity adapter 미구현
+    └── linux/                       # 서비스용 저장·identity adapter 미구현
+```
+
+현재 `native_service.rs`, `service_provision.rs`, `service_admin.rs`, `service_restore.rs`는 앱의 `platform/windows/service/`, `machine_install.rs`, `machine_setup.rs`는 `platform/windows/setup/`로 이동하는 것이 첫 후보다. shared crate의 Win32 OS 호출은 해당 crate의 Windows backend로 점진적으로 분리하되 기존 기능별 `windows.rs`를 의미 없이 중복하지 않는다. 공통 Provider는 target Device·권한·timeout·취소·artifact 흐름을 담당하고 driver handle/OS IO는 platform backend가 담당한다.
+
+공개 Rust/IPC 계약은 가능한 유지하며 module export로 이동 범위를 제한한다. 기존 GUI 소비자를 깨뜨리지 않기 위해 GUI source를 동시에 재작성하지 않는다. `platform/windows` 밖 공통 계층에 Win32 의존성을 추가하지 않고 Cargo의 target-specific dependency와 `cfg(target_os)`로 선택한다. 새 crate나 고정 LOC 목표를 구조 개선의 필수 조건으로 만들지 않는다.
+
+| 플랫폼 | Agent service / device adapter 목표 | 이번 실행 정책 |
+|---|---|---|
+| Windows x64 | SCM·Named Pipe·service SID·DPAPI/ACL·ConPTY·사용자 세션 backend·USB 접근 | 유일한 우선 구현/검증 대상. 실제 설치/서비스 등록/driver 변경은 금지 유지 |
+| macOS | 향후 launchd·OS credential/IPC·장치 접근 adapter | **미구현**. 공통 계약과 adapter 경계만 계획; native build/실행 없음 |
+| Linux | 향후 systemd·OS credential/IPC·장치 접근 adapter | **미구현**. 공통 계약과 adapter 경계만 계획; native build/실행 없음 |
+
+미구현 target은 구현 상태/unsupported 오류를 명시한다. 빈 stub가 READY나 Supported를 반환하게 만들지 않는다. 일부 POSIX 공통 코드가 존재하더라도 서비스 제품 전체가 지원된다고 표시하지 않는다.
+
+### 3.5 원격 USB·동글·외장 장치 연결과 정적 분석
+
+USB 동글을 **원격 분석 대상 장치**로 취급한다. Agent 서비스에 라이선스 dongle 필수 조건이나 동글 기반 로그인 정책을 추가하는 요구로 해석하지 않는다.
+
+> [!NOTE]
+> 이전 Python Agent에는 Ghidra/GDB 리버싱 Provider, CDB 원격 디버거 및 양방향 native/proxy 중계가 있었다. 이는 USB 전용 장치 접근 구현과 구분한다. Python 폐기 직전 snapshot과 확인 가능한 Agent 이력에서는 USB 탐색·직접 IO·동글 데이터 수집 전용 코드를 찾지 못했다. 확인 범위와 근거는 [구현 현황](../quality/implementation-status.md)에 기록한다. AS16–AS18 착수 시 기존 Rust 리버싱·중계·파일/artifact 경로의 재사용 가능성과 원격 제조사 도구 실행으로 충족되는 범위를 먼저 확인하고, 실제 공백인 장치 adapter만 추가한다. 기존 기능을 전부 신규 구현하거나 USB 기능이 Rust 전환에서 유실됐다고 단정하지 않는다.
+
+| 단계 | 원격 기능 목표 | 경계/결과 |
+|---|---|---|
+| 1. 탐색·식별 | USB topology/interface·VID/PID·serial(존재 시)·장치 class·driver/backend·연결 상태 열람 | Agent의 PC `device_id`와 외장 장치 ID를 구분. VID/PID만으로 물리 장치를 유일하게 식별하지 않음 |
+| 2. 접근 가능성 판정 | 현재 driver·service account ACL·사용 중인 interface·지원 backend로 가능한 작업 표시 | 발견 성공과 IO 연결 가능을 분리. WinUSB/HID/vendor/class backend를 실제 장치 조건에 따라 선택 |
+| 3. 원격 연결 | Agent 쪽 장치/interface handle을 열고 호출자에 opaque session handle과 lease 반환 | remote caller·Agent boot·장치 connection generation에 binding. 실제 OS handle을 외부에 그대로 노출하지 않음 |
+| 4. 정적 수집 | descriptor/interface/endpoint 정보, 장치 연관 driver/firmware 파일, 지원 protocol로 읽을 수 있는 장치 데이터·firmware image 수집 | 요청한 장치와 범위·read method·driver version·시각·수집 한도/결과/hash를 manifest로 기록. 읽을 수 없는 항목은 unavailable/unsupported로 구분 |
+| 5. 분석 artifact | 수집 bytes/파일을 spool→Gateway artifact로 전달하여 host 측 정적 분석 도구에 연결 | 원본·Device/interface identity·SHA-256·부분 수집 여부 보존. host 분석 성공과 장치의 live IO 지원을 구분 |
+| 6. 연결 종료 | close/cancel/timeout/unplug/Agent restart 때 장치 세션 폐기 | replug 뒤 stale handle로 다른 장치에 접근하지 않음. pending IO 취소·lease/handle 정리와 실패 상태 반환 |
+
+RPC 이름은 계약 설계 때 확정한다. `enumerate → inspect → open → acquire → artifact → close`가 목표 흐름이며 현재 등록된 operation이라고 표시하지 않는다. metadata 조회, 지원 장치의 분석 데이터 수집, 장치 상태 변경을 권한·승인으로 구분한다. 처음에는 탐색/descriptor/분석 artifact 수집을 구현하고 임의 write/reset/firmware flash·driver 교체·OS 전체 USB passthrough는 별도 요청 전 범위에 넣지 않는다.
+
+Windows의 WinUSB 접근은 해당 interface의 function driver 조건을 만족해야 하고 descriptor 읽기는 firmware 추출 API와 다르다. 모든 USB dongle에 공통적인 firmware dump가 가능하다고 약속하지 않는다. HID/vendor SDK 또는 문서화된 read protocol이 필요한 장치는 별도 backend를 선택하며, Service가 해당 handle을 열 수 있는지 검사한다. [Microsoft WinUSB 접근 조건](https://learn.microsoft.com/en-us/windows-hardware/drivers/usbcon/using-winusb-api-to-communicate-with-a-usb-device), [표준 USB descriptor](https://learn.microsoft.com/en-us/windows-hardware/drivers/usbcon/standard-usb-descriptors).
+
+control transfer의 IN 방향이나 endpoint read만으로 부작용이 없다고 가정하지 않는다. 대상 장치에서 확인한 수집 protocol/요청의 범위와 예산을 계약으로 명시한다. 제조사·모델·장치 class와 현재 driver는 구체적 backend를 선정할 입력이며, 제시되지 않은 장치도 전부 지원한다고 선언하지 않는다. 일반 원격 USB 연결은 Agent-mediated IO를 뜻하며, 관리 PC에 USB device를 가상으로 attach하는 USB-over-IP 제품을 자동으로 구현하는 것은 아니다.
+
 <a id="section-04"></a>
 
 ## 4. 미구현·보완 작업 및 우선순위
@@ -118,6 +202,10 @@ P0는 Agent 서비스의 독립 실행·원격 제어·권한/정리 경계, P1�
 | AS12 / P1 | **미완성: Agent 서비스 단독 배포/CI** | AS01 계약에 맞는 서비스 전용 package/recipe/설치 보호·진단 정의를 Git 추적 가능하게 배치. Client EXE/shortcut 없음. `dist/agent` 역할별 manifest/SBOM/해시, pinned compiler와 CI 정적 검사 연결. artifact 생성과 실제 서비스 등록을 별도 단계로 유지 |
 | AS13 / P2 | **미완성: 업데이트/제거·버전 복구 제품 흐름** | protected image·service command·state schema·pending 전환의 호환성, 기존 버전 보존·rollback/UNKNOWN·정리 확인·명시 detach 조건을 정의. helper restore 코드와 완결된 updater를 구분. 실제 교체/제거는 전용 환경과 별도 실행 요청 후 검사 |
 | AS14 / P3 | **미연결 확장** | 현재 catalog의 일반 서비스/registry/tasks/software·storage·memory write 등은 실제 사용 요구가 있을 때 선택. 새 OS object/API 전체를 AS01–AS12의 완료 조건에 강제하지 않음. 선택 runtime·타 OS도 요청된 범위만 추가 |
+| AS15 / P0 | **보완: 역할 중심 경로·공통/플랫폼 경계** | `apps/agent-rust`→`apps/agent` 변경과 Cargo·빌드/패키징·version/inventory·CI·검사 스크립트·AGENTS·활성 문서 참조를 같은 작업에서 갱신. §3.4에 따라 Windows service/setup 파일과 신규 hardware backend부터 책임별 이동/배치. package/EXE `racp-agent`·공개 계약·권한·동작 유지, Windows build/회귀 확인. macOS/Linux service/device는 미구현 명시; 코드 복제·불필요한 crate 분할·타 OS build 없음 |
+| AS16 / P1 | **미구현: 원격 USB/외장 장치 탐색·연결 계약** | §3.5의 ID/interface/backend/capability·opaque session/lease·권한을 정의하고 Windows enumeration/inspect/open/close와 protocol 연결. 발견/연결/수집 지원 상태를 구분, 다른 Agent/boot/replug generation의 handle 거부 |
+| AS17 / P1 | **미구현: 분석용 수집/정적 artifact 연결** | descriptor와 연관 파일 수집부터 구현하고 선정된 장치의 지원 read protocol/vendor backend를 추가. bounded IO·부분 수집·artifact hash/provenance·host 분석 연동 확인. 임의 firmware dump나 물리 memory 접근을 보편 지원으로 주장하지 않음 |
+| AS18 / P1 | **미구현: 장치 수명주기·IO 정리·진단** | unplug/replug·busy/access denied·timeout·worker crash·서비스 stop/restart 때 pending IO와 장치 handle/lease 정리. stale identity·다른 장치 재사용 거부. driver 설치/교체·장치 reset/write는 수행하지 않음 |
 
 AS01/AS12의 서비스 payload를 만들기 위해 기존 Client payload의 필수 파일 검사를 단순히 없애거나 모든 폴더를 허용하지 않는다. 역할을 명시한 계약·허용 파일·hash/ACL 검증을 유지한다. AS02는 승인 우회나 비인증 관리 API 추가를 의미하지 않는다.
 
@@ -168,16 +256,29 @@ AS01/AS12의 서비스 payload를 만들기 위해 기존 Client payload의 필�
 
 AST19는 이미 승인된 전용 서비스 환경이 없으면 user-mode 원격 확인으로 범위를 제한해 보고한다. AST20/AST21도 수행한 계정·실행 mode와 exact artifact를 기록한다. 시간·PC/runtime 부족은 보류이며 합격이 아니다.
 
+### 5.4 플랫폼 경계와 원격 외장 장치 시험
+
+| ID | 선행 조건 | 절차 및 합격 기준 |
+|---|---|---|
+| AST22 | AS15 경로/구조 이동 후 Windows artifact | `apps/agent`의 workspace/path dependency·빌드/패키징·version/inventory·CI·검사 스크립트·활성 문서 링크 검사. 활성 실행 참조에 이전 경로가 남지 않았는지 확인하되 과거 증거 참조는 구분. package/EXE `racp-agent`·`dist/agent` 출력·공개 계약/권한/dispatch·Agent-only build·SBOM의 동일 역할 확인. 공통 계층의 Win32 leakage와 macOS/Linux 미구현 capability 검사. 다른 OS를 빌드하지 않음 |
+| AST23 | protocol/정책/장치 backend fixture | 장치 ID와 PC ID 구분, composite interface·serial 부재·동일 VID/PID, 허용/거부·승인·lease·handle binding 검사. fixture는 계약/흐름 시험이며 실제 USB IO 성공으로 기록하지 않음 |
+| AST24 | 사용자가 지정한 원격 테스트 PC와 실제 USB·동글/외장 장치, 기존 driver | 원격 enumerate/inspect/open/지원 수집/artifact/close의 end-to-end 효과 확인. 실제 장치/driver/backend와 service 또는 user-mode를 기록. driver 교체나 새 서비스 등록은 하지 않으며 실제 service 계정 시험은 설치 금지 해제 후 |
+| AST25 | 허용된 테스트 장치/시간, 기존 접근 backend | unplug/replug·busy·access denied·동시 요청·cancel/timeout·Agent stop/restart를 검사. generation이 바뀐 stale handle 거부, pending IO/handle/lease 정리, 다른 장치에 요청 전이 없음 |
+| AST26 | 지원 read protocol 또는 장치 연관 파일과 분석 도구 | descriptor/raw bytes/firmware 또는 driver 파일의 범위·출처·SHA-256·부분 수집 정보 확인 후 host 정적 분석. descriptor만 읽은 결과를 firmware dump로 표시하지 않음. unsupported 항목은 실제 제한 이유 반환 |
+
+AST24–AST26의 실제 장치 접근·분리/재연결·수집은 이번 문서 작업에서 실행하지 않는다. 대상 장치·허용한 read protocol·기존 driver·계정/실행 mode를 확정한 후 수행한다. 동글을 인증키로 사용하는 시험은 이 범위에 없다.
+
 <a id="section-06"></a>
 
 ## 6. 작업 순서와 종료 기준
 
 | 묶음 | 수행 범위 | 종료 조건 |
 |---|---|---|
-| 1. Agent 서비스 독립 경계 | AS01/AS02, AST01–AST03·AST10 | GUI 파일 없이 admitted되는 service payload와 인증 headless 관리/승인 계약 확보. 이 단계만으로 서비스 실동작 합격 아님 |
+| 1. Agent 서비스 독립·플랫폼 경계 | AS15/AS01/AS02, AST01–AST03·AST10·AST22 | Windows service와 공통 경계, GUI 없는 payload·인증 관리/승인 계약 확보. 전체 파일 대이동을 원격 실행의 선행 조건으로 강제하지 않음. 실제 SCM 합격은 별도 |
 | 2. 설치 없는 원격 회귀 | AS05–AS07·AS10, AST04–AST11 | 실제 원격 실행·권한·승인·결과·취소·재연결·정리 확인. 동일 PC 및 user-mode 한계 명시 |
 | 3. 실제 service 인수 | AS03/AS04/AS08/AS09/AS11, AST12–AST17 | **현재 보류**. 허용된 전용 환경에서 service account/SCM 수명주기와 실제 원격 작업 증거 확보 |
 | 4. 서비스 배포/운영 | AS12/AS13, AST18–AST21 | artifact·배포 복구·실제 두 PC·운영 자원 인수. 설치 관련 범위는 계속 별도 실행 허가 필요 |
+| 4-A. 요청된 외장 장치 분석 | AS16–AS18, AST23–AST26 | Windows 원격 장치 탐색·연결·지원 데이터 수집·artifact·종료 인수. 현재 driver/장치 조건과 service 인수 보류를 명시 |
 | 5. 선택 확장 | AS14 | 실제 요구가 확인된 기능만 계약·권한·Provider·시험 연결 |
 
 계획 실행 시 먼저 실패를 재현하고 필요한 코드만 변경한다. 공통 Agent 기능이나 새 GUI를 처음부터 다시 만드는 작업으로 확대하지 않는다. 별도 agent/thread는 사용자 요청 없이 만들지 않는다.
@@ -188,7 +289,7 @@ AST19는 이미 승인된 전용 서비스 환경이 없으면 user-mode 원격 
 
 ## 7. 산출물·버전·증거 관리
 
-- source는 `apps/agent-rust`, `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`, 필요한 `xtask` 범위에 둔다. `apps/client-native` source/화면/실행을 이 계획의 구현·시험 대상으로 추가하지 않는다.
+- Agent 앱 source의 목표 경로는 `apps/agent`이며 AS15 완료 전 실제 경로는 `apps/agent-rust`다. 공유 source는 `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`, 필요한 `xtask` 범위에 둔다. `apps/client-native` source/화면/실행을 이 계획의 구현·시험 대상으로 추가하지 않는다.
 - 현재 standalone build는 `dist/agent/<version>/win-x64/<build-id>/build/`다. service package의 목표는 같은 Agent batch의 `packages/`이며 AS01/AS12에서 manifest/recipe/entry point를 확정한다. 아직 없는 service package command를 실행 가능한 명령으로 문서화하지 않는다.
 - 현재 Client machine recipe를 Agent 단독 recipe로 오인하지 않는다. 기본 제품에 CPython/Node/Electron/Iced GUI·token·credential·Gateway 고정 설정·Device state를 넣지 않는다. 선택 runtime은 별도 admission이다.
 - raw evidence는 `dist/verification/agent/<version>/<run-id>/`, 실제 결과·실패·수치·hash는 [구현 현황](../quality/implementation-status.md)에 기록한다. mode(`user`/`service`/`model`), 계정/SID 역할, source/lock, 기대/실제 결과, 자원 정리를 포함하며 비밀 값은 제외한다.

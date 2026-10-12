@@ -2503,3 +2503,66 @@ Computer Use Node helper는 `failed to write kernel assets: 지정된 경로를 
 코드를 대조해 SCM host/provision/bootstrap/관리/restore/IPC 경로가 이미 존재함을 확인했으며 이를 전부 미구현으로 재분류하지 않았다. 구체적 공백으로 service host의 `pin_current_payload(true)`와 Client EXE를 필수로 요구하는 `BASE_FILES`, Client를 동봉하는 machine recipe, demand-start 운영 경로를 기록했다. Agent 단독 service admission/배포, GUI 없는 관리·승인 계약, partial 복구와 자동 시작/장애 정책을 보완 항목으로 분리했다. Session 0과 사용자 세션 Broker/Guardian은 Agent 원격 desktop backend로 포함하되 GUI app·화면·IME·UIA 시험은 제외했다.
 
 이번 작업은 계획 문서 작성과 링크/범위 검토만 수행했다. source 구현·제품 버전 증가·build/test·installer 실행·SCM 서비스 등록/시작/정지·계정/ACL/기존 state 변경을 수행하지 않았다. 실제 service 인수는 현재 설치 금지로 보류하며, 기존 user-mode Agent 결과를 서비스 성공으로 이관하지 않는다.
+
+### 2026-10-12 플랫폼별 Agent 구조 및 원격 USB/동글 정적 분석 요구 반영
+
+사용자는 GUI 재설계를 별도로 진행하며 Agent도 Windows/macOS/Linux 단위로 구조를 구분하고 Windows부터 구현하도록 제안했다. 첨부 GUI 계획은 플랫폼 공통/OS adapter 분리 원칙의 참고 자료로만 읽었다. 완료 체크·GUI 구현 지시를 현재 Agent의 완료 증거나 실행 범위로 가져오지 않았다.
+
+USB 동글의 용도는 사용자가 **원격 PC에 연결된 외장 장치/동글에 접근해 정적 분석할 데이터를 수집하는 Remote 기능**이라고 명확히 했다. Agent 인증/라이선스 동글 요구로 해석하지 않는다. 현재 source와 계약 검색에서 해당 enumeration/연결/수집 Provider는 확인되지 않았으며 일반 USB 프레임 한계에 대한 문서 언급만 존재했다.
+
+[Agent 서비스 계획 §3.4/§3.5](../spec/agent-service-implementation-and-test-plan.md#section-03)에 공통·플랫폼 목표 폴더/파일과 Windows 우선/macOS·Linux 서비스/장치 어댑터 미구현 상태를 추가했다. AS15–AS18은 플랫폼 경계·장치 탐색/remote session·지원 read 수집/정적 artifact·unplug/cancel/정리 작업, AST22–AST26은 구조/계약/실제 원격 장치/IO 수명주기/분석 출처 시험으로 정리했다. driver/backend·장치별 지원 범위, descriptor와 firmware 추출의 차이, PC ID와 외장 장치 identity/generation·opaque handle·lease를 구분했다. 일반 USB-over-IP 가상 attach나 driver 교체/임의 write/reset/flash를 이 요구만으로 실행하지 않는다.
+
+이번에는 계획·AGENTS·문서 index만 변경했다. 실제 source 폴더/파일 이동, WinUSB/HID/vendor adapter 구현, 장치 탐색/IO·수집, driver 변경, 설치/서비스 등록, 타 OS build/test는 수행하지 않았다. 기준 제품 버전은 v0.1.26이며 GUI 제외·실제 설치 금지를 유지한다.
+
+### 2026-10-12 이전 Python Agent의 원격 리버싱·USB 기능 확인
+
+사용자가 Python 버전에 원격 USB/동글 분석 기능이 있었는지 물어 Git의 Python Agent 폐기 commit `ded180d` 직전 snapshot `654a0df8a75b5d6717e4677e8b360adc474cb54e`와 확인 가능한 모든 ref의 `apps/agent` 변경 이력을 read-only로 확인했다. 당시 `providers/reversing.py`와 `plugins/gdb_driver.py`·`ghidra_driver.py`에는 원격 리버싱/디버깅 코드가 있고, `providers/native_debugger.py`에는 `native.prepare/start/close` CDB 경로, `providers/proxy.py`에는 `proxy.prepare/close` 양방향 carrier가 있다. 이는 기존 원격 분석/중계 구현의 증거이며 USB 장치 전용 Provider의 증거는 아니다.
+
+해당 snapshot의 Python Agent·SDK·protocol·tests와 모든 ref의 Python Agent 변경 이력에서 USB/dongle·WinUSB/HIDAPI/libusb/PyUSB/USB-IP·SetupDi/DeviceIoControl 키워드를 검색했지만 전용 장치 탐색·연결/IO·동글 데이터 수집 구현은 찾지 못했다. `apps/agent/pyproject.toml`에도 USB 전용 라이브러리 의존성은 없지만, 의존성 부재만으로 기능 부재를 판정하지 않았다. 저장소 밖 도구·미커밋 코드·제공되지 않은 이력은 확인 범위에 포함되지 않는다. 기존 shell 실행/파일 회수/중계를 통해 외부 제조사 도구를 사용했을 가능성과 Agent 내 USB 전용 구현을 구분한다.
+
+[Agent 서비스 계획 §3.5](../spec/agent-service-implementation-and-test-plan.md#section-03)에 기존 리버싱·중계·artifact 기능의 재사용 우선 및 전용 장치 adapter 공백만 추가하는 원칙을 반영했다. 현재 Rust 기준 미구현 판단을 과거 Python 전체의 기능 부재나 migration 유실 증거로 확대하지 않는다. 이번 확인은 소스/이력 열람과 문서 수정이며 실제 장치 IO·외부 도구 실행·설치·서비스 작업·build/test는 수행하지 않았다.
+
+### 2026-10-12 Agent 역할 중심 디렉터리 계획 갱신
+
+사용자 요청에 따라 [Agent 서비스 계획](../spec/agent-service-implementation-and-test-plan.md)의 목표 앱 경로를 `apps/agent`로 변경했다. 현재 실제 경로 `apps/agent-rust`와 목표를 구분하고 §3.4·AS15·AST22·산출물 관리에 경로 변경과 Cargo workspace/path dependency·빌드/패키징·version/inventory·CI·검사 스크립트·AGENTS·활성 문서 참조의 동시 갱신을 포함했다. package/EXE `racp-agent`, 공유 `crates/racp-*`, 출력 `dist/agent`는 유지하며 과거 source/manifest/hash 증거는 당시 경로를 보존하도록 명시했다.
+
+이번 작업은 계획 문서 수정이며 실제 source 디렉터리 이동·설정 변경·제품 빌드/시험·설치·서비스 작업은 수행하지 않았다. 제품 기준선 v0.1.26, Windows 우선, GUI 제외 및 실제 설치 금지를 유지한다.
+
+### 2026-10-13 Native Client Enterprise GUI 현대화 및 검증 (`feature/enterprise-client-gui`)
+
+사용자 지시(`/goal`)에 따라 `feature/enterprise-client-gui` 브랜치에서 Native Client GUI(`apps/client-native`)의 엔터프라이즈 모던 디자인 개편, 단일 파일 분해, i18n 언어팩 독립화, 카테고리 트리 및 SVG 3-Way 선택기 구현을 완주했다.
+
+1. **에셋 파이프라인 및 SVG 도입 (Phase 1)**:
+   - 이모지를 전면 배제하고 프로덕션 24x24 viewBox SVG 벡터 아이콘 11종 제작 및 내장 (`apps/client-native/assets/icons/`: `deny.svg`, `prompt.svg`, `allow.svg`, `monitor.svg`, `folder.svg`, `file_edit.svg`, `terminal.svg`, `search.svg`, `refresh.svg`, `copy.svg`, `trash.svg`).
+   - `Cargo.toml`에 `iced = { workspace = true, features = ["advanced", "svg"] }`, `chrono = { workspace = true }` 연동.
+   - Oracle MCP 1차 사전 아키텍처 검토 완료 (Verdict: GO).
+
+2. **독립 다국어 i18n 시스템 구축 (Phase 2)**:
+   - `apps/client-native/src/i18n/mod.rs`, `ko.rs`, `en.rs` 분리.
+   - 정적 타입 체크가 보장되는 `TextKey` 열거형(70개 이상의 UI 텍스트 키) 및 `tr!` 매크로 구현.
+   - OS 기본 언어 자동 감지(`detect_os_language()`, Windows LCID `0x0412` 및 POSIX `LANG`/`LC_ALL` 대응).
+   - 설정 탭에서 한국어/영어 즉시 전환(`SetLanguage(Language)`)을 지원하며 폼 입력 데이터 보존.
+
+3. **엔터프라이즈 디자인 시스템 및 재사용 위젯 (Phase 3)**:
+   - Dark Slate-950 팔레트와 일관된 컨테이너/버튼/카드 스타일 토큰 (`src/theme/mod.rs`, `src/theme/styles.rs`).
+   - 메모리 내장형 벡터 아이콘 렌더러 (`src/components/icons.rs`).
+   - 거부/승인 필요/허용 3-Way SVG 세그먼트 버튼 (`src/components/grant_selector.rs`) — 계약 enum `Grant::Deny`, `Grant::RequireApproval`, `Grant::Allow` 직접 바인딩.
+   - 카테고리 아코디언 노드 (`src/components/category_accordion.rs`) — 카테고리 헤더, 설명, 켜기/끄기 토글, `일괄 거부`/`일괄 승인`/`일괄 허용` 액션 컨트롤.
+   - 실시간 감사 로그 터미널 (`src/components/terminal_log.rs`) — `ControlCompletion` 영수증(Cancellation, Policy, Stop) 포맷팅, 복사/지우기 툴바, 모노스페이스 콘솔 레이아웃.
+   - 시맨틱 상태 및 위험도 배지 (`src/components/status_badge.rs`).
+   - 기존 `controls.rs`의 `custom_button`, `button`, `text`, `text_input`, `checkbox`에 AccessKit UIA 접근성(Role::Button, Role::TextInput, Role::ComboBox) 100% 보존.
+
+4. **표준 뷰 파일 세분화 및 분해 (Phase 4)**:
+   - `src/views/status.rs`: 초기 `.racp` 온보딩 폼(경로, 확인 버튼, 게이트웨이/만료/CA 해시 미리보기, SHA-256 입력, 작업 폴더 초안, 실행 프로필 픽리스트, 미결 경고, 등록 제출), 등록된 상태 요약, 서비스 화면 제어 연결/해제, 실행 작업 실시간 취소(`CancelOperation`), 최근 제어 영수증 터미널 로그 스트림.
+   - `src/views/permissions.rs`: 제로 트러스트 매트릭스, CAS 정책 커밋(`SavePolicy`), 전역 프리셋(`*` 와일드카드 일괄 적용), 실행 제약(작업 영역, timeout, output, allow/deny 바이너리 목록) 편집 및 복원.
+   - `src/views/approvals.rs`: 대기 중인 승인 요청 실시간 큐, 고위험/중위험 태그, TTL 배지, 1클릭 단건 승인/거절.
+   - `src/views/runtime.rs`: 외부 격리 런타임 및 분석 호스트(Chromium, CDB, GDB, Ghidra) manifest 및 해시 승인 폼.
+   - `src/views/settings.rs`: 독립 언어팩 선택기(한국어/영어), 최대 15개 네임드 작업 폴더 관리(추가/식별자/경로/삭제), Windows 로그인 시 자동 시작 토글.
+
+5. **App 리팩토링 및 검증 (Phase 5)**:
+   - `src/app.rs`: 500줄 이상의 인라인 모놀리식 뷰 코드를 `views::*`로 위임. 네비게이션 탭 하이라이트 및 실시간 대기 승인 건수 배지, 하단 글로벌 툴바/오류 알림 스트림 완벽 유지.
+   - `cargo test -p racp-client-native`: 신규 컴포넌트, 다국어 팩, 5개 뷰 렌더링 무결성 등 6개 단위 테스트 **100% 통과 (6 PASS / 0 FAIL)**.
+   - `cargo check --workspace`: 워크스페이스 전역 컴파일 에러 0건.
+   - `cargo clippy -p racp-client-native`: 신규 UI 및 뷰 모듈 클리피 경고 0건.
+   - Oracle MCP 2차 아키텍처 및 릴리즈 게이트 자문 완료.
+
