@@ -7,11 +7,15 @@ import os
 import subprocess
 from pathlib import Path
 
+from racp_domain.version import VERSION
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--compiler", type=Path, required=True)
-    parser.add_argument("--output", type=Path, default=Path("dist/re-fixture"))
+    parser.add_argument(
+        "--output", type=Path, default=Path("dist/verification/fixtures") / VERSION / "re-fixture"
+    )
     args = parser.parse_args()
     source = Path("tests/fixtures/re_program.c").resolve(strict=True)
     output = args.output.resolve()

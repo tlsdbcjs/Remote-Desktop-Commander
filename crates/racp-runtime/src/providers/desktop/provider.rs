@@ -24,29 +24,30 @@ use tokio_util::sync::CancellationToken;
 
 pub(super) enum BrokerProcess {
     Local(OwnedProcess),
-    Registered(super::login::BrokerJob),
+    Joined(PinnedPeer),
 }
 impl BrokerProcess {
     pub(super) fn alive(&mut self) -> bool {
         match self {
             Self::Local(p) => p.poll().is_ok_and(|v| v.is_none()),
-            Self::Registered(p) => p.alive(),
+            Self::Joined(p) => p.alive().is_ok(),
         }
     }
     fn kill_tree(&mut self) -> Result<(), RacpError> {
         match self {
             Self::Local(p) => p.kill_tree(),
-            Self::Registered(p) => p.kill(),
+            Self::Joined(_) => Ok(()),
         }
     }
     fn tree_empty(&mut self) -> Result<bool, RacpError> {
         match self {
             Self::Local(p) => p.tree_empty(),
-            Self::Registered(p) => p.empty(),
+            Self::Joined(p) => p.exited(),
         }
     }
     fn drain(&mut self) {
-        if let Self::Local(p) = self {
+        {
+            let Self::Local(p) = self else { return };
             let mut bytes = [0u8; 4096];
             for pipe in [&mut p.stdout, &mut p.stderr] {
                 for _ in 0..16 {
@@ -61,13 +62,19 @@ impl BrokerProcess {
 }
 pub(super) enum GuardianProcess {
     Local(std::process::Child),
-    Registered(PinnedPeer),
+    Joined(PinnedPeer),
 }
 impl GuardianProcess {
-    fn alive(&mut self) -> bool {
+    fn clean_exit(&mut self) -> Result<bool, RacpError> {
         match self {
-            Self::Local(p) => p.try_wait().is_ok_and(|v| v.is_none()),
-            Self::Registered(p) => p.alive().is_ok(),
+            Self::Local(process) => Ok(process.try_wait()?.is_some_and(|status| status.success())),
+            Self::Joined(peer) => peer.exit_success(),
+        }
+    }
+    fn alive(&mut self) -> Result<bool, RacpError> {
+        match self {
+            Self::Local(p) => Ok(p.try_wait()?.is_none()),
+            Self::Joined(p) => Ok(!p.exited()?),
         }
     }
 }
@@ -79,6 +86,10 @@ pub(super) struct Child {
     pub(super) peer: PeerIdentity,
     pub(super) config: PairConfig,
     pub(super) path: PathBuf,
+    pub(super) _pair_pin: Option<racp_core::Directory>,
+    pub(super) owner: Option<PeerIdentity>,
+    pub(super) bucket_cleaned: bool,
+    pub(super) ledger: Option<super::session_ledger::Record>,
 }
 impl Child {
     pub(super) fn stop(&mut self) -> Result<(), RacpError> {
@@ -87,7 +98,7 @@ impl Child {
                 &self.config,
                 &self.peer,
                 json!({"operation":"broker.stop"}),
-                Duration::from_secs(3),
+                Duration::from_secs(1),
             );
         }
         self.process.kill_tree()?;
@@ -98,59 +109,73 @@ impl Child {
             }
             std::thread::sleep(Duration::from_millis(20));
         }
-        racp_core::atomic_write(&self.path.with_file_name("guardian-stop"), b"", true)?;
-        while self.guardian.alive() {
+        if self.guardian.alive()? {
+            racp_core::atomic_write(&self.path.with_file_name("guardian-stop"), b"", true)?;
+        }
+        while self.guardian.alive()? {
             if Instant::now() >= deadline {
                 return Err(RacpError::new("CLEANUP_FAILED"));
             }
             std::thread::sleep(Duration::from_millis(20));
         }
+        if !self.guardian.clean_exit()? {
+            return Err(RacpError::new("CLEANUP_UNKNOWN"));
+        }
         let _ = std::fs::remove_file(&self.path);
+        if let Some(record) = &mut self.ledger {
+            record.confirm_cleanup()?;
+        }
+        if let Some(pin) = self._pair_pin.take() {
+            super::service_session::cleanup_bucket(pin)?;
+            self.bucket_cleaned = true;
+        } else if self.owner.is_some() && !self.bucket_cleaned {
+            // A prior failed deletion must never become successful merely because its pin was consumed.
+            return Err(RacpError::new("CLEANUP_FAILED"));
+        }
+        if let Some(record) = &self.ledger {
+            record.complete()?;
+        }
+        self.ledger = None;
         Ok(())
     }
 }
 #[derive(Clone)]
 pub struct Desktop {
+    pending: Arc<Mutex<BTreeMap<String, super::service_session::Pending>>>,
     child: Arc<Mutex<BTreeMap<u32, Child>>>,
-    registrar: Arc<Mutex<Option<super::login::Registrar>>>,
     status: Arc<Mutex<Value>>,
     spool: PathBuf,
     device: String,
-    enabled: bool,
+    enabled: Arc<AtomicBool>,
     settings: AgentSettings,
     connected: Arc<AtomicBool>,
+    policy: Arc<Mutex<Option<racp_core::policy::PolicySnapshot>>>,
 }
 impl Desktop {
     pub fn new(settings: &AgentSettings) -> Result<Self, RacpError> {
         let spool = settings.data_dir.join("spool");
         private_dir(&spool)?;
         let provider = Self {
+            pending: Arc::new(Mutex::new(BTreeMap::new())),
             child: Arc::new(Mutex::new(BTreeMap::new())),
-            registrar: Arc::new(Mutex::new(None)),
             status: Arc::new(Mutex::new(
                 json!({"available":false,"error_code":if settings.desktop_enabled { "SESSION_UNAVAILABLE" } else { "DESKTOP_NOT_CONFIGURED" }}),
             )),
             spool,
             device: settings.device_id.clone(),
-            enabled: settings.desktop_enabled,
+            enabled: Arc::new(AtomicBool::new(settings.desktop_enabled)),
             settings: settings.clone(),
             connected: Arc::new(AtomicBool::new(false)),
+            policy: Arc::new(Mutex::new(None)),
         };
-        if provider.enabled {
+        if provider.enabled.load(Ordering::Acquire) {
             let actor = PinnedPeer::open(std::process::id())?;
             if actor.identity().session == 0 {
-                if settings.data_dir.join("service-login.json").try_exists()? {
-                    *provider
-                        .registrar
-                        .lock()
-                        .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? =
-                        Some(super::login::Registrar::start(
-                            settings,
-                            provider.child.clone(),
-                            provider.connected.clone(),
-                            provider.status.clone(),
-                        )?);
-                }
+                provider
+                    .status
+                    .lock()
+                    .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?["error_code"] =
+                    json!("NATIVE_SERVICE_SESSION_NOT_CONNECTED");
                 return Ok(provider);
             }
             if let Ok(child) = Self::launch(settings) {
@@ -185,7 +210,7 @@ impl Desktop {
             .child
             .lock()
             .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
-        if !self.enabled
+        if !self.enabled.load(Ordering::Acquire)
             || !self.connected.load(Ordering::Acquire)
             || !children.is_empty()
             || PinnedPeer::open(std::process::id())?.identity().session == 0
@@ -220,7 +245,6 @@ impl Desktop {
         let pair_id = new_id("pair").trim_start_matches("pair_").to_owned();
         let root = settings.data_dir.join("desktop").join(&pair_id);
         private_dir(&root)?;
-        let path = root.join("pair.bin");
         use base64::Engine;
         let random: [u8; 32] = rand::random();
         let config = PairConfig {
@@ -236,17 +260,33 @@ impl Desktop {
             secret: base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(random),
             job_name: None,
         };
+        Self::launch_paired(config, root, &settings.device_id)
+    }
+    pub(super) fn launch_paired(
+        config: PairConfig,
+        root: PathBuf,
+        device: &str,
+    ) -> Result<Child, RacpError> {
+        let path = root.join("pair.bin");
         config.validate()?;
+        let launcher = PinnedPeer::open(std::process::id())?;
+        config.require_broker(launcher.identity())?;
         SecretStore::new(path.clone()).save(
             &BTreeMap::from([
                 ("pair".into(), serde_json::to_string(&config)?),
-                ("device_id".into(), settings.device_id.clone()),
+                ("device_id".into(), device.to_owned()),
+                ("launcher_pid".into(), launcher.identity().pid.to_string()),
+                (
+                    "launcher_created".into(),
+                    launcher.identity().created.to_string(),
+                ),
             ]),
             false,
         )?;
         use std::os::windows::process::CommandExt;
         use std::process::{Command, Stdio};
-        let mut guardian = Command::new(std::env::current_exe()?)
+        let executable = std::env::current_exe()?.with_file_name("racp-agent.exe");
+        let mut guardian = Command::new(&executable)
             .args(["guardian", "--pair-config"])
             .arg(&path)
             .stdin(Stdio::null())
@@ -255,67 +295,90 @@ impl Desktop {
             .creation_flags(0x01000000 | 0x08000000)
             .spawn()
             .map_err(|_| RacpError::new("SESSION_UNAVAILABLE"))?;
-        let guardian_protection = ProtectedProcess::register(guardian.id())?;
-        let guardian_peer = PinnedPeer::open(guardian.id())?;
-        config.require_broker(guardian_peer.identity())?;
-        let ready_deadline = Instant::now() + Duration::from_secs(3);
-        loop {
-            if guardian.try_wait()?.is_some() || Instant::now() >= ready_deadline {
-                let _ = std::fs::remove_file(&path);
-                return Err(RacpError::new("SESSION_UNAVAILABLE"));
-            }
-            if let Ok(bytes) =
-                racp_core::read_bounded(&path.with_file_name("guardian-status.json"), 4096, true)
-            {
-                if let Ok(status) = serde_json::from_slice::<Value>(&bytes) {
-                    if status["pid"] == guardian.id()
-                        && status["create_time"] == guardian_peer.identity().created
-                        && status["healthy"] == true
-                        && status["outside_all_jobs"] == true
-                    {
-                        break;
+        let result = (|| {
+            let guardian_protection = ProtectedProcess::register(guardian.id())?;
+            let guardian_peer = PinnedPeer::open(guardian.id())?;
+            config.require_broker(guardian_peer.identity())?;
+            let ready_deadline = Instant::now() + Duration::from_secs(3);
+            loop {
+                if guardian.try_wait()?.is_some() || Instant::now() >= ready_deadline {
+                    let _ = std::fs::remove_file(&path);
+                    return Err(RacpError::new("SESSION_UNAVAILABLE"));
+                }
+                if let Ok(bytes) = racp_core::read_bounded(
+                    &path.with_file_name("guardian-status.json"),
+                    4096,
+                    true,
+                ) {
+                    if let Ok(status) = serde_json::from_slice::<Value>(&bytes) {
+                        if status["pid"] == guardian.id()
+                            && status["create_time"] == guardian_peer.identity().created
+                            && status["healthy"] == true
+                            && status["outside_all_jobs"] == true
+                        {
+                            break;
+                        }
                     }
                 }
+                std::thread::sleep(Duration::from_millis(20));
             }
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        let mut values = SecretStore::new(path.clone()).load()?;
-        values.insert("guardian_pid".into(), guardian.id().to_string());
-        values.insert(
-            "guardian_created".into(),
-            guardian_peer.identity().created.to_string(),
-        );
-        SecretStore::new(path.clone()).save(&values, true)?;
-        let guards = Workspaces::new(&root, &[])?;
-        let spawn = OwnedProcess::spawn(CommandSpec {
-            argv: vec![
-                std::env::current_exe()?.to_string_lossy().into_owned(),
-                "broker".into(),
-                "--pair-config".into(),
-                path.to_string_lossy().into_owned(),
-            ],
-            environment: containment::environment(&Value::Null)?,
-            cwd: guards.directory("default", &root)?,
-        });
-        let process = match spawn {
-            Ok(process) => process,
-            Err(e) => {
+            let mut values = SecretStore::new(path.clone()).load()?;
+            values.insert("guardian_pid".into(), guardian.id().to_string());
+            values.insert(
+                "guardian_created".into(),
+                guardian_peer.identity().created.to_string(),
+            );
+            SecretStore::new(path.clone()).save(&values, true)?;
+            let guards = Workspaces::new(&root, &[])?;
+            let spawn = OwnedProcess::spawn(CommandSpec {
+                argv: vec![
+                    executable.to_string_lossy().into_owned(),
+                    "broker".into(),
+                    "--pair-config".into(),
+                    path.to_string_lossy().into_owned(),
+                ],
+                environment: containment::environment(&Value::Null)?,
+                cwd: guards.directory("default", &root)?,
+            });
+            let process = match spawn {
+                Ok(process) => process,
+                Err(e) => {
+                    let _ = std::fs::remove_file(&path);
+                    return Err(e);
+                }
+            };
+            let protection = ProtectedProcess::register(process.pid())?;
+            let peer = PinnedPeer::open(process.pid())?.identity().clone();
+            config.require_broker(&peer)?;
+            Ok((guardian_protection, process, protection, peer))
+        })();
+        match result {
+            Ok((guardian_protection, process, protection, peer)) => Ok(Child {
+                guardian: GuardianProcess::Local(guardian),
+                _guardian_protection: guardian_protection,
+                process: BrokerProcess::Local(process),
+                _protection: protection,
+                peer,
+                config,
+                path,
+                _pair_pin: None,
+                owner: None,
+                bucket_cleaned: false,
+                ledger: None,
+            }),
+            Err(error) => {
+                racp_core::atomic_write(&path.with_file_name("guardian-stop"), b"", true)?;
+                let deadline = Instant::now() + Duration::from_secs(3);
+                while guardian.try_wait()?.is_none() {
+                    if Instant::now() >= deadline {
+                        return Err(RacpError::new("CLEANUP_FAILED"));
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
                 let _ = std::fs::remove_file(&path);
-                return Err(e);
+                Err(error)
             }
-        };
-        let protection = ProtectedProcess::register(process.pid())?;
-        let peer = PinnedPeer::open(process.pid())?.identity().clone();
-        config.require_broker(&peer)?;
-        Ok(Child {
-            guardian: GuardianProcess::Local(guardian),
-            _guardian_protection: guardian_protection,
-            process: BrokerProcess::Local(process),
-            _protection: protection,
-            peer,
-            config,
-            path,
-        })
+        }
     }
     fn materialize(
         &self,
@@ -434,7 +497,9 @@ impl Desktop {
                     }
                 }
             }
-            return Ok(json!({"sessions":sessions,"configured":self.enabled}));
+            return Ok(
+                json!({"sessions":sessions,"configured":self.enabled.load(Ordering::Acquire)}),
+            );
         }
         let session = request["payload"]["session_id"]
             .as_u64()
@@ -568,21 +633,212 @@ impl Desktop {
     }
     fn shutdown(&self) -> Result<(), RacpError> {
         self.connected.store(false, Ordering::Release);
-        let mut registrar = self
-            .registrar
-            .lock()
-            .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
-            .take();
-        if let Some(registrar) = registrar.as_mut() {
-            registrar.stop()?;
-        }
-        // Keep query grants until authenticated Broker shutdown has completed.
+        self.clear_pending()?;
         self.retire_children()?;
-        drop(registrar);
         Ok(())
+    }
+    fn clear_pending(&self) -> Result<(), RacpError> {
+        let pending = std::mem::take(
+            &mut *self
+                .pending
+                .lock()
+                .map_err(|_| RacpError::new("CLEANUP_FAILED"))?,
+        );
+        let mut failure = None;
+        for value in pending.into_values() {
+            if let Err(error) = value.discard() {
+                failure = Some(error);
+            }
+        }
+        failure.map_or(Ok(()), Err)
     }
 }
 impl Provider for Desktop {
+    fn remove_desktop(
+        &self,
+        peer: PeerIdentity,
+        pair: String,
+    ) -> BoxFuture<'_, Result<(), RacpError>> {
+        let provider = self.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                let mut pending = provider
+                    .pending
+                    .lock()
+                    .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+                if pending.get(&pair).is_some_and(|item| item.accepts(&peer)) {
+                    return pending
+                        .remove(&pair)
+                        .ok_or_else(|| RacpError::new("PERMISSION_DENIED"))?
+                        .discard();
+                }
+                drop(pending);
+                let mut children = provider
+                    .child
+                    .lock()
+                    .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+                let child = children
+                    .get_mut(&peer.session)
+                    .filter(|child| {
+                        child.config.pair_id == pair
+                            && child.owner.as_ref().is_some_and(|owner| {
+                                owner.pid == peer.pid
+                                    && owner.created == peer.created
+                                    && owner.sid == peer.sid
+                                    && owner.session == peer.session
+                            })
+                    })
+                    .ok_or_else(|| RacpError::new("PERMISSION_DENIED"))?;
+                child.stop()?;
+                children.remove(&peer.session);
+                Ok(())
+            })
+            .await
+            .map_err(|_| RacpError::new("CLEANUP_UNKNOWN"))?
+        })
+    }
+    fn prepare_desktop(
+        &self,
+        peer: PeerIdentity,
+    ) -> BoxFuture<'_, Result<racp_contract::local_ipc::DesktopSeed, RacpError>> {
+        let provider = self.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                if !provider.enabled.load(Ordering::Acquire) {
+                    return Err(RacpError::new("PERMISSION_DENIED"));
+                }
+                {
+                    let mut children = provider
+                        .child
+                        .lock()
+                        .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+                    if let Some(child) = children.get_mut(&peer.session) {
+                        if child.process.alive() {
+                            return Err(RacpError::new("RESOURCE_BUSY"));
+                        }
+                        child.stop()?;
+                        children.remove(&peer.session);
+                    }
+                }
+                let mut pending = provider
+                    .pending
+                    .lock()
+                    .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+                let expired: Vec<_> = pending
+                    .iter()
+                    .filter_map(|(id, value)| value.expired().then_some(id.clone()))
+                    .collect();
+                for id in expired {
+                    if let Some(value) = pending.remove(&id) {
+                        value.discard()?;
+                    }
+                }
+                if pending.len() >= 16
+                    || pending
+                        .values()
+                        .any(|value| value.config.session_id == peer.session)
+                {
+                    return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+                }
+                let value = super::service_session::Pending::new(&provider.settings, peer)?;
+                let seed = value.seed();
+                pending.insert(seed.pair_id.clone(), value);
+                Ok(seed)
+            })
+            .await
+            .map_err(|_| RacpError::new("EXECUTION_UNKNOWN"))?
+        })
+    }
+    fn register_desktop(
+        &self,
+        peer: PeerIdentity,
+        pair: String,
+        broker: u32,
+        birth: f64,
+        guardian: u32,
+        guardian_birth: f64,
+    ) -> BoxFuture<'_, Result<(), RacpError>> {
+        let provider = self.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                if !provider.enabled.load(Ordering::Acquire) {
+                    return Err(RacpError::new("PERMISSION_DENIED"));
+                }
+                let mut entries = provider
+                    .pending
+                    .lock()
+                    .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+                if !entries.get(&pair).is_some_and(|entry| entry.accepts(&peer)) {
+                    return Err(RacpError::new("PERMISSION_DENIED"));
+                }
+                let pending = entries
+                    .remove(&pair)
+                    .ok_or_else(|| RacpError::new("PERMISSION_DENIED"))?;
+                drop(entries);
+                let mut child = pending.register(&peer, broker, birth, guardian, guardian_birth)?;
+                let mut children = provider
+                    .child
+                    .lock()
+                    .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+                if children.contains_key(&peer.session) {
+                    child.stop()?;
+                    return Err(RacpError::new("RESOURCE_BUSY"));
+                }
+                // Registration already completed the mutual status exchange.
+                *provider.status.lock().map_err(|_|RacpError::new("LOCAL_STATE_FAILED"))?=
+                    json!({"session_id":peer.session,"available":true,"broker_running":true,"error_code":null});
+                children.insert(peer.session, child);
+                Ok(())
+            })
+            .await
+            .map_err(|_| RacpError::new("EXECUTION_UNKNOWN"))?
+        })
+    }
+    fn policy_changed(
+        &self,
+        policy: racp_core::policy::PolicySnapshot,
+    ) -> BoxFuture<'_, Result<(), RacpError>> {
+        let provider = self.clone();
+        Box::pin(async move {
+            let changed = provider
+                .policy
+                .lock()
+                .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+                .replace(policy.clone())
+                .is_some();
+            let permissions = policy.permissions()?;
+            let catalog: Vec<Value> = serde_json::from_str(include_str!(
+                "../../../../../packages/protocol/src/racp_protocol/permission_catalog.json"
+            ))?;
+            let enabled = catalog.iter().any(|item| {
+                item["implementation"] == "rpc"
+                    && item["id"].as_str().is_some_and(|id| {
+                        id.starts_with("desktop.") || id.starts_with("clipboard.")
+                    })
+                    && !permissions["disabled_categories"]
+                        .as_array()
+                        .is_some_and(|v| v.contains(&item["category"]))
+                    && matches!(
+                        permissions["grants"][item["id"].as_str().unwrap()].as_str(),
+                        Some("allow" | "require_approval")
+                    )
+            });
+            provider.enabled.store(enabled, Ordering::Release);
+            tokio::task::spawn_blocking(move || {
+                if changed {
+                    provider.clear_pending()?;
+                    provider.retire_children()?;
+                }
+                if enabled {
+                    provider.restore_foreground()
+                } else {
+                    provider.shutdown()
+                }
+            })
+            .await
+            .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
+        })
+    }
     fn connection(&self, epoch: u64, ttl: Duration) {
         let active = epoch > 0 && !ttl.is_zero();
         let previous = self.connected.swap(active, Ordering::AcqRel);
@@ -594,19 +850,31 @@ impl Provider for Desktop {
     fn expire_lease(&self) -> BoxFuture<'_, Result<(), RacpError>> {
         let provider = self.clone();
         Box::pin(async move {
-            tokio::task::spawn_blocking(move || provider.retire_children())
-                .await
-                .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
+            tokio::task::spawn_blocking(move || {
+                provider.clear_pending()?;
+                provider.retire_children()
+            })
+            .await
+            .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
         })
     }
     fn capabilities(&self) -> Vec<Value> {
-        let status = self
+        let mut status = self
             .status
             .lock()
             .map(|s| s.clone())
             .unwrap_or_else(|_| json!({"available":false}));
+        let live = self
+            .child
+            .lock()
+            .is_ok_and(|mut children| children.values_mut().any(|child| child.process.alive()));
+        status["broker_running"] = json!(live);
+        if !live {
+            status["available"] = json!(false);
+            status["error_code"] = json!("SESSION_UNAVAILABLE");
+        }
         vec![
-            json!({"name":"desktop","version":"1.0.0","supported":true,"enabled":self.enabled,"healthy":status["broker_running"]==true,"unavailable_reason":status["error_code"],"operations":["clipboard.state","clipboard.read","clipboard.write","desktop.sessions","desktop.monitors","desktop.windows","desktop.foreground","desktop.screenshot","desktop.inspect","desktop.lease_acquire","desktop.lease_renew","desktop.lease_release","desktop.activate","desktop.move","desktop.click","desktop.type","desktop.key","desktop.scroll","desktop.drag","desktop.invoke","desktop.set_value"],"attributes":{"backend":"rust-windows-paired-session-broker","sessions":[status],"input_guardian_available":true,"capture":"visible_rectangle","service_cross_session_registration":true,"service_cross_session_launch":false}}),
+            json!({"name":"desktop","version":"1.0.0","supported":true,"enabled":self.enabled.load(Ordering::Acquire),"healthy":status["broker_running"]==true,"unavailable_reason":status["error_code"],"operations":["clipboard.state","clipboard.read","clipboard.write","desktop.sessions","desktop.monitors","desktop.windows","desktop.foreground","desktop.screenshot","desktop.inspect","desktop.lease_acquire","desktop.lease_renew","desktop.lease_release","desktop.activate","desktop.move","desktop.click","desktop.type","desktop.key","desktop.scroll","desktop.drag","desktop.invoke","desktop.set_value"],"attributes":{"backend":"rust-windows-paired-session-broker","sessions":[status],"input_guardian_available":true,"capture":"visible_rectangle","service_cross_session_registration":true,"service_cross_session_launch":false}}),
         ]
     }
     fn execute(

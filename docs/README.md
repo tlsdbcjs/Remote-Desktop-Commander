@@ -1,8 +1,8 @@
 # RACP 기술 문서 포털 (Documentation Portal)
 
 > **Document ID**: `DOC-HUB-INDEX`  
-> **Status**: Active · **Target Version**: v0.1.20  
-> **Last Updated**: 2026-10-10 · **Classification**: Documentation Portal & Index
+> **Status**: Active · **Target Version**: v0.1.26\
+> **Last Updated**: 2026-10-12 · **Classification**: Documentation Portal & Index
 
 ---
 
@@ -16,6 +16,9 @@
 
 > [!IMPORTANT]
 > **[Client 영역 전체 Rust 전환 작업 계획서](spec/rust-client-migration-plan.md)** — GUI·상주 Agent·OS 제어·Client 배포를 Rust로 재작성하고 구 Client를 제거하는 현재 실행 기준이다. Gateway는 Python을 유지한다.
+
+> [!IMPORTANT]
+> **[Agent 서비스 구현 및 검증 작업 계획](spec/agent-service-implementation-and-test-plan.md)** — GUI 재구성을 제외한 현재 후속 작업 기준이다. Agent 단독 서비스 배포·관리/승인·원격 실행·SCM·계정/복구와 시험을 정의한다. 실제 설치 금지를 유지하며 계획서만으로 구현·테스트를 자동 실행하지 않는다.
 
 > [!IMPORTANT]
 > **[Windows 작업 및 테스트 계획서 바로 열기](spec/windows-engineering-plan.md)** — 공식 위치는 `docs/spec/windows-engineering-plan.md`다. 이전 한글 파일 경로 대신 이 링크를 사용한다.
@@ -64,15 +67,17 @@ RACP 플랫폼의 핵심 설계 원칙, 프로토콜 계약, 상태 머신, 권�
 - [RACP 종합 개발정의서 v1.1](spec/racp-specification-v1.1.md) (`DOC-SPEC-CORE-v1.1`): 시스템 마스터 설계서
 - [Agent 세부 권한 및 원격 OS 기능 아키텍처](spec/agent-permissions-and-capabilities.md) (`DOC-SPEC-AGENT-PERMISSIONS`): Client 설정·Agent 검사·18개 기능 분류, 향후 중앙 정책은 설계 경계만 정의
 - [Agent 세부 권한 구현 계획](spec/agent-permissions-implementation-plan.md) (`DOC-PLAN-AGENT-PERMISSIONS`): 대체된 Python/Electron 과거 계획 · 후속 실행은 Rust 전환 계획 참조
-- [Client 영역 전체 Rust 전환 작업 계획서](spec/rust-client-migration-plan.md) (`DOC-PLAN-RUST-CLIENT`): 현재 실행 기준 · Rust native UI/Agent·R00–R14·전체 기능 추적·플랫폼/성능 gate·레거시 제거
+- [Client 영역 전체 Rust 전환 작업 계획서](spec/rust-client-migration-plan.md) (`DOC-PLAN-RUST-CLIENT`): 향후 전체 전환 기준 · v0.1.21 코드 재사용·R00–R14 세부 작업·62개 확장 권한 배정·검증 보류와 완료 조건
+- [Agent 서비스 구현 및 검증 계획](spec/agent-service-implementation-and-test-plan.md) (`DOC-PLAN-AGENT-SERVICE`): GUI 제외, 서비스 단독 계약·원격 실행·lifecycle/identity/복구·시험. 실제 설치 시험 보류
+- [이전 Native Client·Agent 통합 계획](spec/native-client-completion-and-test-plan.md) (`DOC-PLAN-NATIVE-COMPLETION`, Superseded): GUI 포함 당시 작업 이력. 현재 서비스 작업의 필수 선행 조건으로 사용하지 않음
 - [Gateway 웹 관리 서버 작업 계획서](spec/gateway-web-management-plan.md) (`DOC-SPEC-GATEWAY-WEB-PLAN`): v0.1.15 기준선 · 설계·13개 작업·29개 시험군·3개 묶음 인수
 - [Windows 작업 및 테스트 계획서](spec/windows-engineering-plan.md) (`DOC-SPEC-WIN-v1.0`): 문서 개정 1.5 · 작업·시험·실제 두 PC 인수·배포 완료 기준
-- [Client·Agent Rust 전환 설계](spec/client-rust-migration.md) (`DOC-SPEC-CLIENT-RUST`, Active): 승인된 전환 범위, 기존 기능·데이터 호환성, Python 제거 및 완료 조건
-- [Client·Agent Rust 구현 계획](spec/client-rust-implementation-plan.md) (`DOC-PLAN-CLIENT-RUST`, Draft): 10개 task의 파일·인터페이스·검증 절차와 실행 방식 검토
+- [Client·Agent Rust 전환 설계](spec/client-rust-migration.md) (`DOC-SPEC-CLIENT-RUST`, Superseded): v0.1.21 Tauri/React 이식 설계 이력; 향후 계획은 전체 Rust 전환 문서로 통합
+- [Client·Agent Rust 구현 계획](spec/client-rust-implementation-plan.md) (`DOC-PLAN-CLIENT-RUST`, Superseded): 과거 10개 task 이력; 새 계획의 완료·실행 지시로 전용하지 않음
 
 ### 2.2 [운영 및 사용자 가이드 (docs/guides/)](guides/README.md)
 실제 사용자 및 운영자를 위한 실전 가이드라인입니다.
-- [데스크톱 클라이언트 사용 가이드](guides/desktop-client-guide.md): Electron 기반 3-OS 데스크톱 앱 운용
+- [데스크톱 클라이언트 사용 가이드](guides/desktop-client-guide.md): Rust/Iced Client·동반 Agent의 Windows 설치본과 native 운용
 - [PC 등록 및 온보딩 가이드](guides/pc-connect-guide.md): 신규 장비 안전 등록, 토큰 발급, 연결 수립
 - [다중 작업 폴더(Named Workspaces) 가이드](guides/named-workspaces-guide.md): 작업 폴더 권한 격리 및 경로 보안
 - [백그라운드 에이전트 가이드](guides/background-agent-guide.md): `racp-agentctl` 수명주기 제어 및 데몬 관리

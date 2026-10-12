@@ -430,6 +430,22 @@ impl Processes {
     }
 }
 impl Provider for Processes {
+    fn retire_handle(&self, handle: &Value) -> BoxFuture<'_, Result<(), RacpError>> {
+        let managed = self.managed.clone();
+        let id = handle["id"].as_str().unwrap_or("").to_owned();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                let mut map = managed
+                    .lock()
+                    .map_err(|_| RacpError::new("CLEANUP_FAILED"))?;
+                map.get_mut(&id)
+                    .ok_or_else(|| RacpError::new("HANDLE_NOT_FOUND"))?
+                    .close()
+            })
+            .await
+            .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
+        })
+    }
     fn owns_process(&self, r: &Value) -> bool {
         let pid = r["payload"]["pid"].as_u64().unwrap_or(0) as u32;
         let birth = r["payload"]["create_time"].as_f64().unwrap_or(0.0);

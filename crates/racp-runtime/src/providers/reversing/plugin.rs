@@ -136,6 +136,13 @@ pub struct Approved {
     pub manifest: Value,
     pub hash: String,
     pub path: PathBuf,
+    pub(super) _pins: Option<std::sync::Arc<AdapterPins>>,
+}
+pub(super) struct AdapterPins {
+    pub _runtime: std::sync::Arc<racp_core::runtime_admission::PinnedRuntime>,
+    pub _guard: Workspaces,
+    pub _directory: racp_core::Directory,
+    pub _manifest: File,
 }
 impl Approved {
     pub fn load(
@@ -197,6 +204,7 @@ impl Approved {
             manifest,
             hash: hash.into(),
             path: path.into(),
+            _pins: None,
         })
     }
 }
@@ -266,11 +274,18 @@ impl Supervisor {
                         .unwrap_or(5000),
                 ),
             cancel,
-        )?;
+        );
+        let result = match result {
+            Ok(result) => result,
+            Err(error) => {
+                self.shutdown()?;
+                return Err(error);
+            }
+        };
         if result["manifest_sha256"] != self.approved.hash
             || result["backend_version"] != self.approved.manifest["backend_version"]
         {
-            let _ = self.shutdown();
+            self.shutdown()?;
             return Err(RacpError::new("PLUGIN_VERSION_MISMATCH"));
         }
         self.ready = true;

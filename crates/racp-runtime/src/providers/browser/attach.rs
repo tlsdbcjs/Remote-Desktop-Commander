@@ -129,6 +129,7 @@ impl Browser {
         }
         let handle = json!({"id":id,"type":"browser","device_id":self.device,"owner":request["context"]["principal_id"],"agent_boot_id":self.boot,"workspace_id":request["context"]["workspace_id"],"provider_instance_id":self.instance,"resource_revision":"1","created_at":timestamp(),"last_access_at":timestamp(),"expires_at":(chrono::Utc::now()+chrono::Duration::hours(1)).to_rfc3339_opts(chrono::SecondsFormat::Micros,true),"state":"CREATING","availability":"unavailable","ownership":if borrowed{"borrowed"}else{"racp_owned"}});
         let session = Arc::new(Session {
+            capture_policy: self.capture_policy.clone(),
             events: self.outbox.clone(),
             siblings: Arc::downgrade(&self.sessions),
             opening_operation: request["operation_id"].as_str().unwrap_or("").into(),
@@ -141,6 +142,8 @@ impl Browser {
             context,
             state: Mutex::new(State {
                 history: vec![],
+                diagnostic: Default::default(),
+                contexts: Default::default(),
                 uploads: 0,
                 download: None,
                 handle,

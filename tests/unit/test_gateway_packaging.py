@@ -23,6 +23,8 @@ def test_gateway_build_dry_run_defines_setup_and_portable_without_publishing() -
             "--node",
             "unused-in-dry-run.exe",
             "--dry-run",
+            "--build-id",
+            "unit-dry-run",
         ],
         cwd=ROOT,
         check=True,
@@ -36,6 +38,10 @@ def test_gateway_build_dry_run_defines_setup_and_portable_without_publishing() -
     assert plan["targets"] == ["setup", "portable"]
     assert plan["setup_engine"] == "nsis"
     assert plan["publish"] is False
+    assert plan["build_id"] == "unit-dry-run"
+    assert Path(plan["output"]).relative_to(ROOT).as_posix() == (
+        f"dist/gateway/{plan['version']}/win-x64/unit-dry-run/packages"
+    )
 
 
 def test_package_gateway_exposes_typed_dry_run_contract() -> None:
@@ -113,8 +119,7 @@ def test_installer_preserves_programdata_and_uses_dedicated_service_identity() -
     assert "ProgramData is deliberately preserved even when a fresh install is aborted" in installer
     assert (
         'DeleteRegKey HKLM "SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\'
-        'RACP Gateway"'
-        in installer
+        'RACP Gateway"' in installer
     )
     assert 'RMDir /r /REBOOTOK "$INSTDIR"' in installer
     assert "ProgramData is deliberately preserved" in installer
@@ -123,8 +128,7 @@ def test_installer_preserves_programdata_and_uses_dedicated_service_identity() -
     remove = (ROOT / "scripts/host/Remove-GatewayService.ps1").read_text(encoding="utf-8")
     assert "RACP Gateway Updater" in install
     gateway_create = (
-        "New-Service -Name $serviceName -BinaryPathName $binaryPath "
-        "-StartupType Automatic"
+        "New-Service -Name $serviceName -BinaryPathName $binaryPath -StartupType Automatic"
     )
     assert gateway_create in install
     assert "sc.exe config $serviceName obj= 'NT SERVICE\\RACP Gateway'" in install

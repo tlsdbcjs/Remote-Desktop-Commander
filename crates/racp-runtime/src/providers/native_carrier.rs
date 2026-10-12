@@ -22,10 +22,19 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 #[cfg(windows)]
 mod windows;
+#[cfg(windows)]
+pub(crate) fn validate_cdb(
+    runtime: Arc<racp_core::runtime_admission::PinnedRuntime>,
+) -> Result<(), RacpError> {
+    windows::Runtime::from_admitted(runtime).map(|runtime| {
+        let _ = &runtime.version;
+    })
+}
 #[derive(Clone)]
 pub struct NativeCarrier {
     settings: AgentSettings,
     native_installed: bool,
+    runtimes: super::ProviderRuntimes,
     boot: String,
     instance: String,
     root: PathBuf,
@@ -33,6 +42,7 @@ pub struct NativeCarrier {
     connection: Arc<Mutex<Option<(u64, Instant)>>>,
     outgoing: mpsc::Sender<Value>,
     incoming: Arc<Mutex<mpsc::Receiver<Value>>>,
+    policy: Arc<Mutex<Option<(u64, Value)>>>,
 }
 struct Session {
     scope: Value,
@@ -43,6 +53,8 @@ struct Session {
     expires: Instant,
     connection: Arc<Mutex<Option<(u64, Instant)>>>,
     permissions: Value,
+    policy: Arc<Mutex<Option<(u64, Value)>>>,
+    approved: bool,
     cancel: CancellationToken,
     channels: AsyncMutex<BTreeMap<u64, Arc<Channel>>>,
     next: Mutex<u64>,
@@ -88,7 +100,21 @@ impl Session {
         if self.scope["connection_epoch"] != epoch || Instant::now() >= lease {
             return Err(RacpError::new("STALE_CONNECTION"));
         }
-        racp_core::authorize(&self.permissions, &self.request, false)?;
+        let live = self
+            .policy
+            .lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+            .clone();
+        if let Some((revision, permissions)) = live {
+            racp_core::authorize_with_approval(
+                &permissions,
+                &self.request,
+                false,
+                self.approved && self.scope["local_policy_revision"] == revision,
+            )?;
+        } else {
+            racp_core::authorize(&self.permissions, &self.request, false)?;
+        }
         #[cfg(windows)]
         self.target.alive()?;
         Ok(())
@@ -459,17 +485,22 @@ impl Session {
     }
 }
 impl NativeCarrier {
-    pub fn new(settings: &AgentSettings, boot: &str) -> Result<Self, RacpError> {
+    pub fn with_runtimes(
+        settings: &AgentSettings,
+        boot: &str,
+        runtimes: super::ProviderRuntimes,
+    ) -> Result<Self, RacpError> {
         let root = settings.data_dir.join("native");
         racp_core::private_dir(&root)?;
         let (outgoing, incoming) = mpsc::channel(128);
         #[cfg(windows)]
-        let native_installed = windows::Runtime::load(&settings.data_dir).is_ok();
+        let native_installed = runtimes.cdb.is_some();
         #[cfg(not(windows))]
         let native_installed = false;
         Ok(Self {
             settings: settings.clone(),
             native_installed,
+            runtimes,
             boot: boot.into(),
             instance: new_id("native_provider"),
             root,
@@ -477,6 +508,7 @@ impl NativeCarrier {
             connection: Arc::new(Mutex::new(None)),
             outgoing,
             incoming: Arc::new(Mutex::new(incoming)),
+            policy: Arc::new(Mutex::new(None)),
         })
     }
     async fn prepare(&self, r: Value, cancel: CancellationToken) -> Result<Value, RacpError> {
@@ -506,7 +538,12 @@ impl NativeCarrier {
             }
             let native = op == "native.prepare";
             let runtime = if native {
-                Some(windows::Runtime::load(&self.settings.data_dir)?)
+                Some(windows::Runtime::from_admitted(
+                    self.runtimes
+                        .cdb
+                        .clone()
+                        .ok_or_else(|| RacpError::new("CAPABILITY_UNAVAILABLE"))?,
+                )?)
             } else {
                 None
             };
@@ -522,10 +559,10 @@ impl NativeCarrier {
             let workspace = r["context"]["workspace_id"].as_str().unwrap_or("default");
             Workspaces::new(&self.settings.workspace, &self.settings.allowed_workspaces)?
                 .root(workspace)?;
-            let permissions = self
-                .settings
-                .permissions
-                .clone()
+            let permissions = r
+                .get("_local_permissions")
+                .cloned()
+                .or_else(|| self.settings.permissions.clone())
                 .ok_or_else(|| RacpError::new("PERMISSIONS_INVALID"))?;
             let id = new_id(if native { "native" } else { "proxy" });
             let role = if native {
@@ -533,7 +570,7 @@ impl NativeCarrier {
             } else {
                 p["direction"].as_str().unwrap()
             };
-            let scope = json!({"session_id":id,"device_id":self.settings.device_id,"agent_boot_id":self.boot,"connection_epoch":epoch,"principal_id":principal,"workspace_id":workspace,"permission_revision":digest(serde_json::to_vec(&permissions)?),"endpoint_role":role});
+            let scope = json!({"session_id":id,"device_id":self.settings.device_id,"agent_boot_id":self.boot,"connection_epoch":epoch,"principal_id":principal,"workspace_id":workspace,"permission_revision":digest(serde_json::to_vec(&permissions)?),"local_policy_revision":r["_local_policy_revision"],"endpoint_role":role});
             let fingerprint = digest(serde_json::to_vec(&scope)?);
             let seconds = p["lease_seconds"].as_u64().unwrap_or(120);
             let created = timestamp();
@@ -543,6 +580,7 @@ impl NativeCarrier {
             let session = Arc::new(Session {
                 scope: scope.clone(),
                 fingerprint,
+                approved: r["_local_approved"] == true,
                 request: r,
                 handle: Mutex::new(handle),
                 stream: Mutex::new(None),
@@ -550,6 +588,7 @@ impl NativeCarrier {
                     .min(lease + Duration::from_secs(seconds)),
                 connection: self.connection.clone(),
                 permissions,
+                policy: self.policy.clone(),
                 cancel: CancellationToken::new(),
                 channels: AsyncMutex::new(BTreeMap::new()),
                 next: Mutex::new(1),
@@ -598,6 +637,53 @@ impl NativeCarrier {
     }
 }
 impl Provider for NativeCarrier {
+    fn frame_request(&self, frame: &Value) -> Result<Value, RacpError> {
+        let sessions = self
+            .state
+            .try_lock()
+            .map_err(|_| RacpError::new("RESOURCE_BUSY"))?;
+        let session = sessions
+            .get(frame["handle_id"].as_str().unwrap_or(""))
+            .ok_or_else(|| RacpError::new("HANDLE_NOT_FOUND"))?;
+        session.check()?;
+        Ok(session.request.clone())
+    }
+    fn retire_handle(&self, handle: &Value) -> BoxFuture<'_, Result<(), RacpError>> {
+        let id = handle["id"].as_str().unwrap_or("").to_owned();
+        Box::pin(async move {
+            let session = self
+                .state
+                .lock()
+                .await
+                .get(&id)
+                .cloned()
+                .ok_or_else(|| RacpError::new("HANDLE_NOT_FOUND"))?;
+            session.close().await
+        })
+    }
+    fn policy_changed(
+        &self,
+        policy: racp_core::policy::PolicySnapshot,
+    ) -> BoxFuture<'_, Result<(), RacpError>> {
+        Box::pin(async move {
+            let permissions = policy.permissions()?;
+            *self
+                .policy
+                .lock()
+                .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? =
+                Some((policy.revision, permissions));
+            let sessions: Vec<_> = self.state.lock().await.values().cloned().collect();
+            let mut error = None;
+            for session in sessions {
+                if session.check().is_err() {
+                    if let Err(e) = session.close().await {
+                        error = Some(e);
+                    }
+                }
+            }
+            error.map_or(Ok(()), Err)
+        })
+    }
     fn capabilities(&self) -> Vec<Value> {
         let native = self.native_installed;
         vec![
@@ -775,18 +861,6 @@ impl Provider for NativeCarrier {
             }
             Ok(())
         })
-    }
-}
-
-pub fn provision_native(args: &[String], state: &std::path::Path) -> Result<Value, RacpError> {
-    #[cfg(windows)]
-    {
-        windows::provision(args, state)
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = (args, state);
-        Err(RacpError::new("OPERATION_NOT_SUPPORTED"))
     }
 }
 

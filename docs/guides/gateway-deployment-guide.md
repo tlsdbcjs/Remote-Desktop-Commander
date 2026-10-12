@@ -1,8 +1,8 @@
 # Windows Gateway 배포 및 운영
 
 > **Document ID**: `DOC-GDE-GATEWAY-DEPLOYMENT`\
-> **Status**: Active · **Target Version**: v0.1.19\
-> **Last Updated**: 2026-10-09 · **Classification**: Deployment & Operations Guide
+> **Status**: Active · **Target Version**: v0.1.25\
+> **Last Updated**: 2026-10-12 · **Classification**: Deployment & Operations Guide
 
 ## 목차
 
@@ -22,11 +22,14 @@ Windows x64 Gateway는 **Setup**과 **Portable ZIP** 두 형태를 정의한다.
 - Setup: `RACP-Gateway-<version>-win-x64-setup.exe`. 관리자 권한으로 `%ProgramFiles%\RACP\Gateway\<version>`에 설치하고 `RACP Gateway` Windows 서비스를 자동 시작으로 등록한다. 운영 상태는 `%ProgramData%\RACP\Gateway`에 둔다.
 - Portable: `RACP-Gateway-<version>-win-x64.zip`. 서비스 등록 없이 고정 폴더에 해제하고 PowerShell 진입점으로 실행한다.
 
-현재 소스의 Setup 정의는 NSIS `makensis`를 요구한다. v0.1.19 최종 검증에서는 electron-builder cache의 pinned NSIS **v3.04**를 archive/executable SHA-256까지 확인해 사용했고 compiler warning은 `/WX`로 오류 처리했다. compiler가 없거나 pin/hash가 다르면 Setup build는 중단한다. 정식 release는 별도 Authenticode 서명 gate를 통과해야 하며, 개발용 unsigned 산출물을 signed release로 취급하지 않는다.
+현재 기본 빌드는 Portable ZIP이며 출력은 `dist/gateway/<version>/win-x64/<build-id>/packages/`다. [AGENTS §9](../../AGENTS.md#9-build-output-layout)의 Gateway/Agent/Client 분리 규칙을 따른다. Gateway는 동반 Agent나 데스크톱 GUI를 포함하지 않는다. Console 정적 파일은 같은 build-ID의 `dist/console/<version>/web/<build-id>/build/web/`에서 복사한다.
 
-2026-10-09 최종 선택 Portable은 `dist/gw-v019-final-native3/RACP-Gateway-0.1.19-win-x64.zip`, SHA-256 `5e9920f082ac9397117ee01544c344e84ca8ea8b76cea6cebb1064d7efd4d4f7`이다. ZIP CRC, manifest **4,391개** 파일 hash, bundled CPython import/version, fresh PowerShell launch, Console/TLS, 1회 등록·Console login, loopback MCP **86-tool** catalog smoke와 실제 121 Web Console 인수를 통과했다. 최종 Setup은 최신 frozen installer source를 pinned NSIS `/WX`로 다시 컴파일한 `dist/gw-v019-final-setup-20261009-1715/RACP-Gateway-0.1.19-win-x64-setup.exe`, SHA-256 `099145b5c6f2125c9447fa10dd3349225ac067fce842474378e030c2482922b8`이다. runtime/Python/Node가 없는 clean Windows 11 VM에서 실제 install, service identity/readiness, OS reboot 후 자동 기동, uninstall/ProgramData 보존, backup 확인 후 명시적 state 삭제까지 PASS했다. Setup source bundle의 **4,392 ZIP entry**는 선택 Portable과 byte-identical하므로 installer-only 수정이 실제 121에서 검증한 runtime payload를 바꾸지 않았다. 정확한 candidate/evidence는 [구현 현황 §26](../quality/implementation-status.md#gateway-management-final-0119)을 사용한다. 이 산출물은 **unsigned 개발 후보**이며 실제 interactive install cancel과 Authenticode 서명까지 통과했다는 뜻은 아니다.
+```powershell
+uv run --frozen python scripts/build_gateway.py --node .tools/node-v22.23.0-win-x64/node.exe --build-id <unique-build-id> --targets portable
+```
 
-두 선택 파일의 비게시 통합 복사본은 `dist/gw-v019-final-selected`에 있으며 `candidate-manifest.json`과 `SHA256SUMS.txt`로 exact hash를 확인한다. 이 디렉터리는 로컬 인수 편의를 위한 것이며 public release/upload를 뜻하지 않는다.
+> [!NOTE]
+> 현재 checkout에는 Gateway의 `apps/gateway/build/deployment.json` 및 `installer.nsi`가 없다. Setup은 정의상 별도 형식이며 해당 recipe와 pinned NSIS를 복구하기 전에는 생성할 수 없다. Portable은 이 recipe에 의존하지 않는다. 과거 v0.1.19 인수 결과는 [구현 현황 §26](../quality/implementation-status.md#gateway-management-final-0119)의 이력이며 현재 재빌드 산출물의 인수를 대신하지 않는다. 개발 산출물은 unsigned이며 게시하지 않는다.
 
 1. 쓰기 가능한 고정 폴더(예: `E:\RACP\Gateway`)에 ZIP을 압축 해제한다.
 2. 호스트에서 `Start-Gateway.ps1`를 실행한다. 첫 실행은 로컬 IPv4를 선택하고 기본 HTTPS 포트 8765로 초기화한다. IPv4가 여러 개면 주소 입력을 요청한다.

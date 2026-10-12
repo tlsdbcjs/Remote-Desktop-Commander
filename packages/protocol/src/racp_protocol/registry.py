@@ -7,6 +7,7 @@ from racp_domain.models import RACPError
 from racp_protocol.browser import BROWSER_MODELS
 from racp_protocol.clipboard import CLIPBOARD_MODELS
 from racp_protocol.desktop import DESKTOP_MODELS, DESKTOP_READS
+from racp_protocol.expansions import EXPANSION_MODELS, EXPANSION_MUTATIONS
 from racp_protocol.models import ShellInput
 from racp_protocol.native_operations import NATIVE_MODELS
 from racp_protocol.network_capture import NetworkCapture
@@ -101,6 +102,7 @@ SHELL = OperationSpec(
 )
 REGISTRY = {SHELL.name: SHELL}
 INPUT_MODELS: dict[str, type[BaseModel]] = {
+    **EXPANSION_MODELS,
     **PROXY_MODELS,
     **NATIVE_MODELS,
     **CLIPBOARD_MODELS,
@@ -141,6 +143,7 @@ INPUT_MODELS: dict[str, type[BaseModel]] = {
 MUTATIONS = frozenset(
     {
         *NATIVE_MODELS,
+        *EXPANSION_MUTATIONS,
         *PROXY_MODELS,
         "shell.exec",
         "network.capture",
@@ -267,6 +270,25 @@ for name in WINDOWS_INVENTORY_READS:
     REGISTRY[name] = replace(
         REGISTRY[name], minimum_os=("Windows",), resource_lock_key="os_account",
         verification_ids=("OS-INVENTORY-01", "RPC-01", "POLICY-01"),
+    )
+
+for name in EXPANSION_MODELS:
+    worker = name in {
+        "filesystem.preview_image", "filesystem.trash", "events.query", "diagnostics.export"
+    }
+    expansion_task = (
+        "R11-A" if name.startswith("filesystem.")
+        else "R11-E" if name.startswith("browser.")
+        else "R11-C" if name.startswith("jobs.") else "R11-J"
+    )
+    REGISTRY[name] = replace(
+        REGISTRY[name], minimum_os=("Windows",),
+        resource_lock_key="target_operation_id" if name.startswith("jobs.") else "workspace/path",
+        cancel="owned_bounded_worker" if worker
+        else "cooperative_sampling" if name == "performance.sample" else "before_commit",
+        max_timeout_ms=120000, max_sync_timeout_ms=120000,
+        default_timeout_ms=30000, default_job_timeout_ms=120000, max_job_timeout_ms=120000,
+        verification_ids=(expansion_task, "RPC-01", "POLICY-01", "LIFE-01"),
     )
 
 for name in CLIPBOARD_MODELS:

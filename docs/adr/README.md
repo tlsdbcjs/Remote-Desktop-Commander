@@ -1,8 +1,8 @@
 # RACP 아키텍처 결정 레코드 (ADR Index)
 
-> **문서 ID**: `DOC-ADR-INDEX`  
-> **상태**: Active · **기준 버전**: v0.1.8  
-> **최종 개정일**: 2026-10-07 · **분류**: Architecture Decision Records
+> **Document ID**: `DOC-ADR-INDEX`\
+> **Status**: Active · **Target Version**: v0.1.23\
+> **Last Updated**: 2026-10-11 · **Classification**: Architecture Decision Records
 
 ---
 
@@ -64,7 +64,8 @@
 | [ADR-0028](ADR-0028-connection-file-onboarding.md) | Gateway 연결 파일로 최초 PC 등록 | **Accepted** | 단일 `.racp` 연결 파일 드롭만으로 주소, 1회용 토큰, 사설 CA를 일괄 적용 |
 | [ADR-0029](ADR-0029-local-settings-repair.md) | 보호된 PC 등록의 설정 수정과 복구 | **Accepted** | 등록된 Gateway 주소, 폴더 목록, 프로필 직접 수정 및 무결성 검증 복구 |
 
-| [ADR-0030](ADR-0030-rust-tauri-client-and-native-agent.md) | Rust Agent와 Tauri 클라이언트 | **Accepted** | 기존 보호된 상태·프로토콜 유지, Python/Electron client 제거, native Windows 패키징 |
+| [ADR-0030](ADR-0030-rust-tauri-client-and-native-agent.md) | Rust Agent와 Tauri 클라이언트 | **Superseded for new source** | v0.1.21 이력 보존; 새 Client source 결정은 ADR-0031로 대체 |
+| [ADR-0031](ADR-0031-native-rust-client-and-isolated-state.md) | Rust native Client와 독립 상태·선택 runtime | **Accepted for implementation** | Iced/Rust·새 상태·인증 IPC·선택 runtime·xtask; 핵심 제어 우선, 실기/배포 gate 보류 |
 
 ---
 

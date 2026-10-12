@@ -171,6 +171,7 @@ pub fn decode_bridge(raw: &[u8]) -> Result<Value, RacpError> {
     if raw.len() > 16384 {
         return Err(RacpError::new("REQUEST_INVALID"));
     }
+    crate::local_ipc::reject_duplicate_keys(raw)?;
     let mut value: Value = serde_json::from_slice(raw)?;
     if !BRIDGE_VALIDATOR.is_valid(&value) || !strict_types(&BRIDGE, &BRIDGE, &value) {
         return Err(RacpError::new(if value.get("token").is_some() {
@@ -186,6 +187,7 @@ pub fn decode_message(raw: &[u8]) -> Result<Value, RacpError> {
     if raw.len() > 1024 * 1024 {
         return Err(RacpError::new("REQUEST_INVALID"));
     }
+    crate::local_ipc::reject_duplicate_keys(raw)?;
     let mut value: Value = serde_json::from_slice(raw)?;
     tree(&value, 0)?;
     if !WIRE_VALIDATOR.is_valid(&value) || !strict_types(&WIRE, &WIRE, &value) {

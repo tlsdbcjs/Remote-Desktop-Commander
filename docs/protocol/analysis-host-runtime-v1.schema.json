@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Optional native analysis host runtime definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "installation", "java"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "installation": {"type": "string", "minLength": 1, "maxLength": 2048},
+    "java": {"type": "string", "minLength": 1, "maxLength": 2048}
+  },
+  "$comment": "Paths are native bundle-relative and are additionally validated by relative_runtime_path; absolute, parent traversal, reserved Windows names, links and unlisted files are rejected. This is optional-host metadata, not Agent settings or credential state."
+}

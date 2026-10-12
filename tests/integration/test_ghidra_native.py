@@ -50,7 +50,9 @@ async def execute(
 
 async def opened(live: dict[str, Any]) -> dict[str, Any]:
     root = Path(__file__).parents[2]
-    path = root / "dist/re-fixture/manifest.json"
+    from racp_domain.version import VERSION
+
+    path = root / "dist/verification/fixtures" / VERSION / "re-fixture/manifest.json"
     if not path.is_file():
         pytest.skip("requires built known-source fixture with symbols")
     manifest = json.loads(path.read_text())

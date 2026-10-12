@@ -96,6 +96,9 @@ impl Cdp {
                     Message::Ping(_) | Message::Pong(_) => continue,
                     _ => break,
                 };
+                if racp_contract::local_ipc::reject_duplicate_keys(raw.as_bytes()).is_err() {
+                    break;
+                }
                 let Ok(value) = serde_json::from_str::<Value>(&raw) else {
                     break;
                 };
@@ -227,6 +230,19 @@ fn metadata_event(value: Value) -> Option<Value> {
     let method = value["method"].as_str()?;
     let p = &value["params"];
     let params = match method {
+        "Runtime.consoleAPICalled" => {
+            let args=p["args"].as_array().map(|args|args.iter().take(16).map(|arg|{
+                let value=match arg["value"].as_str(){Some(value)=>json!(super::operations::bounded(value,512)),None=>if arg["value"].is_number() || arg["value"].is_boolean() || arg["subtype"]=="null"{arg["value"].clone()}else{Value::Null}};
+                json!({"type":arg["type"],"value":value,"description":arg["description"].as_str().map(|v|super::operations::bounded(v,256))})
+            }).collect::<Vec<_>>()).unwrap_or_default();
+            json!({"type":p["type"],"executionContextId":p["executionContextId"],"timestamp":p["timestamp"],"args":args,"stack_omitted":true})
+        }
+        "Network.requestWillBeSent" => {
+            json!({"frameId":p["frameId"],"requestId":p["requestId"],"timestamp":p["timestamp"],"type":p["type"],"request":{"url":super::expansion::redacted_url(p["request"]["url"].as_str().unwrap_or("")),"method":p["request"]["method"].as_str().map(|v|super::operations::bounded(v,16))},"headers_and_body_omitted":true})
+        }
+        "Network.responseReceived" => {
+            json!({"frameId":p["frameId"],"requestId":p["requestId"],"timestamp":p["timestamp"],"type":p["type"],"response":{"url":super::expansion::redacted_url(p["response"]["url"].as_str().unwrap_or("")),"status":p["response"]["status"],"mimeType":p["response"]["mimeType"].as_str().map(|v|super::operations::bounded(v,128))},"headers_and_body_omitted":true})
+        }
         "Fetch.requestPaused" => {
             json!({"requestId":p["requestId"],"resourceType":p["resourceType"],"frameId":p["frameId"],"request":{"url":p["request"]["url"]}})
         }

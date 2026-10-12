@@ -1,0 +1,20 @@
+[package]
+name = "racp-analysis-host"
+version = "0.1.26"
+edition = "2021"
+rust-version = "1.90"
+license = "MIT"
+publish = false
+
+# Independent opt-in workspace: never feature-unified into the base Client build.
+[workspace]
+
+[dependencies]
+racp-contract = { path = "../../crates/racp-contract" }
+racp-core = { path = "../../crates/racp-core" }
+racp-runtime = { path = "../../crates/racp-runtime" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+sha2 = "0.10"
+chrono = "0.4"
+tokio-util = "0.7"

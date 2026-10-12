@@ -47,6 +47,7 @@ impl ArtifactClient {
             }
             body.extend_from_slice(&next);
         }
+        racp_contract::local_ipc::reject_duplicate_keys(&body)?;
         let value: Value = serde_json::from_slice(&body)
             .map_err(|_| RacpError::new("RUNTIME_RESPONSE_INVALID"))?;
         if !status.is_success() {
@@ -97,6 +98,14 @@ impl ArtifactClient {
         .await
     }
     pub async fn upload(&self, output: &Value, outputs: &OutputSpool) -> Result<Value, RacpError> {
+        self.upload_guarded(output, outputs, None).await
+    }
+    pub(crate) async fn upload_guarded(
+        &self,
+        output: &Value,
+        outputs: &OutputSpool,
+        fence: Option<crate::peer::EmissionFence>,
+    ) -> Result<Value, RacpError> {
         let path = outputs.path(output)?;
         let (size, hash) = file_digest(path.clone()).await?;
         if size != output["size_bytes"].as_u64().unwrap_or(MAX + 1) || hash != output["sha256"] {
@@ -105,11 +114,13 @@ impl ArtifactClient {
         let id = output["id"]
             .as_str()
             .ok_or_else(|| RacpError::new("RUNTIME_RESPONSE_INVALID"))?;
+        let begin = emission_permit(fence.as_ref()).await?;
         let mut state = if let Some(transfer) = output["transfer_id"].as_str() {
             self.authorize(transfer).await?
         } else {
             self.call(reqwest::Method::POST,"/api/v1/artifact-transfers",&self.credential,Some(json!({"device_id":self.device,"operation_id":output["operation_id"],"output_id":id,"direction":"upload","size_bytes":size,"sha256":hash,"media_type":output["media_type"]}))).await?
         };
+        drop(begin);
         check_scope(&state, &self.device, "upload", size, &hash)?;
         let transfer = state["id"]
             .as_str()
@@ -140,6 +151,7 @@ impl ArtifactClient {
             let expected = offset + chunk.len() as u64;
             let mut committed = false;
             for attempt in 0..3 {
+                let _permit = emission_permit(fence.as_ref()).await?;
                 let credential = state["credential"]
                     .as_str()
                     .ok_or_else(|| RacpError::new("RUNTIME_RESPONSE_INVALID"))?;
@@ -195,6 +207,7 @@ impl ArtifactClient {
             }
         }
         for _ in 0..3 {
+            let _permit = emission_permit(fence.as_ref()).await?;
             let result = self
                 .call(
                     reqwest::Method::POST,
@@ -366,6 +379,17 @@ impl ArtifactClient {
             }
         }
         Err(RacpError::new("TRANSFER_INTERRUPTED"))
+    }
+}
+async fn emission_permit(
+    fence: Option<&crate::peer::EmissionFence>,
+) -> Result<Option<tokio::sync::OwnedRwLockReadGuard<()>>, RacpError> {
+    if let Some(fence) = fence {
+        let permit = fence.gate.clone().read_owned().await;
+        (fence.authorize)()?;
+        Ok(Some(permit))
+    } else {
+        Ok(None)
     }
 }
 fn identifier(s: &str) -> Result<(), RacpError> {

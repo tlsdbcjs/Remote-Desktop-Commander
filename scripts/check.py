@@ -1,15 +1,25 @@
 """Run the reproducible local quality gate; stop at the first failing command."""
 
 import subprocess
+from datetime import UTC, datetime
+from pathlib import Path
+
+from racp_domain.version import VERSION
 
 
 def main() -> None:
+    output = (
+        Path("dist/verification/gateway")
+        / VERSION
+        / datetime.now(UTC).strftime("quality-%Y%m%d-%H%M%S-%f")
+    )
+    output.mkdir(parents=True, exist_ok=False)
     commands = [
         ["uv", "sync", "--all-packages", "--frozen"],
         ["uv", "run", "--frozen", "ruff", "format", "--check"],
         ["uv", "run", "--frozen", "ruff", "check"],
         ["uv", "run", "--frozen", "mypy"],
-        ["uv", "run", "--frozen", "pytest", "-q", "--junitxml=dist/test-results.xml"],
+        ["uv", "run", "--frozen", "pytest", "-q", f"--junitxml={output / 'test-results.xml'}"],
     ]
     for command in commands:
         result = subprocess.run(command, check=False)

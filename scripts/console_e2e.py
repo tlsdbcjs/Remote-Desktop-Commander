@@ -18,6 +18,7 @@ from typing import Any
 import psutil
 import uvicorn
 from fastapi import Request
+from racp_domain.version import VERSION
 from racp_gateway.app import bearer, create_app
 from racp_gateway.loop import create_loop
 from racp_gateway.store import GatewayStore
@@ -25,6 +26,12 @@ from racp_sdk.security import SecretStore, digest, token
 
 
 async def run(node: Path, grep: str | None = None) -> int:
+    evidence = (
+        Path("dist/verification/console")
+        / VERSION
+        / datetime.now(UTC).strftime("e2e-%Y%m%d-%H%M%S-%f")
+    ).resolve()
+    evidence.mkdir(parents=True, exist_ok=False)
     browser_path = await asyncio.to_thread(Path(".tools/playwright").resolve)
     playwright_cli = await asyncio.to_thread(
         Path("apps/console/node_modules/@playwright/test/cli.js").resolve
@@ -221,6 +228,7 @@ async def run(node: Path, grep: str | None = None) -> int:
                     "RACP_DESKTOP_SESSION_ID": str(session_id) if session_id else "",
                     "PLAYWRIGHT_BROWSERS_PATH": str(browser_path),
                     "PLAYWRIGHT_HTML_OPEN": "never",
+                    "RACP_TEST_RESULTS": str(evidence),
                 }
             )
             result = await asyncio.to_thread(
@@ -238,7 +246,7 @@ async def run(node: Path, grep: str | None = None) -> int:
             )
             if result.returncode:
                 agent_log.flush()
-                shutil.copyfile(root / "agent.log", Path("dist/console-agent-failure.log"))
+                shutil.copyfile(root / "agent.log", evidence / "agent-failure.log")
             return result.returncode
         finally:
             if agent.poll() is None:

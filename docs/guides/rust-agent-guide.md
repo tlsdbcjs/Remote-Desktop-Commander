@@ -1,123 +1,82 @@
 # Rust Agent 실행 가이드
 
 > **Document ID**: `DOC-GUIDE-RUST-AGENT`\
-> **Status**: Active · **Target Version**: v0.1.21\
-> **Last Updated**: 2026-10-10 · **Classification**: User Guide
+> **Status**: Active · **Target Version**: v0.1.23 native development\
+> **Last Updated**: 2026-10-11 · **Classification**: User Guide
 
-## 1. 실행 파일
+## 개요
 
-Windows x64 개발용 ZIP을 풀면 `racp-agent.exe`, `chromium/`, `build-manifest.json`이 들어 있다. Python·Node 설치 없이 Agent를 실행한다. Chromium 디렉터리는 실행 파일 옆에 유지한다. Node는 빌드 중 고정된 Chromium을 내려받을 때만 사용하며 패키지에 포함하지 않는다.
+> [!IMPORTANT]
+> 현재 Agent 서비스의 후속 구현·미완성·시험 계획은 [Agent 서비스 전용 계획](../spec/agent-service-implementation-and-test-plan.md)을 따른다. GUI는 재구성 예정으로 해당 계획에서 제외한다. 아래 user-mode/Client 연동 설명과 과거 보류 기록은 서비스 계정의 실제 SCM 인수 증거가 아니며, 최신 실제 설치 금지 지시를 유지한다.
 
-Rust Agent는 등록·설정, HTTPS/WSS, 작업 저널/Artifact, 100개 등록 RPC의 파일·셸·프로세스·메모리·터미널·CDP 브라우저·OS 관측·클립보드·Windows desktop Broker/Guardian·GDB/Ghidra 및 native/proxy carrier를 구현한다. 데스크톱 UI와 패키징은 Tauri/Rust를 사용한다. 선택적 분석 도구는 로컬 설치를 명시적으로 승인해야 사용한다. 최신 빌드 근거는 [구현 현황](../quality/implementation-status.md)에 기록한다.
+Rust Agent는 Iced native Client의 원격 실행과 로컬 권한·승인·작업 추적을 담당한다. 현재는 테스트 전 구현·생산 컴파일 단계이며 실제 GUI·원격 기능·설치·서비스 인수는 보류 상태다. 생산 빌드 성공을 실제 기능 성공으로 판단하지 않는다.
 
-## 2. 명시적인 상태 디렉터리
+기본 payload는 Agent·Client·LICENSE·SBOM과 파일 manifest다. 브라우저/분석 도구는 별도 admission된 선택 runtime이며 기본 패키지에서 자동 검색하거나 다운로드하지 않는다. 구 Tauri/React Client와 TCP bridge·구 credential 설정 변환·이전 서비스 로그인 명령은 폐기했다. 과거 v0.1.21 실행 증거는 [구현 현황](../quality/implementation-status.md)에 이력으로 보존한다.
 
-모든 실행 명령에는 절대 경로인 `--state-dir`를 지정한다. 기존 클라이언트의 `agent/credential.bin`을 사용하는 경우 해당 `agent` 디렉터리를 지정한다. 새로운 실기 테스트에는 별도 디렉터리를 사용하고, 동일한 상태 디렉터리에서 두 Agent 프로세스를 동시에 실행하지 않는다.
+## 목차
 
-```powershell
-$State = 'C:\RACP\rust-agent-lab'
-New-Item -ItemType Directory -Force $State | Out-Null
-.\racp-agent.exe --help
-.\racp-agent.exe info --state-dir $State
-```
+- [1. 실행 파일과 새 상태](#1-실행-파일과-새-상태)
+- [2. 등록과 명시적 권한](#2-등록과-명시적-권한)
+- [3. 실행·제어·종료](#3-실행제어종료)
+- [4. 선택 runtime과 서비스 범위](#4-선택-runtime과-서비스-범위)
+- [5. 생산 빌드와 보류된 검증](#5-생산-빌드와-보류된-검증)
+- [6. 관련 문서](#6-관련-문서)
 
-현재 프로세스 사용자에게 속한 DPAPI credential을 읽는다. 다른 Windows 계정의 credential을 복사해 사용하지 않는다.
+## 1. 실행 파일과 새 상태
 
-## 3. 등록과 설정
+기본 Windows user state는 `%LOCALAPPDATA%/RACP/native-client`다. native 포터블 state는 launcher 위치별 별도 경로다. 명시한 다른 상태를 사용하려면 GUI의 `--state-dir <absolute-path>`를 사용한다. private SID/SYSTEM ACL을 확인하며 credential은 해당 계정의 DPAPI로 별도 보존한다. 기존 credential이나 Device ID를 가져오지 않는다.
 
-`bridge`는 기존 클라이언트와 동일한 JSON 요청을 표준 입력으로 받는다. 등록 토큰은 명령 인수에 넣지 않는다. 콘솔 입력을 UTF-8로 설정한 다음 명령을 실행하고, 한 줄의 등록 JSON을 입력한다. 기존 클라이언트에서 등록한 상태를 사용하는 경우 등록을 반복할 필요가 없다.
+GUI 사용·포터블 상태·배포 형식은 [Desktop Client Guide](desktop-client-guide.md)에 정의한다. 실행 중인 기존 설치·Device·사용자 데이터를 변경하는 교체 절차는 별도 인수 대상이다.
 
-```powershell
-[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
-.\racp-agent.exe bridge --state-dir $State
-```
+## 2. 등록과 명시적 권한
 
-입력 형식은 `{"action":"enroll",...}` 또는 `{"action":"enroll_connection",...}`이며, 세부 필드는 [클라이언트 bridge 계약](../../crates/racp-contract/schemas/bridge.json)을 따른다. 토큰을 셸 히스토리에 저장하지 않도록 JSON은 실행 후 표준 입력에 직접 입력한다.
+GUI에서 새 연결 파일의 Gateway·만료·파일 SHA-256을 확인하고 작업 영역·실행 프로필·권한을 명시한 뒤 새 등록을 요청한다. 초기 권한은 모두 거부다. 미확정 등록 marker가 남으면 자동 재등록하지 않는다. enrollment token은 argv·GUI 응답·로그에 표시하지 않는다.
 
-설정과 현재 revision을 확인한다.
+자동화용 `native-enroll`은 bounded JSON을 stdin으로 받는다. GUI와 같은 native enrollment 형식이며 권한 policy가 필수다. Agent 내부 설정은 version 2와 명시한 permissions를 검사하고 version 1·누락된 policy를 변환하거나 넓은 기본 허용 목록으로 대체하지 않는다. 서버의 실행 프로필은 로컬 권한을 좁힐 수 있다.
 
-```powershell
-.\racp-agent.exe settings --state-dir $State
-```
+## 3. 실행·제어·종료
 
-기본 정책은 `read_only`다. 쓰기·프로세스 실행·브라우저 입력 등은 필요한 정책을 설정한 뒤 사용한다. 설정 변경은 `bridge`의 `update_settings`와 표시된 revision을 사용한다.
-
-## 4. 연결과 종료
+등록된 새 상태만 foreground로 실행한다. 명령 인수에는 token을 넣지 않는다.
 
 ```powershell
-.\racp-agent.exe run --state-dir $State
+.\racp-agent.exe native-run --state-dir 'C:\RACP\native-state'
 ```
 
-등록된 Gateway에 연결한다. 전경 실행은 Ctrl+C로 종료한다. 백그라운드 실행은 다음 명령을 사용한다.
+백그라운드 시작·정책·승인·작업 취소·Stop은 native GUI와 인증 Named Pipe를 사용한다. foreground는 Ctrl+C를 통해 정리를 요청한다. 실행 시작 전의 durable 기록과 최종 자원 회수 기록, Agent 잠금 해제를 함께 확인하며 강제 종료나 정리 미확정을 정상 종료로 간주하지 않는다.
+
+| 로컬 명령 | 입력/역할 |
+|---|---|
+| `native-settings-configure` | stdin JSON, Agent 정지 상태의 workspace/profile revision CAS |
+| `native-login-status` / `native-login-configure` | 현재 사용자의 고정 native 로그인 항목 조회/명시 변경 |
+| `native-runtime-status` / `native-runtime-admit` / `native-runtime-configure` | 선택 runtime 조회·명시 admission·선택 CAS |
+| `native-maintenance-status` | packaged user 설치의 정리·저장 형식·로그인 참조 검사, 실제 교체/삭제 없음 |
+
+명령마다 `--state-dir <absolute-path>`가 필요하다. helper 응답은 `ok/result` 또는 `ok=false/error.code`, 실패 종료 코드는 4다. Broker/Guardian/Provider worker의 stdout은 해당 framed protocol 전용이다.
+
+## 4. 선택 runtime과 서비스 범위
+
+Chromium/CDB/GDB/별도 native 분석 host는 manifest hash·전체 파일 hash/size·OS/architecture/version을 확인하고 명시적으로 admission해야 한다. 자동 PATH 탐색·옆의 chromium 폴더·plugins.json·native-runtime.json을 사용하는 fallback이 없다. runtime의 admission과 첫 authorized 실행의 READY 상태는 구분한다. 기본 Client는 프로젝트 Java bridge를 실행하지 않으며 분석 엔진은 별도 [native host](../../apps/analysis-host/Cargo.toml)에 둔다.
+
+사용자 Agent의 desktop 기능은 같은 사용자 세션의 Rust Broker/Guardian을 사용한다. 서비스는 고정 RACPNativeAgent 계정·private state·observer/controller IPC를 사용하는 별도 구현 경로다.
+
+> [!IMPORTANT]
+> native service provisioning·[현재 사용자 session 연결](desktop-client-guide.md#69-service의-현재-사용자-화면-연결-source-구현-실기-보류)·[SYSTEM handoff/세션 복구](desktop-client-guide.md#610-관리자-system-handoff와-세션-복구-source-구현-실행-보류)를 source로 연결했다. 실제 서비스/입력 인수·불확실한 partial 상태의 강제 복구·per-machine packaging은 미완료다. 이전 service-login.json, Task Scheduler Guardian 또는 기존 RACPAgent 설정을 native fallback으로 사용하지 않는다. source 경계를 실제 설치 절차나 동작 인수로 해석하지 않는다.
+
+## 5. 생산 빌드와 보류된 검증
+
+Rust 1.90.0·Windows x64 SDK/MSVC와 xtask를 사용한다. 기본 Client 빌드에는 Node/Python/Chromium 다운로드 단계가 없다.
 
 ```powershell
-.\racp-agent.exe start --state-dir $State
-.\racp-agent.exe status --state-dir $State
-.\racp-agent.exe activity --state-dir $State
-.\racp-agent.exe stop --state-dir $State
+cargo run --locked -p xtask -- stage --platform win --arch x64 --build-id <unique-build-id>
+cargo run --locked -p xtask -- verify-staging --platform win --arch x64 --build-id <unique-build-id>
 ```
 
-조회·제어 명령은 `ok`와 `result` 또는 오류 `code`를 포함하는 JSON을 출력한다. `stop` 응답의 `cleanup_status`로 자원 정리 결과를 확인한다. 요청 실패는 종료 코드 4를 반환한다.
+출력은 `dist/client-native/<version>/win-x64/<build-id>/`다. 기존 batch를 보존하고 static CRT/Win64/import/hash/manifest를 확인한다. 제품 installer/portable archive 생성·실행, 테스트·fixture 추가·GUI smoke·native acceptance·macOS/Linux 빌드는 현재 보류다. 이전 bridge/credential 전용 Python acceptance harness는 폐기했으며 새 native 인수는 테스트 재개 후 준비해야 한다. 서버/Console 공통 계약·회귀 소스는 유지한다.
 
-브라우저 origin 제한과 외부 CDP 연결은 전경 실행에 명시한다.
+## 6. 관련 문서
 
-```powershell
-.\racp-agent.exe run --state-dir $State --browser-allow-origin 'https://example.com'
-```
-
-외부 CDP를 사용하려면 `--enable-cdp`를 추가한다. 백그라운드 `start`에는 이 옵션을 전달하지 않는다.
-
-`desktop_enabled=true`인 설정에서는 현재 사용자 세션의 Rust Broker가 별도 process/Job으로 시작된다. Gateway에서 `desktop.sessions`로 세션 ID를 확인하고 `desktop.monitors`, `desktop.windows`, `desktop.foreground`, `desktop.screenshot`을 호출한다. 잠금·비활성 세션·다른 사용자 로그인·secure desktop에서는 캡처를 거부한다. 캡처와 선택적 preview는 PNG Artifact로 전달된다. 입력/UIA는 허용된 로컬 권한과 유효한 lease/observation, 독립 Guardian 상태를 확인한 뒤 실행한다. 서비스는 허용된 사용자 로그온 Broker의 Named Pipe 등록을 지원한다. 사용자 토큰이나 비밀번호로 다른 세션의 프로세스를 시작하지 않는다.
-
-## 5. 빌드와 검증 보류
-
-Windows x64, PowerShell 7, Rust 1.90.0, Node 22.23.0에서 다음을 실행한다.
-
-```powershell
-pwsh -File scripts/build_rust_agent.ps1
-```
-
-출력은 `dist/rust-agent/0.1.21/win-x64/<build-id>/`다. 기존 산출물을 덮어쓰지 않는다. ZIP SHA-256과 파일별 크기·해시, source commit은 동봉된 기록으로 확인한다. 개발 빌드는 서명되지 않았다.
-
-사용자 요청에 따라 현재 migration 브랜치의 자동 테스트는 보류한다. `rust-agent` CI는 production release Agent와 Chromium 패키지만 빌드한다. 이후 `workflow_dispatch`의 `run_tests=true`로 기존 acceptance를 재개할 수 있다. 빌드 성공은 기능 동등성·실제 데스크톱 입력 검증을 의미하지 않는다.
-
-## 6. 선택적 네이티브 분석 도구
-
-GDB/Ghidra/JDK/CDB는 패키지에 포함하지 않는다. 다음 명령은 명시된 로컬 파일을 검증하고 provenance, SHA-256 및 승인 manifest를 등록한다. --directory는 새 절대 경로여야 한다.
-
-```powershell
-.\racp-agent.exe provision-gdb --state-dir $State --directory 'C:\RACP\tools\gdb-registration' --gdb 'C:\Tools\gdb\gdb.exe' --backend-version '17.1'
-.\racp-agent.exe provision-ghidra --state-dir $State --directory 'C:\RACP\tools\ghidra-registration' --ghidra 'C:\Tools\ghidra' --java 'C:\Tools\jdk\bin\java.exe'
-.\racp-agent.exe provision-native --state-dir $State --directory 'C:\RACP\tools\cdb-runtime' --cdb-directory 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64'
-```
-
-등록 후 Agent를 재시작한다. GDB 버전과 실행 파일, Ghidra/JDK inventory, CDB DLL/실행 파일의 해시·PE 아키텍처·파일 버전을 확인한다. 실행 기능은 로컬 권한에서 별도로 허용해야 한다.
-
-## 7. 서비스와 로그인 세션
-
-SCM 명령은 `racp-agent.exe service --state-dir <absolute-path>`다. 기존 published service 설정을 유지하는 경우 `service --config <absolute-json-path>`도 지원한다. 서비스 이름은 RACPAgent이며 Session 0과 활성화된 서비스 SID, 비관리자 실행 계정을 확인한 뒤 credential을 연다. LocalSystem/관리자 실행은 거절한다. DPAPI 등록은 해당 서비스 계정의 소유여야 한다.
-
-관리자는 명시적인 SID 목록과 endpoint 경로를 구성한다.
-
-```powershell
-.\racp-agent.exe configure-service-login --state-dir $State --device-id '<registered-device-id>' --agent-sid '<service-account-SID>' --service-sid '<RACPAgent-service-SID>' --login-user '<interactive-user-SID>' --endpoint 'C:\RACP\desktop-login-endpoint.json'
-```
-
-endpoint 상위 폴더는 지정 사용자가 통과할 수 있어야 한다. 서비스는 허용된 OS 사용자/세션만 등록하고, Broker는 GUI 초기화 전 서비스 소유 Job에 들어간다. 지정 사용자의 로그온 세션에서 동일한 서비스 Agent 실행 파일의 `broker-login --login-endpoint <endpoint-path>`로 연결한다. 다른 설치의 Agent 실행 파일은 등록을 거절한다. Guardian은 Task Scheduler를 통해 Job 밖에서 실행되며 실제 PID/birth와 release-only 상태를 확인한다.
-
-지정 사용자 계정에서 자동 시작을 등록하거나 제거한다. HKCU에 저장하며 다른 사용자의 등록을 바꾸지 않는다.
-
-```powershell
-.\racp-agent.exe broker-login-install --login-endpoint 'C:\RACP\desktop-login-endpoint.json'
-.\racp-agent.exe broker-login-remove --login-endpoint 'C:\RACP\desktop-login-endpoint.json'
-```
-
-로그온 launcher는 해당 세션의 Broker가 종료되면 다시 등록한다. 실행 lease가 만료되면 소유 Broker/Guardian과 작업 자원을 정리하고, 재연결 뒤 등록과 사용자 세션 Broker를 복구한다. Agent 종료는 등록기를 중지하고 정리 결과를 보고한다. 자동 시작 제거는 다음 로그온의 실행 등록을 제거한다.
-
-SCM 설치는 운영자가 서비스 계정과 정확한 실행 파일 경로를 지정한다. 서비스의 `binPath`에는 위 `service` 명령과 절대 상태 경로를 사용하고, `sc.exe sidtype RACPAgent unrestricted`로 서비스 SID를 활성화한다. 등록 credential은 이 서비스 계정이 직접 생성해야 하며, 사용자에게는 해당 실행 파일과 endpoint의 읽기·실행/통과 권한이 필요하다.
-
-## 8. 관련 문서
-
-- [Rust 전환 설계](../spec/client-rust-migration.md)
-- [구현 계획](../spec/client-rust-implementation-plan.md)
-- [데스크톱 클라이언트 가이드](desktop-client-guide.md)
+- [Agent 서비스 구현 및 검증 계획](../spec/agent-service-implementation-and-test-plan.md)
+- [Desktop Client Guide](desktop-client-guide.md)
+- [전체 Rust 전환 계획](../spec/rust-client-migration-plan.md)
+- [구현 현황](../quality/implementation-status.md)
+- [Native Client ADR](../adr/ADR-0031-native-rust-client-and-isolated-state.md)

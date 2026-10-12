@@ -1,8 +1,11 @@
 # Client와 Agent Rust 전환 설계안
 
 > **Document ID**: `DOC-SPEC-CLIENT-RUST`\
-> **Status**: Active · **Target Version**: v0.1.21 / 전환 전 기준선 v0.1.10\
-> **Last Updated**: 2026-10-10 · **Classification**: Architecture Specification
+> **Status**: Superseded · **Target Version**: v0.1.21 / 전환 전 기준선 v0.1.10\
+> **Last Updated**: 2026-10-11 · **Classification**: Architecture Specification
+
+> [!IMPORTANT]
+> v0.1.21 Tauri/React 이식 설계를 설명하는 과거 기록이다. 2026-10-11 세부 계획 개정으로 향후 전체 Rust 전환 계획은 [Rust Client 전환 계획](rust-client-migration-plan.md)으로 통합한다. 아래 승인·실행 기록은 당시 범위에 한정하며 새 구현 실행 지시가 아니다. 현재 코드와 배포물은 여전히 [ADR-0030](../adr/ADR-0030-rust-tauri-client-and-native-agent.md)의 구조이며, Iced 전환 완료를 뜻하지 않는다.
 
 ## 개요
 

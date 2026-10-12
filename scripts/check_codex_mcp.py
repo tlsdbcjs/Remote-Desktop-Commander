@@ -105,9 +105,18 @@ def main() -> None:
             report["status"] = (
                 "PASS" if report["initialized"] and "device_list" in names else "FAIL"
             )
-            (root / "dist/codex-mcp-native-startup-20261006.json").write_text(
-                json.dumps(report, indent=2), encoding="utf-8"
+            from datetime import UTC, datetime
+
+            from racp_domain.version import VERSION
+
+            evidence = (
+                root
+                / "dist/verification/gateway"
+                / VERSION
+                / datetime.now(UTC).strftime("codex-mcp-%Y%m%d-%H%M%S-%f")
             )
+            evidence.mkdir(parents=True, exist_ok=False)
+            (evidence / "result.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
             print(json.dumps({key: value for key, value in report.items() if key != "tools"}))
             if report["status"] != "PASS":
                 raise RuntimeError("Native Codex could not initialize the RACP MCP tools")

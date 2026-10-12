@@ -132,8 +132,10 @@
     "label": "원격 이미지 보기",
     "description": "binary read + host preview, Device/hash 대응",
     "baseline": "기존 회수 / 전용 UX 후속",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.preview_image"
+    ]
   },
   {
     "id": "files.metadata.read",
@@ -256,8 +258,10 @@
     "label": "휴지통으로 이동·복원",
     "description": "Windows 사용자/session 지원 확인",
     "baseline": "후속",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.trash"
+    ]
   },
   {
     "id": "files.acl.read",
@@ -266,8 +270,11 @@
     "label": "ACL 조회/변경",
     "description": "변경은 강한 opt-in, 권한 상향과 분리",
     "baseline": "후속",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.acl_modify",
+      "filesystem.acl_read"
+    ]
   },
   {
     "id": "files.acl.modify",
@@ -276,8 +283,10 @@
     "label": "ACL 조회/변경",
     "description": "변경은 강한 opt-in, 권한 상향과 분리",
     "baseline": "후속",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "filesystem.acl_modify"
+    ]
   },
   {
     "id": "storage.volumes.read",
@@ -605,8 +614,11 @@
     "label": "장기 작업 진행·취소",
     "description": "terminal 결과 불변·소유 tree 정리",
     "baseline": "기존",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "jobs.cancel",
+      "jobs.observe"
+    ]
   },
   {
     "id": "jobs.cancel",
@@ -615,8 +627,10 @@
     "label": "장기 작업 진행·취소",
     "description": "terminal 결과 불변·소유 tree 정리",
     "baseline": "기존",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "jobs.cancel"
+    ]
   },
   {
     "id": "desktop.monitors.read",
@@ -991,8 +1005,10 @@
     "label": "console·요청/응답 기록",
     "description": "secret redaction·body opt-in·HAR 한도",
     "baseline": "후속 전용 RPC",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "browser.console_read"
+    ]
   },
   {
     "id": "browser.network.read",
@@ -1001,8 +1017,10 @@
     "label": "console·요청/응답 기록",
     "description": "secret redaction·body opt-in·HAR 한도",
     "baseline": "후속 전용 RPC",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "browser.network_read"
+    ]
   },
   {
     "id": "browser.cookies.read",
@@ -1011,8 +1029,10 @@
     "label": "cookie/storage",
     "description": "credential 민감도, 기본 off",
     "baseline": "후속",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "browser.cookies_read"
+    ]
   },
   {
     "id": "browser.storage.modify",
@@ -1021,8 +1041,10 @@
     "label": "cookie/storage",
     "description": "credential 민감도, 기본 off",
     "baseline": "후속",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "browser.storage_modify"
+    ]
   },
   {
     "id": "network.interfaces.read",
@@ -1547,8 +1569,11 @@
     "label": "Agent 상태·최근 활동·진단",
     "description": "redaction·bounded tail",
     "baseline": "기존 일부",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "diagnostics.agent",
+      "diagnostics.export"
+    ]
   },
   {
     "id": "events.os.read",
@@ -1557,8 +1582,11 @@
     "label": "Windows Event Log 등 조회",
     "description": "channel/time/query·결과 한도",
     "baseline": "후속",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "diagnostics.export",
+      "events.query"
+    ]
   },
   {
     "id": "events.trace.record",
@@ -1577,8 +1605,10 @@
     "label": "CPU/RSS/handle/I/O 시계열",
     "description": "주기·보관·clock 출처",
     "baseline": "후속",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "performance.sample"
+    ]
   },
   {
     "id": "diagnostics.export",
@@ -1587,8 +1617,10 @@
     "label": "지원 bundle·시험 증거 회수",
     "description": "credential/원문 DB 제외, export 권한",
     "baseline": "Client 전용 후속",
-    "implementation": "planned",
-    "operations": []
+    "implementation": "rpc",
+    "operations": [
+      "diagnostics.export"
+    ]
   },
   {
     "id": "artifacts.export",
@@ -1602,6 +1634,8 @@
       "browser.download",
       "browser.screenshot",
       "desktop.screenshot",
+      "diagnostics.export",
+      "filesystem.preview_image",
       "filesystem.read",
       "native.prepare",
       "native.start",

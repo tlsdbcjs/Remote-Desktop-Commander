@@ -15,7 +15,9 @@ pytestmark = pytest.mark.gdb_native
 
 async def launch(live: dict[str, Any]) -> dict[str, Any]:
     root = Path(__file__).parents[2]
-    file = root / "dist/re-fixture/manifest.json"
+    from racp_domain.version import VERSION
+
+    file = root / "dist/verification/fixtures" / VERSION / "re-fixture/manifest.json"
     if not file.exists():
         pytest.skip("requires built known-source fixture with symbols")
     manifest = json.loads(file.read_text())

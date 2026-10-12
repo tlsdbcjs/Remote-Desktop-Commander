@@ -5,12 +5,14 @@ import hashlib
 import importlib.metadata
 import json
 import platform
+import re
 import shutil
 import subprocess
 import sys
 import sysconfig
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -29,6 +31,9 @@ class PackagingConfig:
     targets: tuple[Literal["setup", "portable"], ...] = ("portable",)
     dry_run: bool = False
     output_dir: Path | None = None
+    build_id: str = field(
+        default_factory=lambda: datetime.now(UTC).strftime("local-%Y%m%d-%H%M%S-%f")
+    )
 
 
 class ArtifactManifest(BaseModel):
@@ -75,6 +80,8 @@ def package_gateway(config: PackagingConfig) -> BuildManifest | dict[str, object
         ",".join(targets),
         "--node",
         str(config.node),
+        "--build-id",
+        config.build_id,
     ]
     if config.output_dir is not None:
         command.extend(["--output-dir", str(config.output_dir)])
@@ -93,7 +100,7 @@ def package_gateway(config: PackagingConfig) -> BuildManifest | dict[str, object
     output = (
         config.output_dir.resolve()
         if config.output_dir is not None
-        else ROOT / "dist/gateway" / VERSION / "win-x64"
+        else ROOT / "dist/gateway" / VERSION / "win-x64" / config.build_id / "packages"
     )
     manifest_path = output / "build-manifest.json"
     return BuildManifest.model_validate_json(manifest_path.read_bytes())
@@ -106,20 +113,26 @@ def main() -> None:
     parser.add_argument("--arch", choices=["x64"], default="x64")
     parser.add_argument("--targets", default="portable")
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--build-id", default=datetime.now(UTC).strftime("local-%Y%m%d-%H%M%S-%f"))
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-    deployment = json.loads(
-        (ROOT / "apps/gateway/build/deployment.json").read_text(encoding="utf-8")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", args.build_id):
+        parser.error("invalid build ID")
+    deployment_path = ROOT / "apps/gateway/build/deployment.json"
+    installer_path = ROOT / "apps/gateway/build/installer.nsi"
+    deployment = (
+        json.loads(deployment_path.read_text(encoding="utf-8"))
+        if deployment_path.is_file()
+        else None
     )
     targets = [value.strip() for value in args.targets.split(",") if value.strip()]
-    if not targets or any(value not in deployment["targets"] for value in targets):
+    if not targets or any(value not in {"setup", "portable"} for value in targets):
         raise SystemExit("Gateway targets must be a comma-separated subset of setup,portable")
     makensis = shutil.which("makensis.exe") or shutil.which("makensis")
-    compiler = deployment["installer"]["compiler"]
     output = (
         args.output_dir.resolve()
         if args.output_dir is not None
-        else ROOT / "dist/gateway" / VERSION / "win-x64"
+        else ROOT / "dist/gateway" / VERSION / "win-x64" / args.build_id / "packages"
     )
     name = f"RACP-Gateway-{VERSION}-win-x64"
     bundle = output / name
@@ -128,10 +141,13 @@ def main() -> None:
             json.dumps(
                 {
                     "version": VERSION,
+                    "build_id": args.build_id,
                     "output": str(output),
                     "platform": f"{args.platform}-{args.arch}",
                     "targets": targets,
-                    "deployment_schema": deployment["schema_version"],
+                    "deployment_schema": deployment["schema_version"] if deployment else None,
+                    "setup_definition_available": deployment is not None
+                    and installer_path.is_file(),
                     "setup_engine": "nsis",
                     "setup_engine_available": makensis is not None,
                     "publish": False,
@@ -146,6 +162,11 @@ def main() -> None:
     if "setup" in targets and makensis is None:
         raise SystemExit("Setup target requires makensis.exe (NSIS) on PATH")
     if "setup" in targets:
+        if deployment is None or not installer_path.is_file():
+            raise SystemExit(
+                "Setup requires the maintained Gateway deployment manifest and NSIS recipe"
+            )
+        compiler = deployment["installer"]["compiler"]
         assert makensis is not None
         makensis_path = Path(makensis).resolve()
         reported = subprocess.check_output(
@@ -153,9 +174,7 @@ def main() -> None:
         ).strip()
         if reported != compiler["reported_version"]:
             expected = compiler["reported_version"]
-            raise SystemExit(
-                f"NSIS compiler version mismatch: expected {expected}, got {reported}"
-            )
+            raise SystemExit(f"NSIS compiler version mismatch: expected {expected}, got {reported}")
         if sha256(makensis_path) != compiler["makensis_sha256"]:
             raise SystemExit("NSIS compiler executable SHA-256 differs from deployment pin")
         archive_path = next(
@@ -179,7 +198,16 @@ def main() -> None:
         subprocess.run(command, cwd=ROOT, check=True)
 
     # Installed dependencies must match the frozen graph before any runtime is copied.
-    run([sys.executable, "scripts/console_build.py", "--node", str(node)])
+    run(
+        [
+            sys.executable,
+            "scripts/console_build.py",
+            "--node",
+            str(node),
+            "--build-id",
+            args.build_id,
+        ]
+    )
     wheels = output / "wheels"
     run(["uv", "build", "--all-packages", "--wheel", "--out-dir", str(wheels)])
     bundle.mkdir()
@@ -238,7 +266,8 @@ def main() -> None:
                 if not entry.is_dir():
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     destination.write_bytes(archive.read(entry))
-    shutil.copytree(ROOT / "apps/console/dist", site / "racp_gateway/static/console")
+    console = ROOT / "dist/console" / VERSION / "web" / args.build_id / "build/web"
+    shutil.copytree(console, site / "racp_gateway/static/console")
     scripts = bundle / "scripts"
     scripts.mkdir()
     for script in [
@@ -251,8 +280,9 @@ def main() -> None:
     for launcher in sorted((ROOT / "scripts/host").glob("*.ps1")):
         shutil.copy2(launcher, bundle / launcher.name)
     guide = (ROOT / "docs/guides/gateway-deployment-guide.md").read_text(encoding="utf-8")
-    readme = guide.split("## 5. 관련 문서")[0]
-    readme = readme.replace("- [5. 관련 문서](#5-관련-문서)\n", "")
+    readme = guide.split("## 8. 관련 문서")[0]
+    readme = readme.replace("- [8. 관련 문서](#8-관련-문서)\n", "")
+    readme = re.sub(r"\[([^\]]+)\]\([^)]*\.md[^)]*\)", r"\1", readme)
     (bundle / "README.md").write_text(readme, encoding="utf-8")
     run(
         [
@@ -271,10 +301,7 @@ def main() -> None:
             "-I",
             "-B",
             "-c",
-            (
-                "import win32serviceutil; "
-                "print(win32serviceutil.LocatePythonServiceExe())"
-            ),
+            ("import win32serviceutil; print(win32serviceutil.LocatePythonServiceExe())"),
         ]
     )
     service_host = runtime / "pythonservice.exe"
@@ -285,6 +312,8 @@ def main() -> None:
     manifest = {
         "version": VERSION,
         "kind": "development-gateway",
+        "component": "gateway",
+        "build_id": args.build_id,
         "platform": "win-x64",
         "python": "3.12.11",
         "signed": False,
@@ -305,12 +334,14 @@ def main() -> None:
         for file in sorted(bundle.rglob("*")):
             if file.is_file():
                 archive.write(file, file.relative_to(output))
-    artifacts = [{
-        "file": archive_path.name,
-        "size_bytes": archive_path.stat().st_size,
-        "sha256": sha256(archive_path),
-        "target": "portable",
-    }]
+    artifacts = [
+        {
+            "file": archive_path.name,
+            "size_bytes": archive_path.stat().st_size,
+            "sha256": sha256(archive_path),
+            "target": "portable",
+        }
+    ]
     if "setup" in targets:
         assert makensis is not None
         setup_path = output / (name + "-setup.exe")

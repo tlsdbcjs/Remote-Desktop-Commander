@@ -1043,7 +1043,7 @@ async fn restart_removes_profile_only_after_owned_process_tree_has_exited() {
         .path()
         .join("data/browser")
         .join(opened["browser_id"].as_str().unwrap());
-    let config = BrowserConfig::bundled();
+    let config = BrowserConfig::default();
     drop(browser);
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     let settings:racp_core::AgentSettings=serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("data"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
@@ -1068,7 +1068,7 @@ async fn recovery_never_deletes_a_live_owned_process_profile() {
     let profile = settings.data_dir.join("browser/browser_live");
     racp_core::private_dir(&profile).unwrap();
     racp_core::atomic_write(&profile.join("process.json"),serde_json::to_vec(&json!({"version":1,"agent_boot_id":"boot_old","device_id":"dev_browser","pid":std::process::id(),"create_time":1.0,"job_name":null})).unwrap().as_slice(),false).unwrap();
-    let browser = Browser::new(&settings, "boot_new", BrowserConfig::bundled()).unwrap();
+    let browser = Browser::new(&settings, "boot_new", BrowserConfig::default()).unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     assert_eq!(browser.capabilities()[0]["healthy"], false);
     assert_eq!(

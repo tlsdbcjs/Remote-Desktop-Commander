@@ -34,6 +34,11 @@ pub fn run_broker(config_path: &Path) -> Result<(), RacpError> {
             .ok_or_else(|| RacpError::new("PERMISSION_DENIED"))?
             .as_bytes(),
     )?;
+    let _query_grants = if let Some(service) = &config.agent_service_sid {
+        Some(super::access::own(&[service.clone()], false)?)
+    } else {
+        None
+    };
     let device = values
         .get("device_id")
         .filter(|v| v.len() <= 96 && !v.is_empty())

@@ -1,10 +1,10 @@
 [workspace]
-members = ["crates/racp-contract", "crates/racp-core", "crates/racp-runtime", "apps/agent-rust"]
+members = ["crates/racp-contract", "crates/racp-core", "crates/racp-runtime", "apps/agent-rust", "apps/client-native", "xtask"]
 resolver = "2"
-exclude = ["apps/client/src-tauri"]
+exclude = ["apps/analysis-host"]
 
 [workspace.package]
-version = "0.1.21"
+version = "0.1.26"
 edition = "2021"
 rust-version = "1.90"
 license = "MIT"
@@ -31,3 +31,4 @@ tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 webpki-roots = "1"
 sysinfo = "0.37"
 rand = "0.9"
+iced = { version = "=0.13.1", default-features = false, features = ["tokio", "tiny-skia"] }

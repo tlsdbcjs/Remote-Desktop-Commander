@@ -1,40 +1,183 @@
 #[cfg(windows)]
-mod service;
-use racp_contract::{decode_bridge, RacpError, VERSION};
+mod machine_install;
+#[cfg(windows)]
+mod machine_setup;
+#[cfg(windows)]
+mod native_service;
+#[cfg(windows)]
+mod service_admin;
+#[cfg(windows)]
+mod service_provision;
+#[cfg(windows)]
+mod service_restore;
+use racp_contract::{RacpError, VERSION};
 use serde_json::{json, Value};
 use std::path::PathBuf;
+
+// Validate the whole command before inspecting a package or touching local state.
+fn arguments(args: &[String]) -> Result<Option<PathBuf>, RacpError> {
+    let action = args.first().map(String::as_str).unwrap_or("");
+    let flags: &[&str] = match action {
+        "collection-worker" | "image-preview-worker" | "diagnostic-worker" | "trash-worker" => &[],
+        "broker" | "guardian" => &["--pair-config"],
+        "native-service-session" => &["--service-control"],
+        "native-setup-host" => &["--setup-root", "--input-sha256"],
+        "native-machine-setup" => &["--state-dir"],
+        "native-machine-install-protect" | "native-machine-uninstall-preflight" => &[],
+        "native-machine-setup-cleanup" => &[],
+        "plugin-gdb" => &["--manifest", "--gdb", "--gdb-sha256"],
+        "native-service" if args.len() == 5 => &["--state-dir", "--bootstrap-sha256"],
+        "native-enroll"
+        | "native-run"
+        | "native-runtime-admit"
+        | "native-runtime-configure"
+        | "native-settings-configure"
+        | "native-login-configure"
+        | "native-runtime-status"
+        | "native-login-status"
+        | "native-maintenance-status"
+        | "native-service"
+        | "native-service-admin" => &["--state-dir"],
+        "native-service-provision" => &["--state-dir"],
+        _ => return Err(RacpError::new("REQUEST_INVALID")),
+    };
+    if args.len() != 1 + flags.len() * 2 {
+        return Err(RacpError::new("REQUEST_INVALID"));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for pair in args[1..].chunks_exact(2) {
+        if !flags.contains(&pair[0].as_str())
+            || !seen.insert(pair[0].as_str())
+            || pair[1].is_empty()
+            || pair[1].contains(['\0', '\r', '\n'])
+        {
+            return Err(RacpError::new("REQUEST_INVALID"));
+        }
+    }
+    let state = args[1..]
+        .chunks_exact(2)
+        .find(|pair| pair[0] == "--state-dir")
+        .map(|pair| PathBuf::from(&pair[1]));
+    if let Some(path) = &state {
+        racp_core::validate_local_path(path)?;
+    }
+    Ok(state)
+}
+fn framed(action: &str) -> bool {
+    matches!(
+        action,
+        "broker"
+            | "guardian"
+            | "collection-worker"
+            | "image-preview-worker"
+            | "diagnostic-worker"
+            | "trash-worker"
+            | "plugin-gdb"
+            | "native-run"
+            | "native-service"
+            | "native-service-session"
+            | "native-setup-host"
+    )
+}
+async fn input() -> Result<Vec<u8>, RacpError> {
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt};
+    let mut raw = vec![];
+    let mut reader = tokio::io::BufReader::new(tokio::io::stdin().take(65537));
+    reader.read_until(b'\n', &mut raw).await?;
+    if raw.len() > 65536 {
+        return Err(RacpError::new("REQUEST_INVALID"));
+    }
+    Ok(raw)
+}
+fn shutdown() -> tokio_util::sync::CancellationToken {
+    let shutdown = tokio_util::sync::CancellationToken::new();
+    let token = shutdown.clone();
+    tokio::spawn(async move {
+        let _ = tokio::signal::ctrl_c().await;
+        token.cancel();
+    });
+    shutdown
+}
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("racp-agent {VERSION}\n\nUsage: racp-agent <command> --state-dir <absolute-path>\n\nCommands:\n  provision-gdb / provision-ghidra / provision-native  Approve explicit local analysis tools\n  service   Fixed Windows SCM host (--state-dir or --config)\n  configure-service-login  Configure allowed user SIDs and endpoint\n  broker-login / broker-login-install / broker-login-remove  User-session registration\n  run       Run the registered Agent in the foreground (Ctrl+C stops it)\n  start     Start the registered Agent in the background\n  status    Show background Agent state as JSON\n  stop      Stop the background Agent and report cleanup\n  info      Show enrollment and execution identity (no credentials)\n  settings  Show editable settings and revision\n  activity  Show recent operation activity\n  bridge    Read one bounded JSON request from stdin and write a JSON result\n\nForeground options: --enable-cdp, --browser-allow-origin <origin> (repeatable)\nRegistration/settings updates use bridge JSON on stdin; do not put secrets in arguments.\nThe state directory is explicit so a manual run cannot silently select an existing profile.");
+    if args.is_empty() || matches!(args.as_slice(), [arg] if arg == "--help" || arg == "-h") {
+        println!("racp-agent {VERSION}\n\nUsage: racp-agent <command> --state-dir <absolute-path>\n\nNative commands:\n  native-enroll  Explicit new registration; bounded JSON on stdin\n  native-run  User Agent with authenticated Named Pipe control\n  native-settings-configure  Stopped Agent workspace/profile revision CAS\n  native-login-status / native-login-configure  Current user's fixed login entry\n  native-runtime-status / native-runtime-admit / native-runtime-configure  Optional runtime admission/selection\n  native-service  RACPNativeAgent SCM host with separate private native config\n  native-service-admin  SYSTEM-only config handoff/reconcile; bounded JSON on stdin\n\nSecrets are never accepted in command arguments. Native state never imports legacy credentials. Service provisioning and native session Broker remain incomplete. GUI/acceptance gates remain deferred.");
+        println!("  native-maintenance-status  Packaged user preflight: confirmed cleanup, storage format, login references; no stop/removal/rollback.");
+        println!("  native-service-provision  Fresh SYSTEM-only fixed service/data roots from bounded controllers+enrollment JSON; prepares but never starts/enrolls.");
+        println!("  native-service-session --service-control <absolute-path>  Controller's interactive desktop bridge; no service credential access. GUI provides explicit connect/disconnect.");
+        println!("  native-machine-setup  Elevated administrator to fixed LocalSystem setup runner; fresh provisioning JSON on stdin; no Agent start/enrollment.");
+        println!("  native-service-admin  SYSTEM handoff accepts configure, reconcile, or recover_sessions; recovery does not terminate user processes.");
+        println!("  native-machine-install-protect / native-machine-uninstall-preflight  Fixed ProgramFiles versioned service-package ownership and removal gates.");
+        println!("  native-machine-setup-cleanup  Elevated explicit stopped helper cleanup from setup_root/input_sha256 JSON; target service/state retained.");
         return;
     }
-    if args.iter().any(|a| a == "--version") {
+    if matches!(args.as_slice(), [arg] if arg == "--version") {
         println!("racp-agent {VERSION}");
         return;
     }
-    let action = args.first().map(String::as_str).unwrap_or("run");
-    let state = args
-        .windows(2)
-        .find(|a| a[0] == "--state-dir")
-        .map(|a| PathBuf::from(&a[1]));
+    let action = args[0].as_str();
     let result = async {
-        if action == "collection-worker" {
-            racp_runtime::providers::recipes::run_worker()?;
+        let state = arguments(&args)?;
+        #[cfg(windows)]
+        if action == "native-machine-install-protect" {
+            return machine_install::prepare();
+        }
+        #[cfg(windows)]
+        if action == "native-machine-uninstall-preflight" {
+            return machine_install::uninstall_preflight();
+        }
+        #[cfg(windows)]
+        if action == "native-machine-setup-cleanup" {
+            let raw = input().await?;
+            return tokio::task::spawn_blocking(move || machine_setup::cleanup(&raw))
+                .await
+                .map_err(|_| RacpError::new("MACHINE_SETUP_CLEANUP_UNKNOWN"))?;
+        }
+        #[cfg(windows)]
+        if action == "native-setup-host" {
+            let value = |flag: &str| {
+                args[1..]
+                    .chunks_exact(2)
+                    .find(|pair| pair[0] == flag)
+                    .map(|pair| pair[1].clone())
+                    .ok_or_else(|| RacpError::new("REQUEST_INVALID"))
+            };
+            machine_setup::host(
+                PathBuf::from(value("--setup-root")?),
+                value("--input-sha256")?,
+            )?;
             return Ok(Value::Null);
         }
-        if matches!(action, "plugin-gdb" | "plugin-ghidra") {
-            racp_runtime::providers::reversing::run_native_plugin(action, &args)?;
+        let _payload =
+            racp_core::distribution::pin_current_payload(action == "native-maintenance-status")?;
+        match action {
+            "collection-worker" => {
+                racp_runtime::providers::recipes::run_worker()?;
+                return Ok(Value::Null);
+            }
+            "image-preview-worker" => {
+                racp_runtime::providers::run_preview_worker()?;
+                return Ok(Value::Null);
+            }
+            "diagnostic-worker" => {
+                racp_runtime::providers::run_diagnostic_worker()?;
+                return Ok(Value::Null);
+            }
+            "plugin-gdb" => {
+                racp_runtime::providers::reversing::run_native_plugin(action, &args)?;
+                return Ok(Value::Null);
+            }
+            _ => (),
+        }
+        #[cfg(windows)]
+        if action == "trash-worker" {
+            racp_runtime::providers::run_trash_worker()?;
             return Ok(Value::Null);
         }
         #[cfg(windows)]
         if action == "broker" || action == "guardian" {
-            let path = args
-                .windows(2)
-                .find(|a| a[0] == "--pair-config")
-                .map(|a| PathBuf::from(&a[1]))
-                .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
+            let path = PathBuf::from(&args[2]);
             if action == "guardian" {
                 racp_runtime::providers::desktop::run_guardian(&path)?;
             } else {
@@ -42,175 +185,94 @@ async fn main() {
             }
             return Ok(Value::Null);
         }
-        if action == "maintenance" {
-            return racp_runtime::maintenance::prepare(&args).await;
-        }
         #[cfg(windows)]
-        if matches!(
-            action,
-            "broker-login" | "broker-register" | "broker-login-install" | "broker-login-remove"
-        ) {
-            let endpoint = args
-                .windows(2)
-                .find(|a| a[0] == "--login-endpoint")
-                .map(|a| PathBuf::from(&a[1]))
-                .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
-            if matches!(action, "broker-login-install" | "broker-login-remove") {
-                return racp_runtime::providers::desktop::login_startup(
-                    &endpoint,
-                    action == "broker-login-remove",
-                );
-            }
-            if action == "broker-login" {
-                racp_runtime::providers::desktop::run_login_broker(&endpoint)?;
-            } else {
-                racp_runtime::providers::desktop::register_login_broker(&endpoint)?;
-            }
+        if action == "native-service-session" {
+            racp_runtime::providers::desktop::run_service_session(
+                std::path::Path::new(&args[2]),
+                shutdown(),
+            )
+            .await?;
             return Ok(Value::Null);
-        }
-        #[cfg(windows)]
-        if action == "service" {
-            if let Some(path) = args.windows(2).find(|a| a[0] == "--config") {
-                service::run_config(PathBuf::from(&path[1]))?;
-                return Ok(Value::Null);
-            }
         }
         let state = state.ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
-        racp_core::validate_local_path(&state)?;
         #[cfg(windows)]
-        if action == "configure-service-login" {
-            return racp_runtime::providers::desktop::configure_login(&args, &state);
-        }
-        if action == "provision-native" {
-            return racp_runtime::providers::provision_native(&args, &state);
-        }
-        if matches!(action, "provision-gdb" | "provision-ghidra") {
-            return racp_runtime::providers::reversing::provision(action, &args, &state);
+        if action == "native-machine-setup" {
+            let raw = input().await?;
+            return tokio::task::spawn_blocking(move || machine_setup::execute(&state, &raw))
+                .await
+                .map_err(|_| RacpError::new("MACHINE_SETUP_OUTCOME_UNKNOWN"))?;
         }
         #[cfg(windows)]
-        if action == "service" {
-            service::run(state)?;
+        if action == "native-service-admin" {
+            let raw = input().await?;
+            return tokio::task::spawn_blocking(move || service_admin::execute(&state, &raw))
+                .await
+                .map_err(|_| RacpError::new("SERVICE_CONFIG_OUTCOME_UNKNOWN"))?;
+        }
+        #[cfg(windows)]
+        if action == "native-service-provision" {
+            let raw = input().await?;
+            return tokio::task::spawn_blocking(move || service_provision::execute(&state, &raw))
+                .await
+                .map_err(|_| RacpError::new("SERVICE_PROVISION_OUTCOME_UNKNOWN"))?;
+        }
+        if matches!(
+            action,
+            "native-runtime-admit"
+                | "native-runtime-configure"
+                | "native-settings-configure"
+                | "native-login-configure"
+        ) {
+            return racp_runtime::native_client::runtime_command(
+                action,
+                &input().await?,
+                &state,
+                shutdown(),
+            )
+            .await;
+        }
+        if action == "native-runtime-status" {
+            racp_core::state_schema::NativeState::load(&state)?;
+            return Ok(serde_json::to_value(
+                racp_core::runtime_admission::NativeRuntimeConfig::load(&state)?,
+            )?);
+        }
+        #[cfg(windows)]
+        if action == "native-login-status" {
+            return racp_runtime::native_login::status(&state);
+        }
+        #[cfg(windows)]
+        if action == "native-maintenance-status" {
+            return racp_runtime::native_maintenance::inspect(&state);
+        }
+        if action == "native-enroll" {
+            return racp_runtime::native_client::enroll(&input().await?, &state).await;
+        }
+        #[cfg(windows)]
+        if action == "native-run" {
+            racp_runtime::native_client::run(&state, shutdown()).await?;
             return Ok(Value::Null);
         }
-        if action == "maintenance" {
-            return racp_runtime::maintenance::prepare(&args).await;
+        #[cfg(windows)]
+        if action == "native-service" {
+            let bootstrap_hash = args[1..]
+                .chunks_exact(2)
+                .find(|pair| pair[0] == "--bootstrap-sha256")
+                .map(|pair| pair[1].clone());
+            native_service::run(state, bootstrap_hash)?;
+            return Ok(Value::Null);
         }
-        let mut browser = racp_runtime::providers::browser::BrowserConfig::bundled();
-        browser.cdp_enabled = args.iter().any(|a| a == "--enable-cdp");
-        browser.allow_origins = args
-            .windows(2)
-            .filter(|a| a[0] == "--browser-allow-origin")
-            .map(|a| a[1].clone())
-            .collect();
-        match action {
-            "info" => racp_core::information(&state),
-            "settings" => racp_core::editable_settings(&state),
-            "activity" => racp_runtime::activity(&state),
-            "start" | "status" | "stop" => {
-                if browser.cdp_enabled || !browser.allow_origins.is_empty() {
-                    return Err(RacpError::new("REQUEST_INVALID"));
-                }
-                let control =
-                    racp_runtime::ControlClient::new(state.clone(), std::env::current_exe()?);
-                match action {
-                    "start" => control.start().await,
-                    "status" => control.status().await,
-                    _ => control.stop().await,
-                }
-            }
-            "serve" => {
-                racp_runtime::serve_with_browser(&state, browser).await?;
-                Ok(Value::Null)
-            }
-            "run" => {
-                let (settings, values) = racp_core::load_settings(&state, true)?;
-                let _lock = racp_core::InstanceLock::acquire(&state.join(format!(
-                    "agent-{}.lock",
-                    racp_contract::digest(&settings.device_id)
-                )))?;
-                let agent = racp_runtime::Agent::with_browser(
-                    settings,
-                    values["credential"].clone(),
-                    browser,
-                )?;
-                let shutdown = tokio_util::sync::CancellationToken::new();
-                let token = shutdown.clone();
-                tokio::spawn(async move {
-                    let _ = tokio::signal::ctrl_c().await;
-                    token.cancel();
-                });
-                agent.run(shutdown).await?;
-                Ok(Value::Null)
-            }
-            "bridge" => {
-                use tokio::io::{AsyncBufReadExt, AsyncReadExt};
-                let mut raw = vec![];
-                let mut reader = tokio::io::BufReader::new(tokio::io::stdin().take(16385));
-                reader.read_until(b'\n', &mut raw).await?;
-                let request = decode_bridge(&raw)?;
-                let control =
-                    racp_runtime::ControlClient::new(state.clone(), std::env::current_exe()?);
-                match request["action"].as_str() {
-                    Some("info") => racp_core::information(&state),
-                    Some("settings") => racp_core::editable_settings(&state),
-                    Some("update_settings") => racp_core::update_settings(&state, request),
-                    Some("enroll") => racp_runtime::enroll(request, &state).await,
-                    Some("enroll_connection") => {
-                        racp_runtime::enroll_connection(request, &state).await
-                    }
-                    Some("inspect_connection") => racp_core::inspect_connection(
-                        std::path::Path::new(
-                            request["path"]
-                                .as_str()
-                                .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?,
-                        ),
-                        None,
-                    ),
-                    Some("start") => control.start().await,
-                    Some("status") => control.status().await,
-                    Some("stop") => control.stop().await,
-                    Some("activity") => racp_runtime::activity(&state),
-                    _ => Err(RacpError::new("REQUEST_INVALID")),
-                }
-            }
-            _ => Err(RacpError::new("REQUEST_INVALID")),
-        }
+        Err(RacpError::new("REQUEST_INVALID"))
     }
     .await;
     match result {
-        Ok(value) => {
-            if !matches!(
-                action,
-                "serve"
-                    | "run"
-                    | "broker"
-                    | "broker-login"
-                    | "broker-register"
-                    | "guardian"
-                    | "service"
-                    | "collection-worker"
-                    | "plugin-gdb"
-                    | "plugin-ghidra"
-            ) {
-                println!("{}", json!({"ok":true,"result":value}));
-            }
-        }
+        Ok(value) if !framed(action) => println!("{}", json!({"ok":true,"result":value})),
+        Ok(_) => (),
         Err(error) => {
-            if !matches!(
-                action,
-                "serve"
-                    | "run"
-                    | "broker"
-                    | "broker-login"
-                    | "broker-register"
-                    | "guardian"
-                    | "service"
-                    | "plugin-gdb"
-                    | "plugin-ghidra"
-            ) {
-                println!("{}", json!({"ok":false,"code":error.code}));
-            } else {
+            if framed(action) {
                 eprintln!("{}", error.code.0);
+            } else {
+                println!("{}", json!({"ok":false,"error":{"code":error.code}}));
             }
             std::process::exit(4);
         }

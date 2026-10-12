@@ -3,8 +3,11 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans or superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **Document ID**: `DOC-PLAN-CLIENT-RUST`\
-> **Status**: Active · **Target Version**: v0.1.21 / 전환 전 기준선 v0.1.10\
-> **Last Updated**: 2026-10-10 · **Classification**: Architecture Implementation Plan
+> **Status**: Superseded · **Target Version**: v0.1.21 / 전환 전 기준선 v0.1.10\
+> **Last Updated**: 2026-10-11 · **Classification**: Architecture Implementation Plan
+
+> [!IMPORTANT]
+> 이 문서의 10개 task는 Tauri/React 기반 v0.1.21 이식 이력이다. 향후 작업은 [전체 Rust 전환 세부 계획 §9](rust-client-migration-plan.md#section-09)으로 대체한다. 아래 구현 체크와 과거 실행 승인은 새 R00–R14의 완료·실행 승인으로 이전하지 않는다. 테스트 추가/실행 보류와 실제 구현·검증의 구분은 새 계획에서도 유지한다.
 
 **Goal:** 기존 client와 내장 Agent를 Rust로 전환하고 기능·등록 상태를 보존한 뒤 client 전용 Python 및 Electron 런타임을 제거한다.
 

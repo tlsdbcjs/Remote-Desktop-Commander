@@ -1,4 +1,4 @@
-use crate::{enrollment::http_client, peer::Peer};
+use crate::{network::http_client, peer::Peer};
 use futures_util::StreamExt;
 use racp_contract::{decode_message, new_id, timestamp, RacpError, VERSION};
 use racp_core::{AgentSettings, Journal, OutputSpool};
@@ -22,6 +22,15 @@ pub struct Agent {
     pub settings: AgentSettings,
     pub journal: Journal,
     pub boot_id: String,
+    pub(crate) native_state: Option<crate::local_ipc::events::StateHub>,
+    pub(crate) native_settings_revision: Option<u64>,
+    pub(crate) policy: Option<racp_core::policy::PolicyStore>,
+    pub(crate) approvals: crate::local_ipc::approval::Approvals,
+    pub(crate) resources: crate::resources::ResourceRegistry,
+    pub(crate) policy_retiring: Arc<AtomicBool>,
+    pub(crate) policy_updates: Arc<Mutex<()>>,
+    pub(crate) emission_gate: Arc<RwLock<()>>,
+    pub(crate) stopping: Arc<AtomicBool>,
     credential: Arc<String>,
     pub(crate) artifacts: crate::artifacts::ArtifactClient,
     pub(crate) providers: Arc<dyn crate::providers::Provider>,
@@ -39,13 +48,26 @@ impl Agent {
         Self::with_browser(
             settings,
             credential,
-            crate::providers::browser::BrowserConfig::bundled(),
+            crate::providers::browser::BrowserConfig::default(),
         )
     }
     pub fn with_browser(
         settings: AgentSettings,
         credential: String,
         browser: crate::providers::browser::BrowserConfig,
+    ) -> Result<Self, RacpError> {
+        Self::with_runtimes(
+            settings,
+            credential,
+            browser,
+            crate::providers::ProviderRuntimes::default(),
+        )
+    }
+    pub fn with_runtimes(
+        settings: AgentSettings,
+        credential: String,
+        browser: crate::providers::browser::BrowserConfig,
+        runtimes: crate::providers::ProviderRuntimes,
     ) -> Result<Self, RacpError> {
         settings.validate(true)?;
         let artifacts = crate::artifacts::ArtifactClient::new(
@@ -57,8 +79,12 @@ impl Agent {
         let journal = Journal::open(&settings.data_dir.join("execution.db"))?;
         journal.recover_agent()?;
         let boot_id = new_id("boot");
+        let tasks = Arc::new(Mutex::new(std::collections::BTreeMap::new()));
         let providers: Arc<dyn crate::providers::Provider> = Arc::new(
-            crate::providers::NativeProviders::with_browser(&settings, &boot_id, browser)?,
+            crate::providers::NativeProviders::with_runtimes(
+                &settings, &boot_id, browser, runtimes,
+            )?
+            .with_jobs(journal.clone(), tasks.clone()),
         );
         let outputs = OutputSpool::new(settings.data_dir.join("spool"), journal.clone())?;
         let status = json!({"state":"RUNNING","connected":false,"execution_identity":whoami::username(),"connection_epoch":0,"connection_phase":"starting","active_operations":0,"desktop":{"enabled":settings.desktop_enabled,"healthy":false,"unavailable_reason":"DESKTOP_RUNTIME_UNAVAILABLE","sessions":[]},"operations":[]});
@@ -66,9 +92,18 @@ impl Agent {
             settings,
             journal,
             outputs,
-            tasks: Arc::new(Mutex::new(std::collections::BTreeMap::new())),
+            tasks,
             completed: Arc::new(tokio::sync::Notify::new()),
             boot_id,
+            native_state: None,
+            native_settings_revision: None,
+            policy: None,
+            approvals: Default::default(),
+            resources: Default::default(),
+            policy_retiring: Arc::new(AtomicBool::new(false)),
+            policy_updates: Arc::new(Mutex::new(())),
+            emission_gate: Arc::new(RwLock::new(())),
+            stopping: Arc::new(AtomicBool::new(false)),
             credential: Arc::new(credential),
             artifacts,
             providers,
@@ -104,19 +139,170 @@ impl Agent {
         status
     }
     async fn phase(&self, phase: &str) {
+        if matches!(phase, "connecting" | "disconnected") {
+            self.approvals.invalidate();
+        }
         self.status.write().await["connection_phase"] = json!(phase);
+        if let Some(hub) = &self.native_state {
+            use racp_contract::local_ipc::{AgentStatus, StateChange};
+            let status = match phase {
+                "ready" => AgentStatus::Online,
+                "disconnected" => AgentStatus::Offline,
+                "stopped" => AgentStatus::Stopped,
+                _ => AgentStatus::Connecting,
+            };
+            let revision = hub.snapshot().await.policy_revision;
+            let _ = hub.publish(revision, StateChange::Status { status }).await;
+        }
+    }
+    pub(crate) fn current_permissions(&self) -> Result<(u64, Value), RacpError> {
+        if let Some(store) = &self.policy {
+            store.permissions()
+        } else {
+            Ok((0, self.settings.local_permissions()?))
+        }
+    }
+    pub(crate) fn authorize_request(&self, request: &Value) -> Result<(), RacpError> {
+        if self.native_settings_revision.is_some_and(|revision| {
+            request["_native_settings_revision"].as_u64().unwrap_or(0) != revision
+        }) {
+            return Err(RacpError::new("PERMISSION_DENIED"));
+        }
+        let (revision, permissions) = self.current_permissions()?;
+        racp_core::authorize_with_approval(
+            &permissions,
+            request,
+            self.providers.owns_process(request),
+            self.approvals.authorized(request, revision),
+        )
+    }
+    pub(crate) async fn approval_target(&self, request: &Value) -> Result<String, RacpError> {
+        let workspace = self.settings.workspace.clone();
+        let additional = self.settings.allowed_workspaces.clone();
+        let request = request.clone();
+        let inventory = self.providers.inventory();
+        tokio::task::spawn_blocking(move || {
+            let roots = racp_core::Workspaces::new(&workspace,&additional)?;
+            let mut target = json!({"request":racp_core::approval::ApprovalBinding::digest(&request)});
+            let workspace_id = request["context"]["workspace_id"].as_str().unwrap_or("default");
+            for field in ["path","source_path","destination_path"] {
+                if let Some(raw) = request["payload"][field].as_str() {
+                    let id = if field == "destination_path" { request["payload"]["destination_workspace_id"].as_str().unwrap_or(workspace_id) } else { workspace_id };
+                    let path = roots.path(id,raw)?;
+                    let info = if path == roots.root(id)? { Some(roots.directory(id,&path)?.own_info()?) }
+                        else { roots.parent(id,&path)?.info(&path.file_name().ok_or_else(||RacpError::new("PATH_ACCESS_DENIED"))?.to_string_lossy())? };
+                    target[field] = json!(info.map(|info|info.revision()));
+                }
+            }
+            if let Some(pid) = request["payload"]["pid"].as_u64() {
+                let pid = u32::try_from(pid).map_err(|_|RacpError::new("INVALID_ARGUMENT"))?;
+                target["process_created"] = json!(crate::identity::process_created(pid)?);
+            }
+            if let Some(id) = request["payload"]["handle_id"].as_str() {
+                let handle = inventory.iter().find(|v| v["id"] == id).ok_or_else(||RacpError::new("HANDLE_NOT_FOUND"))?;
+                target["handle"] = json!({"id":handle["id"],"pid":handle["pid"],"created":handle["create_time"],"revision":handle["resource_revision"],"state":handle["state"]});
+            }
+            Ok(racp_contract::canonical_digest(&target))
+        }).await.map_err(|_|RacpError::new("EXECUTION_UNKNOWN"))?
     }
     pub(crate) async fn send(&self, value: Value) -> Result<(), RacpError> {
+        if value["type"] == "result" {
+            let status = self.status.read().await;
+            if status["connected"] != true || status["connection_phase"] != "ready" {
+                return Err(RacpError::new("DEVICE_OFFLINE"));
+            }
+        }
+        if value["type"] == "result" && self.stopping.load(Ordering::Acquire) {
+            return Err(RacpError::new("DEVICE_OFFLINE"));
+        }
         let peer = self
             .peer
             .read()
             .await
             .clone()
             .ok_or_else(|| RacpError::new("DEVICE_OFFLINE"))?;
-        peer.send(value).await
+        let payload = value.clone();
+        let fence = if value["type"] == "result" && private_result(&value) {
+            let agent = self.clone();
+            let id = value["operation_id"].as_str().unwrap_or("").to_owned();
+            Some(crate::peer::EmissionFence {
+                gate: self.emission_gate.clone(),
+                authorize: Arc::new(move || {
+                    if agent.stopping.load(Ordering::Acquire) {
+                        return Err(RacpError::new("DEVICE_OFFLINE"));
+                    }
+                    agent.authorize_record(&agent.journal.get(&id)?)
+                }),
+            })
+        } else if payload["type"] == "reconcile"
+            && payload["records"]
+                .as_array()
+                .is_some_and(|v| v.iter().any(private_result))
+        {
+            let agent = self.clone();
+            let records = payload["records"].as_array().unwrap().clone();
+            Some(crate::peer::EmissionFence {
+                gate: self.emission_gate.clone(),
+                authorize: Arc::new(move || {
+                    for record in records.iter().filter(|r| private_result(r)) {
+                        agent.authorize_record(
+                            &agent
+                                .journal
+                                .get(record["operation_id"].as_str().unwrap_or(""))?,
+                        )?;
+                    }
+                    Ok(())
+                }),
+            })
+        } else if payload["type"] == "native_packet" {
+            let agent = self.clone();
+            let frame = payload.clone();
+            Some(crate::peer::EmissionFence {
+                gate: self.emission_gate.clone(),
+                authorize: Arc::new(move || {
+                    if agent.stopping.load(Ordering::Acquire) {
+                        return Err(RacpError::new("DEVICE_OFFLINE"));
+                    }
+                    agent.authorize_native_frame(&frame)
+                }),
+            })
+        } else {
+            None
+        };
+        match peer.send_checked(value, fence).await {
+            Err(error)
+                if matches!(error.code.0, "PERMISSION_DENIED" | "APPROVAL_REQUIRED")
+                    && payload["type"] == "result" =>
+            {
+                let mut denied = payload;
+                let old_state = denied["state"].clone();
+                denied["state"] = json!("FAILED");
+                denied["result"] = Value::Null;
+                denied["outputs"] = json!([]);
+                denied["error"] = racp_core::error_value(
+                    error.code.0,
+                    "operation output retired by local policy",
+                    if old_state == "SUCCEEDED" {
+                        "executed"
+                    } else {
+                        "unknown"
+                    },
+                );
+                denied["error"]["details"]["execution_outcome_state"] = old_state;
+                peer.send(denied).await
+            }
+            result => result,
+        }
     }
     pub(crate) async fn base(&self, kind: &str) -> Value {
         json!({"protocol":1,"type":kind,"device_id":self.settings.device_id,"agent_boot_id":self.boot_id,"connection_epoch":self.status.read().await["connection_epoch"]})
+    }
+    fn authorize_native_frame(&self, frame: &Value) -> Result<(), RacpError> {
+        let request = self.providers.frame_request(frame)?;
+        let (revision, permissions) = self.current_permissions()?;
+        let approved =
+            request["_local_approved"] == true && request["_local_policy_revision"] == revision;
+        racp_core::authorize_with_approval(&permissions, &request, false, approved)
     }
     async fn heartbeat(&self) -> Result<(), RacpError> {
         let mut value = self.base("heartbeat").await;
@@ -128,8 +314,19 @@ impl Agent {
             .filter(|h| h["availability"] == "available")
             .take(128)
             .collect::<Vec<_>>());
-        value["capabilities"] = json!(self.providers.capabilities());
-        self.send(value).await
+        // Heartbeat updates are bounded to 16 capabilities by the wire contract.
+        // Send all providers in separate updates; only the first carries handles.
+        let capabilities = self.providers.capabilities();
+        if capabilities.is_empty() {
+            value["capabilities"] = json!([]);
+            return self.send(value).await;
+        }
+        for batch in capabilities.chunks(16) {
+            value["capabilities"] = json!(batch);
+            self.send(value.clone()).await?;
+            value["handles"] = Value::Null;
+        }
+        Ok(())
     }
     async fn browser_event(&self, after: &mut u64) -> Result<(), RacpError> {
         if tokio::time::Instant::now() >= *self.lease.lock().await {
@@ -219,7 +416,13 @@ impl Agent {
    self.phase("welcome").await;
    let welcome=tokio::select!{_=shutdown.cancelled()=>return Ok(()),v=receive(&mut stream)=>v?};
    if welcome["type"]!="welcome"||welcome["device_id"]!=self.settings.device_id||welcome["agent_boot_id"]!=self.boot_id{return Err(RacpError::new("REQUEST_INVALID"));}
-   let epoch=welcome["connection_epoch"].as_u64().ok_or_else(||RacpError::new("REQUEST_INVALID"))?;self.status.write().await["connection_epoch"]=json!(epoch);
+   let epoch=welcome["connection_epoch"].as_u64().ok_or_else(||RacpError::new("REQUEST_INVALID"))?;
+   let previous=self.status.read().await["connection_epoch"].as_u64().unwrap_or(0);self.status.write().await["connection_epoch"]=json!(epoch);
+   if previous>0&&previous!=epoch {
+       self.approvals.invalidate();
+       let report=self.resources.retire(crate::resources::RetirementScope {epoch:Some(previous),..Default::default()},Duration::from_secs(15)).await;
+       if !report.failed_resource_ids.is_empty(){return Err(RacpError::new("CLEANUP_UNKNOWN"));}
+   }
    self.phase("reconcile").await;
    for record in self.journal.records()?{
     if record.request["device_id"]!=self.settings.device_id||!Journal::terminal(&record.state){continue;}
@@ -253,7 +456,11 @@ impl Agent {
       if message["type"]=="heartbeat"{*self.lease.lock().await=tokio::time::Instant::now()+Duration::from_millis(lease_ms);if !self.lease_retiring.load(Ordering::Acquire){self.providers.connection(epoch,Duration::from_millis(lease_ms));}}
       else if message["type"]=="request"{self.dispatch(message).await?;}
       else if message["type"]=="cancel"{self.cancel_execution(message["target_operation_id"].as_str().ok_or_else(||RacpError::new("REQUEST_INVALID"))?,message["reason"].as_str().unwrap_or("requested")).await?;}
-      else if matches!(message["type"].as_str(),Some("native_subscribe"|"native_packet"|"native_unsubscribe")){self.providers.native_message(message).await?;}
+      else if matches!(message["type"].as_str(),Some("native_subscribe"|"native_packet"|"native_unsubscribe")){
+          let _permit=self.emission_gate.read().await;
+          if message["type"]!="native_unsubscribe"{self.authorize_native_frame(&message)?;}
+          self.providers.native_message(message).await?;
+      }
       else if message["type"]=="stream_open"{streams.subscribe(message).await?;}
       else if message["type"]=="stream_ack"{streams.ack(&message).await?;}
       else if message["type"]=="stream_unsubscribe"{streams.unsubscribe(&message).await?;}
@@ -366,7 +573,18 @@ impl Agent {
                         retry_agent.outputs.failed(id, "PERMISSION_DENIED")?;
                         continue;
                     }
-                    let result = tokio::select! {_=retry_shutdown.cancelled()=>return Ok::<(),RacpError>(()),v=retry_agent.artifacts.upload(&output,&retry_agent.outputs)=>v};
+                    let guarded = retry_agent.clone();
+                    let operation = op.to_owned();
+                    let fence = crate::peer::EmissionFence {
+                        gate: retry_agent.emission_gate.clone(),
+                        authorize: Arc::new(move || {
+                            if guarded.stopping.load(Ordering::Acquire) {
+                                return Err(RacpError::new("DEVICE_OFFLINE"));
+                            }
+                            guarded.authorize_record(&guarded.journal.get(&operation)?)
+                        }),
+                    };
+                    let result = tokio::select! {_=retry_shutdown.cancelled()=>return Ok::<(),RacpError>(()),v=retry_agent.artifacts.upload_guarded(&output,&retry_agent.outputs,Some(fence))=>v};
                     match result {
                         Ok(_) => {
                             let _ = retry_agent.send(retry_agent.outcome(record).await?).await;
@@ -384,6 +602,7 @@ impl Agent {
             }
             let result = self.session(&shutdown).await;
             if let Err(error) = result {
+                self.phase("disconnected").await;
                 self.log("agent_disconnected", json!({"code":error.code}));
                 if error.code.0 == "TOKEN_REJECTED" {
                     shutdown.cancel();
@@ -403,7 +622,18 @@ impl Agent {
                 }
                 notified.await;
             }
-            self.providers.cleanup().await
+            let report = self
+                .resources
+                .retire(
+                    crate::resources::RetirementScope::default(),
+                    Duration::from_secs(15),
+                )
+                .await;
+            let provider_result = self.providers.cleanup().await;
+            if !report.failed_resource_ids.is_empty() {
+                return Err(RacpError::new("CLEANUP_UNKNOWN"));
+            }
+            provider_result
         };
         tokio::time::timeout(Duration::from_secs(15), cleanup)
             .await
@@ -416,6 +646,7 @@ impl Agent {
             .map_err(|_| RacpError::new("CLEANUP_UNKNOWN"))??;
         self.status.write().await["connected"] = json!(false);
         self.status.write().await["state"] = json!("STOPPED");
+        self.phase("stopped").await;
         Ok(())
     }
     pub fn log(&self, event: &str, mut value: Value) {
@@ -442,6 +673,16 @@ impl Agent {
             let _ = writeln!(file, "{value}");
         }
     }
+}
+fn private_result(value: &Value) -> bool {
+    !(value["result"].is_null()
+        && value["outputs"].as_array().is_some_and(|v| v.is_empty())
+        && value["error"]["details"]
+            .as_object()
+            .is_some_and(|v| v.len() == 1)
+        && value["error"]["details"]["execution_outcome_state"]
+            .as_str()
+            .is_some_and(Journal::terminal))
 }
 async fn receive<S>(stream: &mut S) -> Result<Value, RacpError>
 where

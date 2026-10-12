@@ -1,5 +1,6 @@
 import codecs
 import json
+import math
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
@@ -492,6 +493,8 @@ def validate_tree(value: Any, depth: int = 0) -> None:
         raise ValueError("maximum JSON nesting exceeded")
     if isinstance(value, str) and len(value.encode("utf-8")) > 256 * 1024:
         raise ValueError("maximum string size exceeded")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("non-finite JSON number")
     if isinstance(value, dict):
         for key, item in value.items():
             validate_tree(key, depth + 1)
@@ -501,10 +504,30 @@ def validate_tree(value: Any, depth: int = 0) -> None:
             validate_tree(item, depth + 1)
 
 
-def decode_message(raw: str | bytes) -> Message:
+def _unique_object(items: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in items:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def _invalid_constant(value: str) -> Any:
+    raise ValueError("non-finite JSON constant")
+
+
+def decode_json(raw: str | bytes, max_bytes: int = MAX_MESSAGE_BYTES) -> Any:
     size = len(raw.encode("utf-8")) if isinstance(raw, str) else len(raw)
-    if size > MAX_MESSAGE_BYTES:
+    if size > max_bytes:
         raise ValueError("maximum frame size exceeded")
-    value = json.loads(raw)
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8")
+    value = json.loads(raw, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
     validate_tree(value)
+    return value
+
+
+def decode_message(raw: str | bytes) -> Message:
+    value = decode_json(raw)
     return MESSAGE_ADAPTER.validate_python(value)

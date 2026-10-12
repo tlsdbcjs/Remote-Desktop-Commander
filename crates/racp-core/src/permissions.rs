@@ -11,31 +11,6 @@ static CATALOG: LazyLock<Value> = LazyLock::new(|| {
 static BINDINGS: LazyLock<Value> = LazyLock::new(|| {
     serde_json::from_str(include_str!("permission-bindings.json")).expect("permission bindings")
 });
-pub fn legacy_permissions(desktop: bool) -> Value {
-    let legacy: Vec<String> = serde_json::from_str(include_str!("legacy-permissions.json"))
-        .expect("legacy frozen permissions");
-    let grants: serde_json::Map<String, Value> = CATALOG
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|item| legacy.iter().any(|id| item["id"] == *id))
-        .map(|item| {
-            (
-                item["id"].as_str().unwrap().into(),
-                json!(if !desktop
-                    && matches!(
-                        item["category"].as_str(),
-                        Some("desktop_read" | "desktop_input")
-                    ) {
-                    "deny"
-                } else {
-                    "allow"
-                }),
-            )
-        })
-        .collect();
-    json!({"version":1,"grants":grants,"disabled_categories":[],"constraints":{"workspace_ids":[],"max_timeout_ms":86400000,"max_output_bytes":1073741824,"executable_allowlist":[],"executable_denylist":[],"strict_os_isolation":false}})
-}
 pub fn validate_permissions(value: &Value) -> Result<(), RacpError> {
     let schema: Value = serde_json::from_str(include_str!(
         "../../../docs/protocol/agent-settings-v1.schema.json"
@@ -110,7 +85,19 @@ fn leaf<'a>(permissions: &'a Value, id: &str) -> &'a str {
 pub fn permission_allows_field(value: &Value, id: &str) -> bool {
     leaf(value, id) == "allow"
 }
+pub fn permission_allows_approved_field(value: &Value, id: &str, approved: bool) -> bool {
+    matches!(leaf(value, id), "allow") || (approved && leaf(value, id) == "require_approval")
+}
 pub fn authorize(permissions: &Value, request: &Value, owned: bool) -> Result<(), RacpError> {
+    authorize_with_approval(permissions, request, owned, false)
+}
+/// A true flag must come from an Agent-issued, consumed request/target/revision binding.
+pub fn authorize_with_approval(
+    permissions: &Value,
+    request: &Value,
+    owned: bool,
+    approved: bool,
+) -> Result<(), RacpError> {
     let op = request["operation"].as_str().unwrap_or("");
     let p = &request["payload"];
     let c = &permissions["constraints"];
@@ -265,7 +252,7 @@ pub fn authorize(permissions: &Value, request: &Value, owned: bool) -> Result<()
             _ => return Err(RacpError::new("PERMISSION_DENIED")),
         }
     }
-    if approval {
+    if approval && !approved {
         return Err(RacpError::new("APPROVAL_REQUIRED"));
     }
     Ok(())

@@ -1,4 +1,52 @@
 {
+  "filesystem.preview_image": [
+    "files.preview.image",
+    "artifacts.export"
+  ],
+  "filesystem.trash": [
+    "files.trash"
+  ],
+  "filesystem.acl_read": [
+    "files.acl.read"
+  ],
+  "filesystem.acl_modify": [
+    "files.acl.modify",
+    "files.acl.read"
+  ],
+  "diagnostics.agent": [
+    "diagnostics.agent.read"
+  ],
+  "performance.sample": [
+    "performance.sample"
+  ],
+  "events.query": [
+    "events.os.read"
+  ],
+  "diagnostics.export": [
+    "diagnostics.export",
+    "diagnostics.agent.read",
+    "events.os.read",
+    "artifacts.export"
+  ],
+  "browser.console_read": [
+    "browser.console.read"
+  ],
+  "browser.network_read": [
+    "browser.network.read"
+  ],
+  "browser.cookies_read": [
+    "browser.cookies.read"
+  ],
+  "browser.storage_modify": [
+    "browser.storage.modify"
+  ],
+  "jobs.observe": [
+    "jobs.observe"
+  ],
+  "jobs.cancel": [
+    "jobs.cancel",
+    "jobs.observe"
+  ],
   "system.info": [
     "system.identity.read"
   ],

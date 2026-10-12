@@ -1,6 +1,12 @@
 use super::{cursor::Cursor, encoding, Provider};
+#[cfg(windows)]
+mod acl;
+mod preview;
 mod text;
+#[cfg(windows)]
+mod trash;
 use futures_util::future::BoxFuture;
+pub use preview::run_worker as run_preview_worker;
 use racp_contract::{new_id, registry, RacpError};
 use racp_core::{private_dir, AgentSettings, Directory, FileInfo, Workspaces};
 use serde_json::{json, Value};
@@ -12,6 +18,8 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio_util::sync::CancellationToken;
+#[cfg(windows)]
+pub use trash::run_worker as run_trash_worker;
 use unicode_casefold::UnicodeCaseFold;
 #[derive(Clone)]
 pub struct Filesystem {
@@ -20,6 +28,7 @@ pub struct Filesystem {
     lock: Arc<Mutex<()>>,
     cursor: Cursor,
     protected: Arc<Vec<PathBuf>>,
+    private: Arc<Vec<PathBuf>>,
 }
 struct Budget {
     deadline: Instant,
@@ -133,6 +142,13 @@ impl Filesystem {
         Ok(Self {
             guards,
             spool,
+            private: Arc::new(
+                settings
+                    .data_dir
+                    .parent()
+                    .map(|p| vec![p.to_owned()])
+                    .unwrap_or_else(|| vec![settings.data_dir.clone()]),
+            ),
             lock: Arc::new(Mutex::new(())),
             cursor: Cursor::default(),
             protected: Arc::new(protected),
@@ -142,6 +158,22 @@ impl Filesystem {
         self.protected
             .iter()
             .any(|root| racp_core::path_within(path, root))
+    }
+    fn private_path(&self, path: &Path) -> bool {
+        self.private
+            .iter()
+            .any(|root| racp_core::path_within(path, root))
+            || path.components().any(|part| {
+                let name = part.as_os_str().to_string_lossy().to_ascii_lowercase();
+                name.starts_with(".racp-") || name.starts_with("racp-trash_")
+            })
+    }
+    fn private_overlap(&self, path: &Path) -> bool {
+        self.private_path(path)
+            || self
+                .private
+                .iter()
+                .any(|root| racp_core::path_within(root, path))
     }
     fn read(
         &self,
@@ -405,6 +437,12 @@ impl Filesystem {
             for name in parent.names()? {
                 let info = info(&parent, &name)?;
                 let path = directory.join(name);
+                if self.private_path(&path) {
+                    if complete {
+                        return Err(RacpError::new("PATH_ACCESS_DENIED").into());
+                    }
+                    continue;
+                }
                 paths.push(path.clone());
                 if paths.len() > 10000 {
                     return Err(RacpError::new("RESOURCE_EXHAUSTED").into());
@@ -584,6 +622,21 @@ impl Filesystem {
                 .or(payload["source"].as_str())
                 .unwrap_or("."),
         )?;
+        if self.private_path(&target) {
+            return Err(RacpError::new("PATH_ACCESS_DENIED").into());
+        }
+        if [
+            "filesystem.copy",
+            "filesystem.move",
+            "filesystem.delete",
+            "filesystem.trash",
+            "filesystem.acl_modify",
+        ]
+        .contains(&op)
+            && self.private_overlap(&target)
+        {
+            return Err(RacpError::new("PATH_ACCESS_DENIED").into());
+        }
         if ["filesystem.delete", "filesystem.move"].contains(&op)
             && self.guards.protects_root(&target)
         {
@@ -601,6 +654,34 @@ impl Filesystem {
             return Err(RacpError::new("PATH_ACCESS_DENIED").into());
         }
         match op {
+            "filesystem.preview_image" => return self.preview_image(id, &target, payload, budget),
+            "filesystem.acl_read" | "filesystem.acl_modify" => {
+                #[cfg(windows)]
+                {
+                    if op == "filesystem.acl_modify" && self.protected(&target) {
+                        return Err(RacpError::new("PATH_ACCESS_DENIED").into());
+                    }
+                    return acl::execute(self, id, &target, payload, budget, op)
+                        .map_err(Into::into);
+                }
+                #[cfg(not(windows))]
+                {
+                    return Err(RacpError::new("OPERATION_NOT_SUPPORTED").into());
+                }
+            }
+            "filesystem.trash" => {
+                if self.protected(&target) || self.guards.protects_root(&target) {
+                    return Err(RacpError::new("PATH_ACCESS_DENIED").into());
+                }
+                #[cfg(windows)]
+                {
+                    return trash::execute(self, id, &target, payload, budget).map_err(Into::into);
+                }
+                #[cfg(not(windows))]
+                {
+                    return Err(RacpError::new("OPERATION_NOT_SUPPORTED").into());
+                }
+            }
             "filesystem.search_content" => {
                 return self.search_content(id, &target, payload, budget)
             }
@@ -630,7 +711,11 @@ impl Filesystem {
                 let offset = self
                     .cursor
                     .decode(payload["cursor"].as_str(), &scope, &revision)?;
-                let names = parent.names()?;
+                let names: Vec<_> = parent
+                    .names()?
+                    .into_iter()
+                    .filter(|filename| !self.private_path(&target.join(filename)))
+                    .collect();
                 let mut items = vec![];
                 for filename in names.iter().skip(offset).take(limit) {
                     budget.check()?;
@@ -700,7 +785,10 @@ impl Filesystem {
                     .as_str()
                     .ok_or_else(|| RacpError::new("INVALID_ARGUMENT"))?,
             )?;
-            if self.protected(&destination) || self.guards.is_root(&destination) {
+            if self.protected(&destination)
+                || self.guards.is_root(&destination)
+                || self.private_overlap(&destination)
+            {
                 return Err(RacpError::new("PATH_ACCESS_DENIED").into());
             }
             let source_info = if self.guards.is_root(&target) {
@@ -901,10 +989,11 @@ impl Provider for Filesystem {
                     let state = match error.error.code.0 {
                         "CANCELLED" => "CANCELLED",
                         "TIMEOUT" => "TIMED_OUT",
-                        "EXECUTION_UNKNOWN" => "UNKNOWN",
+                        "EXECUTION_UNKNOWN" | "CLEANUP_UNKNOWN" => "UNKNOWN",
                         _ => "FAILED",
                     };
-                    let partial = error.details["cleanup_status"] == "partial";
+                    let partial = error.details["cleanup_status"] == "partial"
+                        || error.details["rolled_back"] == true;
                     json!({"state":state,"result":null,"error":{"code":error.error.code,"message":"filesystem operation interrupted or rejected","layer":"provider","retryable":false,"execution_state":if partial{"completed"}else{"not_started"},"details":error.details}})
                 }
             })

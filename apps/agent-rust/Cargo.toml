@@ -14,4 +14,4 @@ tokio.workspace = true
 tokio-util.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Services", "Win32_Security", "Win32_Security_Authorization"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Services", "Win32_Security", "Win32_Security_Authorization", "Win32_UI_Shell", "Win32_Storage_FileSystem"] }

@@ -1,9 +1,9 @@
 //! Scoped analysis/debugger handles over explicitly approved native plugins.
-use super::plugin::{decode, Approved, Supervisor};
+use super::plugin::Supervisor;
 use crate::providers::{cursor::Cursor, Provider};
 use futures_util::future::BoxFuture;
-use racp_contract::{digest, new_id, timestamp, validate_schema, RacpError};
-use racp_core::{private_dir, read_bounded, secure_create_file, AgentSettings, Workspaces};
+use racp_contract::{digest, new_id, timestamp, RacpError};
+use racp_core::{private_dir, secure_create_file, AgentSettings, Workspaces};
 use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -53,6 +53,17 @@ fn budget(deadline: Instant, cancel: &CancellationToken) -> Result<(), RacpError
 }
 impl Reversing {
     pub fn new(settings: &AgentSettings, boot: &str) -> Result<Self, RacpError> {
+        Self::with_runtimes(
+            settings,
+            boot,
+            crate::providers::ProviderRuntimes::default(),
+        )
+    }
+    pub fn with_runtimes(
+        settings: &AgentSettings,
+        boot: &str,
+        runtimes: crate::providers::ProviderRuntimes,
+    ) -> Result<Self, RacpError> {
         let root = settings.data_dir.join("reversing");
         private_dir(&root)?;
         let spool = settings.data_dir.join("spool");
@@ -62,40 +73,21 @@ impl Reversing {
             resources: BTreeMap::new(),
             errors: vec![],
         };
-        let config = settings.data_dir.join("plugins.json");
-        if config.try_exists()? {
-            let loaded = (|| {
-                let raw = read_bounded(&config, 65536, true)?;
-                let config = decode(&raw, 65536)?;
-                let schema: Value = serde_json::from_str(include_str!(
-                    "../../../../../docs/protocol/plugin-installations-v1.schema.json"
-                ))
-                .expect("installation schema");
-                validate_schema(&schema, &config)?;
-                for installed in config["plugins"].as_array().into_iter().flatten() {
-                    let path = Path::new(installed["manifest"].as_str().unwrap());
-                    let hash = installed["sha256"].as_str().unwrap();
-                    let permissions: BTreeSet<_> = installed["permissions"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|v| v.as_str().unwrap().into())
-                        .collect();
-                    let approved = Approved::load(path, hash, &permissions)?;
-                    let name = approved.manifest["name"].as_str().unwrap().to_owned();
-                    if state.backends.contains_key(&name) {
-                        return Err(RacpError::new("PLUGIN_PROTOCOL_ERROR"));
+        {
+            for (name, runtime, gdb) in [
+                ("gdb", runtimes.gdb.clone(), true),
+                ("ghidra", runtimes.analysis.clone(), false),
+            ] {
+                if let Some(runtime) = runtime {
+                    match super::admitted::adapter(runtime, &root, gdb) {
+                        Ok(approved) => {
+                            state
+                                .backends
+                                .insert(name.into(), Supervisor::new(approved));
+                        }
+                        Err(_) => state.errors.push("NATIVE_ADAPTER_CONFIGURATION_INVALID"),
                     }
-                    let mut backend = Supervisor::new(approved);
-                    if backend.health(&CancellationToken::new()).is_err() {
-                        state.errors.push("PLUGIN_START_FAILED");
-                    }
-                    state.backends.insert(name, backend);
                 }
-                Ok::<(), RacpError>(())
-            })();
-            if loaded.is_err() {
-                state.errors.push("PLUGIN_CONFIGURATION_INVALID");
             }
         }
         let provider = Self {
@@ -454,7 +446,7 @@ impl Reversing {
             } else {
                 "debugger"
             };
-            let backends:Vec<_>=state.backends.values().filter(|b|b.approved.manifest["capabilities"].as_array().is_some_and(|a|a.iter().any(|v|v==category))).map(|b|json!({"name":b.approved.manifest["name"],"backend":b.approved.manifest["backend_name"],"backend_version":b.approved.manifest["backend_version"],"instance_id":b.instance,"state":if b.ready{"READY"}else{"DEGRADED"},"manifest_sha256":b.approved.hash})).collect();
+            let backends:Vec<_>=state.backends.values().filter(|b|b.approved.manifest["capabilities"].as_array().is_some_and(|a|a.iter().any(|v|v==category))).map(|b|json!({"name":b.approved.manifest["name"],"backend":b.approved.manifest["backend_name"],"backend_version":b.approved.manifest["backend_version"],"instance_id":b.instance,"state":if b.ready{"READY"}else{"ADMITTED"},"manifest_sha256":b.approved.hash})).collect();
             return Ok(json!({"backends":backends,"configuration_errors":state.errors}));
         }
         if matches!(op, "re.open" | "debugger.launch" | "debugger.attach") {
@@ -464,10 +456,10 @@ impl Reversing {
             let backend_name = p["backend"].as_str().unwrap_or("").to_owned();
             let backend = state
                 .backends
-                .get(&backend_name)
+                .get_mut(&backend_name)
                 .ok_or_else(|| RacpError::new("OPERATION_NOT_SUPPORTED"))?;
             if !backend.ready {
-                return Err(RacpError::new("CAPABILITY_UNAVAILABLE"));
+                backend.health(&cancel)?;
             }
             let instance = backend.instance.clone();
             let id = new_id(if op == "re.open" { "analysis" } else { "debug" });
@@ -537,7 +529,7 @@ impl Reversing {
                 }
             };
             if let Some(target) = &_target {
-                let actual = super::ghidra::file_hash(target, deadline, &cancel)?;
+                let actual = super::file_hash(target, deadline, &cancel)?;
                 if value["target_sha256"] != actual {
                     state.backends.get_mut(&backend_name).unwrap().shutdown()?;
                     self.remove_resource(&self.root.join(&id))?;
@@ -789,9 +781,21 @@ impl Reversing {
     }
 }
 impl Provider for Reversing {
+    fn retire_handle(&self, handle: &Value) -> BoxFuture<'_, Result<(), RacpError>> {
+        let provider = self.clone();
+        let handle = handle.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move ||{
+            let analysis=handle["type"]=="analysis";
+            let mut payload=serde_json::Map::new();payload.insert(if analysis{"analysis_id"}else{"debug_id"}.into(),handle["id"].clone());
+            let request=json!({"operation":if analysis{"re.close"}else{"debugger.close"},"agent_boot_id":provider.boot,"device_id":provider.device,"context":{"principal_id":handle["owner"],"workspace_id":handle["workspace_id"]},"payload":payload});
+            provider.run(request,CancellationToken::new(),Instant::now()+Duration::from_secs(5)).map(|_|())
+        }).await.map_err(|_|RacpError::new("CLEANUP_FAILED"))?
+        })
+    }
     fn capabilities(&self) -> Vec<Value> {
         let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        ["re","debugger"].into_iter().map(|namespace|{let mut operations=BTreeSet::from([format!("{namespace}.backends")]);for backend in state.backends.values().filter(|b|b.ready){for op in backend.approved.manifest["operations"].as_array().into_iter().flatten(){if op["name"].as_str().is_some_and(|s|s.starts_with(&format!("{namespace}."))){operations.insert(op["name"].as_str().unwrap().into());}}}json!({"name":namespace,"version":"1.0.0","supported":true,"enabled":true,"healthy":true,"operations":operations,"attributes":{"resource_limit":8,"history_limit":64,"idle_ttl_seconds":3600,"plugin_crash_isolation":"rust-subprocess-job","configuration_errors":state.errors}})}).collect()
+        ["re","debugger"].into_iter().map(|namespace|{let mut operations=BTreeSet::from([format!("{namespace}.backends")]);for backend in state.backends.values(){for op in backend.approved.manifest["operations"].as_array().into_iter().flatten(){if op["name"].as_str().is_some_and(|s|s.starts_with(&format!("{namespace}."))){operations.insert(op["name"].as_str().unwrap().into());}}}json!({"name":namespace,"version":"1.0.0","supported":true,"enabled":true,"healthy":true,"operations":operations,"attributes":{"resource_limit":8,"history_limit":64,"idle_ttl_seconds":3600,"runtime_health":"checked_on_first_open","plugin_crash_isolation":"rust-subprocess-job","configuration_errors":state.errors}})}).collect()
     }
     fn inventory(&self) -> Vec<Value> {
         self.state

@@ -1924,6 +1924,7 @@ export interface components {
        */
       media_type:
         | "application/octet-stream"
+        | "application/vnd.tcpdump.pcap"
         | "application/json"
         | "application/vnd.racp.output-stream"
         | "image/png"

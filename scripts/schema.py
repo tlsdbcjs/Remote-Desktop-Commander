@@ -9,6 +9,7 @@ from racp_protocol.artifacts import TransferComplete, TransferCreate
 from racp_protocol.console import ConsoleEvent, ConsoleLogin, ConsoleSession, DoctorView
 from racp_protocol.jobs import JobAcceptance, JobView
 from racp_protocol.models import MESSAGE_ADAPTER, OperationInput
+from racp_protocol.permissions import OPERATION_PERMISSIONS
 from racp_protocol.plugins import PLUGIN_MESSAGE, PluginManifest
 from racp_protocol.registry import REGISTRY
 from racp_protocol.resolutions import OperationResolutions
@@ -56,6 +57,12 @@ def main() -> None:
     root.mkdir(parents=True, exist_ok=True)
     for name, document in documents().items():
         (root / name).write_text(document, encoding="utf-8")
+    # Keep the native default AND table generated from the same server authority.
+    binding = Path("crates/racp-core/src/permission-bindings.json")
+    binding.write_text(
+        json.dumps(dict(OPERATION_PERMISSIONS), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":

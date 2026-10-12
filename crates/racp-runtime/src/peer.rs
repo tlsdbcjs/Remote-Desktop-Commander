@@ -10,6 +10,12 @@ use tokio_util::sync::CancellationToken;
 struct Envelope {
     value: Value,
     done: oneshot::Sender<Result<(), RacpError>>,
+    fence: Option<EmissionFence>,
+}
+#[derive(Clone)]
+pub(crate) struct EmissionFence {
+    pub gate: std::sync::Arc<tokio::sync::RwLock<()>>,
+    pub authorize: std::sync::Arc<dyn Fn() -> Result<(), RacpError> + Send + Sync>,
 }
 #[derive(Clone)]
 pub(crate) struct Peer {
@@ -31,6 +37,16 @@ impl Peer {
             loop {
                 let entry = tokio::select! {biased;_ =writer_cancel.cancelled()=>break,v=controls.recv()=>v,v=frames.recv()=>v};
                 let Some(entry) = entry else { break };
+                let _permit = if let Some(fence) = &entry.fence {
+                    let permit = fence.gate.clone().read_owned().await;
+                    if let Err(error) = (fence.authorize)() {
+                        let _ = entry.done.send(Err(error));
+                        continue;
+                    }
+                    Some(permit)
+                } else {
+                    None
+                };
                 let result = timeout(
                     Duration::from_secs(5),
                     sink.send(Message::Text(entry.value.to_string().into())),
@@ -62,11 +78,18 @@ impl Peer {
         }
     }
     pub async fn send(&self, value: Value) -> Result<(), RacpError> {
+        self.send_checked(value, None).await
+    }
+    pub async fn send_checked(
+        &self,
+        value: Value,
+        fence: Option<EmissionFence>,
+    ) -> Result<(), RacpError> {
         let raw = serde_json::to_vec(&value)?;
         decode_message(&raw)?;
         let (done, reply) = oneshot::channel();
         let data = value["type"] == "stream_data";
-        let entry = Envelope { value, done };
+        let entry = Envelope { value, done, fence };
         if data {
             self.data
                 .send(entry)

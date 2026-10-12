@@ -1,8 +1,8 @@
 # RACP Agent Guidelines & Version Management
 
 > **Document ID**: `DOC-GOV-AGENTS`\
-> **Status**: Active · **Target Version**: v0.1.21\
-> **Last Updated**: 2026-10-10 · **Classification**: Repository Agent Guidelines
+> **Status**: Active · **Target Version**: v0.1.26\
+> **Last Updated**: 2026-10-12 · **Classification**: Repository Agent Guidelines
 
 This document defines repository instructions, operational principles, and semantic versioning policies for AI agents (Codex, Antigravity, Gemini, etc.) and contributors working on the **Remote-Desktop-Commander (RACP)** codebase.
 
@@ -16,6 +16,7 @@ This document defines repository instructions, operational principles, and seman
 - [6. Release Checklist](#6-pre-commit--release-checklist-for-agents)
 - [7. Documentation Governance](#7-technical-documentation-governance-documentation-standards-skill)
 - [8. Desktop Build Definition](#8-desktop-build-definition-desktop-build-skill)
+- [9. Build Output Layout](#9-build-output-layout)
 
 ---
 
@@ -24,8 +25,8 @@ This document defines repository instructions, operational principles, and seman
 - **Name**: Remote-Desktop-Commander (RACP - Remote Access and Control Protocol)
 - **Architecture**:
   - Python workspace (`uv` workspace): `apps/cli`, `apps/gateway`, `packages/domain`, `packages/protocol`, `packages/policy`, `packages/observability`, `packages/sdk`
-  - Rust workspace: `apps/agent-rust`, `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`; independent Tauri workspace `apps/client/src-tauri`
-  - Node / Web / Desktop workspace (`pnpm` workspace): `apps/client` (Tauri + Rust + React), `apps/console` (React + Vite)
+  - Rust workspace: `apps/agent-rust`, `apps/client-native` (Iced, including its local `src/ui_model.rs`), `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`, `xtask`; opt-in independent `apps/analysis-host`
+  - Node / Web workspace (`pnpm` workspace): `apps/console` (React + Vite) only
 - **Current Baseline Version**: Read `packages/domain/src/racp_domain/version.py` (SSOT).
 
 ---
@@ -100,17 +101,18 @@ When `scripts/version.py` runs, it atomically updates all target files:
    - `packages/sdk/pyproject.toml`
 
 2. **JavaScript / Desktop Packages**:
-   - `apps/client/package.json`
    - `apps/console/package.json`
 
-3. **Rust & Tauri Version Configuration**:
+3. **Rust Native Version Configuration**:
    - `Cargo.toml`
-   - `apps/client/src-tauri/Cargo.toml`
-   - `apps/client/src-tauri/tauri.conf.json`
+   - `apps/analysis-host/Cargo.toml` (independent optional host; same SSOT)
 
 4. **Code & UI Version Display**:
    - `packages/domain/src/racp_domain/version.py` (`VERSION`, `__version__`)
-   - `apps/client/src/main.tsx` (`const CLIENT_VERSION = "..."` rendered in header)
+   - `apps/client-native` reads `racp_contract::VERSION` (`CARGO_PKG_VERSION`) for its header
+
+5. **Published Console Contract Metadata**:
+   - `docs/protocol/console-openapi-v1.json` (`info.version` only; schema paths and API definitions unchanged)
 
 ---
 
@@ -132,7 +134,7 @@ When `scripts/version.py` runs, it atomically updates all target files:
 - **Client Application**:
   - Displayed prominently in the top header as `<span className="version-badge">v0.1.8</span>`.
 - **Dynamic Wheels & Build Scripts**:
-  - `scripts/build.py` imports `racp_domain.version.VERSION`; `scripts/build-client.mjs` reads the workspace version from the maintained version files.
+  - `scripts/build.py` imports `racp_domain.version.VERSION`; native `xtask` uses `racp_contract::VERSION`.
 
 ---
 
@@ -193,15 +195,34 @@ Use [`.agents/skills/desktop-build/SKILL.md`](.agents/skills/desktop-build/SKILL
 > [!IMPORTANT]
 > Build only Windows by default. Do not start macOS/Linux builds, containers, or their CI jobs during routine builds. Their native runners can be enabled explicitly using the workflow dispatch input `include_deferred_platforms`.
 
-- Entry point: `node scripts/build-client.mjs --platform win --arch x64`. Use pinned Node 22.23.0, pnpm 11.19.0 and Rust 1.90.0; `--dry-run` prints paths/targets without building.
-- Build Rust, Chromium, fixed WebView2, and native dependencies on the matching OS and architecture. Reject mismatched bundles instead of copying Windows binaries to macOS/Linux. `.exe` applies to Windows; macOS/Linux use their native executable formats.
-- Packaging SSOT: `apps/client/src-tauri/tauri.conf.json`, `installer.nsh`, and `scripts/build-client.mjs`; manifests verify the current version, architecture and staged file hashes.
-- Staging: `dist/client-agent/<version>/<win|mac|linux>-<arch>/<build-id>/`; output: `dist/client-desktop/<version>/<win|mac|linux>-<arch>/<build-id>/`.
+- Entry point: `cargo run --locked -p xtask -- stage --platform win --arch x64 --build-id <unique-id>`. Use Rust 1.90.0; `xtask package --dry-run` prints definitions without writing. Node 22.23.0/pnpm 11.19.0 belong to the retained Console only.
+- Build native dependencies on the matching OS and architecture. Optional Chromium/analysis runtimes require separate manifest admission. Reject mismatched bundles; `.exe` applies to Windows while macOS/Linux definitions use native executable formats.
+- Packaging SSOT: `xtask/src/package.rs`, `xtask/native-installer.nsi`, `crates/racp-contract/src/distribution.rs`. Product artifact generation is separate from development staging and requires its explicit request.
+- Client staging: `dist/client/<version>/<target>/<build-id>/staging/`; product output: the same batch's `packages/`. Standalone Agent: `dist/agent/<version>/win-x64/<build-id>/build/`, using `xtask stage-agent` and `xtask verify-agent`.
 - Bump PATCH once per build/change batch with `scripts/version.py`, refresh `uv.lock`, and reuse that version for retries and all platform artifacts. Never bump once per output format.
-- Bundle the native Tauri client, Rust Agent, pinned Chromium and SHA-256-admitted fixed WebView2. Do not bundle CPython, Node or Electron. Never package enrollment tokens, credentials, gateway-specific settings, or local device state.
-- Preserve existing outputs. On a failed build, inspect and move only the failed batch into a sibling quarantine path before retrying; do not delete unrelated `dist/` contents.
-- Verify production Rust/TypeScript builds and packaging manifest integrity. Automated tests, GUI smoke and native acceptance are currently deferred by explicit user instruction; do not run them during this migration. Record checksums, passed checks and deferred platforms in [Implementation Status](docs/quality/implementation-status.md).
+- Bundle native Iced Client, Rust Agent and required static assets/license/SBOM only. Do not bundle CPython, Node, Electron, React or WebView2. Optional runtimes and analysis host are separate. Never package enrollment tokens, credentials, gateway-specific settings or local device state.
+- Preserve existing outputs by default. An explicit user request to reset `dist/` authorizes removing its old outputs, including legacy backups and test evidence; it does not authorize deleting source or registered state. Validate the exact workspace path, ensure output processes have stopped, and unlink reparse points without following their external targets before recursive deletion. On ordinary build failure, inspect and quarantine only the failed phase before retrying under a new build ID.
+- Verify production Rust/TypeScript builds and packaging manifest integrity. The Windows installer request authorizes setup artifact creation. The user's latest instruction, **do not actually install**, prohibits any further installer execution or install/uninstall tests on this machine. Earlier isolated tests completed before that instruction are historical evidence only; do not rerun them without a new explicit request. Preserve existing registered profiles and services. Machine service installation, signing, clean-machine acceptance and macOS/Linux native builds remain deferred. Record checksums, passed checks and limitations in [Implementation Status](docs/quality/implementation-status.md).
 
 > [!NOTE]
 > Development builds are unsigned and use `--publish never`; successful packaging does not establish clean-machine installation, upgrade/uninstall, signing, notarization, or native macOS/Linux acceptance.
+
+The user installer bundles Client and Agent in one setup EXE. Its default path is `%LOCALAPPDATA%\Programs\RACP-Native\<version>\payload\`; Start Menu and Windows Apps entries launch/remove this installed version. Registration/state stays at `%LOCALAPPDATA%\RACP\native-client` and is preserved on removal. `staging/racp-native-portable.exe` is a packaging stub, not a runnable portable distribution. Deliver the verified `packages/*-setup.exe` to users.
+
+## 9. Build Output Layout
+
+`dist/` contains generated outputs. `apps/` contains application source, `crates/` shared Rust libraries, and `target/` disposable Cargo compilation caches. Caches are not deployment artifacts and can be reused for a current-source rebuild.
+
+| Component | Default path | Contents / entry point |
+|---|---|---|
+| Gateway | `dist/gateway/<version>/win-x64/<build-id>/packages/` | Python server/runtime and compiled Web Console, portable ZIP; `uv run --frozen python scripts/build_gateway.py --node <node.exe> --build-id <id> --targets portable` |
+| Gateway workspace wheels | `dist/gateway/<version>/python-any/<build-id>/wheels/` | Python Gateway/CLI/shared-package wheels; `uv run --frozen python scripts/build.py --build-id <id>` |
+| Agent | `dist/agent/<version>/win-x64/<build-id>/build/` | Rust Agent EXE, LICENSE, Agent-only SBOM and hash manifest; `cargo run --locked -p xtask -- stage-agent --build-id <id>` |
+| Client | `dist/client/<version>/win-x64/<build-id>/staging/` | Iced Client, required companion Agent, LICENSE/SBOM/manifest and native launcher; `xtask stage` / `verify-staging` |
+| Client product artifacts | `dist/client/<version>/<target>/<build-id>/packages/` | Explicitly requested setup/portable/ZIP; `xtask package` |
+| Console | `dist/console/<version>/web/<build-id>/build/` | `web/` static frontend and build manifest; `uv run --frozen python scripts/console_build.py --node <node.exe> --build-id <id>` |
+| Verification | `dist/verification/<component>/<version>/<run-id>/` | Test reports, logs and isolated fixtures. Pass explicit output paths to Agent/GUI probes; never package these files. Known-source RE fixtures use `dist/verification/fixtures/<version>/re-fixture/`. |
+
+> [!IMPORTANT]
+> Do not write loose wheels, screenshots or build manifests into the `dist/` root. Do not create new `client-agent`, `client-native`, `client-desktop` or legacy-backup output trees. The Gateway runtime belongs only to Gateway outputs; standalone Agent outputs contain no GUI/Python/Node. Client's companion Agent is intentional. No output may contain enrollment tokens, credentials or registered device state.
 

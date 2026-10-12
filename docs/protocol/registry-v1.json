@@ -146,6 +146,1070 @@
     "default_job_timeout_ms": 3600000,
     "max_job_timeout_ms": 86400000
   },
+  "filesystem.preview_image": {
+    "name": "filesystem.preview_image",
+    "mcp_name": "fs_preview_image",
+    "capability": "filesystem",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "max_source_bytes": {
+          "default": 16777216,
+          "maximum": 16777216,
+          "minimum": 1,
+          "title": "Max Source Bytes",
+          "type": "integer"
+        },
+        "max_pixels": {
+          "default": 16777216,
+          "maximum": 16777216,
+          "minimum": 1,
+          "title": "Max Pixels",
+          "type": "integer"
+        },
+        "width": {
+          "default": 1024,
+          "maximum": 2048,
+          "minimum": 1,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "default": 1024,
+          "maximum": 2048,
+          "minimum": 1,
+          "title": "Height",
+          "type": "integer"
+        },
+        "expected_revision": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Revision"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "ImagePreview"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "owned_bounded_worker",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "workspace/path",
+    "permission_scope": "filesystem.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-A",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
+  "filesystem.trash": {
+    "name": "filesystem.trash",
+    "mcp_name": "fs_trash",
+    "capability": "filesystem",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "expected_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "expected_revision"
+      ],
+      "title": "FileTrash"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "owned_bounded_worker",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "workspace/path",
+    "permission_scope": "filesystem.mutate",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-A",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
+  "filesystem.acl_read": {
+    "name": "filesystem.acl_read",
+    "mcp_name": "fs_acl_read",
+    "capability": "filesystem",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "FilePath"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "workspace/path",
+    "permission_scope": "filesystem.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-A",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
+  "filesystem.acl_modify": {
+    "name": "filesystem.acl_modify",
+    "mcp_name": "fs_acl_modify",
+    "capability": "filesystem",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "$defs": {
+        "AclEntry": {
+          "additionalProperties": false,
+          "properties": {
+            "sid": {
+              "maxLength": 184,
+              "pattern": "^S-1-[0-9]+(?:-[0-9]+)+$",
+              "title": "Sid",
+              "type": "string"
+            },
+            "access": {
+              "default": "allow",
+              "enum": [
+                "allow",
+                "deny"
+              ],
+              "title": "Access",
+              "type": "string"
+            },
+            "rights": {
+              "default": "read",
+              "enum": [
+                "read",
+                "read_write",
+                "full"
+              ],
+              "title": "Rights",
+              "type": "string"
+            },
+            "inherit": {
+              "default": false,
+              "title": "Inherit",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "sid"
+          ],
+          "title": "AclEntry",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "expected_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Revision",
+          "type": "string"
+        },
+        "expected_acl_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Acl Sha256",
+          "type": "string"
+        },
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/AclEntry"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Entries",
+          "type": "array"
+        },
+        "inherit_parent": {
+          "default": true,
+          "title": "Inherit Parent",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "expected_revision",
+        "expected_acl_sha256",
+        "entries"
+      ],
+      "title": "AclModify"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "before_commit",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "workspace/path",
+    "permission_scope": "filesystem.mutate",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-A",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
+  "diagnostics.agent": {
+    "name": "diagnostics.agent",
+    "mcp_name": "diagnostics_agent",
+    "capability": "diagnostics",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "title": "AgentDiagnostics"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "workspace/path",
+    "permission_scope": "diagnostics.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-J",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
+  "performance.sample": {
+    "name": "performance.sample",
+    "mcp_name": "performance_sample",
+    "capability": "performance",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "duration_ms": {
+          "default": 1000,
+          "maximum": 30000,
+          "minimum": 100,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "interval_ms": {
+          "default": 250,
+          "maximum": 5000,
+          "minimum": 50,
+          "title": "Interval Ms",
+          "type": "integer"
+        }
+      },
+      "title": "PerformanceSample"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "cooperative_sampling",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "workspace/path",
+    "permission_scope": "performance.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-J",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
+  "events.query": {
+    "name": "events.query",
+    "mcp_name": "events_query",
+    "capability": "events",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "default": "System",
+          "enum": [
+            "System",
+            "Application",
+            "Security"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "after_record_id": {
+          "default": 0,
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "title": "After Record Id",
+          "type": "integer"
+        },
+        "limit": {
+          "default": 100,
+          "maximum": 1000,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "title": "EventQuery"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "owned_bounded_worker",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "workspace/path",
+    "permission_scope": "events.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-J",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
+  "diagnostics.export": {
+    "name": "diagnostics.export",
+    "mcp_name": "diagnostics_export",
+    "capability": "diagnostics",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "default": "System",
+          "enum": [
+            "System",
+            "Application",
+            "Security"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "after_record_id": {
+          "default": 0,
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "title": "After Record Id",
+          "type": "integer"
+        },
+        "limit": {
+          "default": 100,
+          "maximum": 1000,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "max_bytes": {
+          "default": 1048576,
+          "maximum": 16777216,
+          "minimum": 1024,
+          "title": "Max Bytes",
+          "type": "integer"
+        }
+      },
+      "title": "DiagnosticExport"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "owned_bounded_worker",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "workspace/path",
+    "permission_scope": "diagnostics.mutate",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-J",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
+  "browser.console_read": {
+    "name": "browser.console_read",
+    "mcp_name": "browser_console_read",
+    "capability": "browser",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "browser_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Browser Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Boot Id"
+        },
+        "page_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Page Id",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        },
+        "expected_origin": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Expected Origin",
+          "type": "string"
+        },
+        "navigation_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Navigation Revision",
+          "type": "string"
+        },
+        "after_sequence": {
+          "default": 0,
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "title": "After Sequence",
+          "type": "integer"
+        },
+        "limit": {
+          "default": 100,
+          "maximum": 256,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "browser_id",
+        "page_id",
+        "expected_origin",
+        "navigation_revision"
+      ],
+      "title": "BrowserLogRead"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "workspace/path",
+    "permission_scope": "browser.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-E",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
+  "browser.network_read": {
+    "name": "browser.network_read",
+    "mcp_name": "browser_network_read",
+    "capability": "browser",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "browser_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Browser Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Boot Id"
+        },
+        "page_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Page Id",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        },
+        "expected_origin": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Expected Origin",
+          "type": "string"
+        },
+        "navigation_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Navigation Revision",
+          "type": "string"
+        },
+        "after_sequence": {
+          "default": 0,
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "title": "After Sequence",
+          "type": "integer"
+        },
+        "limit": {
+          "default": 100,
+          "maximum": 256,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "browser_id",
+        "page_id",
+        "expected_origin",
+        "navigation_revision"
+      ],
+      "title": "BrowserLogRead"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "workspace/path",
+    "permission_scope": "browser.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-E",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
+  "browser.cookies_read": {
+    "name": "browser.cookies_read",
+    "mcp_name": "browser_cookies_read",
+    "capability": "browser",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "browser_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Browser Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Boot Id"
+        },
+        "page_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Page Id",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        },
+        "expected_origin": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Expected Origin",
+          "type": "string"
+        },
+        "navigation_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Navigation Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "browser_id",
+        "page_id",
+        "expected_origin",
+        "navigation_revision"
+      ],
+      "title": "BrowserScoped"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "workspace/path",
+    "permission_scope": "browser.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-E",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
+  "browser.storage_modify": {
+    "name": "browser.storage_modify",
+    "mcp_name": "browser_storage_modify",
+    "capability": "browser",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "browser_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Browser Id",
+          "type": "string"
+        },
+        "agent_boot_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Boot Id"
+        },
+        "page_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Page Id",
+          "type": "string"
+        },
+        "frame_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Id"
+        },
+        "expected_origin": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Expected Origin",
+          "type": "string"
+        },
+        "navigation_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Navigation Revision",
+          "type": "string"
+        },
+        "storage": {
+          "default": "local",
+          "enum": [
+            "local",
+            "session"
+          ],
+          "title": "Storage",
+          "type": "string"
+        },
+        "key": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "maxLength": 32768,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "expected_value_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Value Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "browser_id",
+        "page_id",
+        "expected_origin",
+        "navigation_revision",
+        "key",
+        "expected_value_sha256"
+      ],
+      "title": "BrowserStorageModify"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "before_commit",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "workspace/path",
+    "permission_scope": "browser.mutate",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-E",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
+  "jobs.observe": {
+    "name": "jobs.observe",
+    "mcp_name": "jobs_observe",
+    "capability": "jobs",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target_operation_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Target Operation Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_operation_id"
+      ],
+      "title": "JobTarget"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "before_commit",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "target_operation_id",
+    "permission_scope": "jobs.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-C",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
+  "jobs.cancel": {
+    "name": "jobs.cancel",
+    "mcp_name": "jobs_cancel",
+    "capability": "jobs",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target_operation_id": {
+          "pattern": "^[A-Za-z0-9_-]{1,96}$",
+          "title": "Target Operation Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_operation_id"
+      ],
+      "title": "JobTarget"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": true,
+    "retry_class": "journal_only",
+    "cancel": "before_commit",
+    "max_timeout_ms": 120000,
+    "resource_lock_key": "target_operation_id",
+    "permission_scope": "jobs.mutate",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "R11-C",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 120000,
+    "default_job_timeout_ms": 120000,
+    "max_job_timeout_ms": 120000
+  },
   "proxy.prepare": {
     "name": "proxy.prepare",
     "mcp_name": "proxy_prepare",

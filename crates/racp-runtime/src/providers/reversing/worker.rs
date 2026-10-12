@@ -1,7 +1,7 @@
 //! Same Agent binary hosts fixed native adapters. Stdout is plugin frames only.
 use super::{
+    file_hash,
     gdb::{target_metadata, Gdb},
-    ghidra::{file_hash, Ghidra},
     plugin,
 };
 use racp_contract::{digest, new_id, validate_operation, validate_schema, RacpError};
@@ -30,10 +30,6 @@ enum Adapter {
         hash: String,
         sessions: BTreeMap<String, Gdb>,
     },
-    Ghidra {
-        runtime: Ghidra,
-        sessions: BTreeMap<String, PathBuf>,
-    },
 }
 struct Worker {
     manifest: Value,
@@ -46,7 +42,8 @@ struct Worker {
 }
 impl Worker {
     fn publish(&mut self, stdout: &mut impl Write) -> Result<(), RacpError> {
-        if let Adapter::Gdb { sessions, .. } = &mut self.adapter {
+        let Adapter::Gdb { sessions, .. } = &mut self.adapter;
+        {
             if let Some(instance) = &self.instance {
                 for (id, driver) in sessions {
                     driver.observe_pending(
@@ -127,11 +124,6 @@ impl Worker {
                         &cancel,
                     )?;
                 }
-                Adapter::Ghidra { runtime, .. } => runtime.health(
-                    Path::new(self.manifest["working_directory"].as_str().unwrap()),
-                    deadline,
-                    &cancel,
-                )?,
             }
             return Ok(
                 json!({"manifest_sha256":self.manifest_hash,"backend_version":self.manifest["backend_version"]}),
@@ -196,40 +188,6 @@ impl Worker {
                 }
                 result
             }
-            Adapter::Ghidra { runtime, sessions } => {
-                if op == "re.open" {
-                    if sessions.len() >= 8 {
-                        return Err(RacpError::new("RESOURCE_EXHAUSTED"));
-                    }
-                    let target = PathBuf::from(p["path"].as_str().unwrap());
-                    let hash = file_hash(&target, deadline, &cancel)?;
-                    let info = runtime.call(
-                        &target,
-                        &json!({"action":"info"}),
-                        true,
-                        deadline,
-                        &cancel,
-                    )?;
-                    let id = new_id("ghidra");
-                    let result = json!({"resource_id":id,"target_sha256":hash,"architecture":info["architecture"],"image_base":info["image_base"],"analysis_state":"READY","analysis_database":target.parent().unwrap().join("database/analysis.gpr")});
-                    sessions.insert(id, target);
-                    return Ok(result);
-                }
-                let id = p["analysis_id"].as_str().unwrap_or("");
-                let target = sessions
-                    .get(id)
-                    .ok_or_else(|| RacpError::new("HANDLE_EXPIRED"))?
-                    .clone();
-                if op == "re.close" {
-                    sessions.remove(id);
-                    self.reported.remove(id);
-                    return Ok(json!({"closed":true,"analysis_state":"CLOSED"}));
-                }
-                if matches!(op, "re.query" | "re.command") {
-                    return runtime.call(&target, &p, false, deadline, &cancel);
-                }
-                Err(RacpError::new("OPERATION_NOT_SUPPORTED"))
-            }
         }
     }
 }
@@ -267,13 +225,6 @@ pub fn run_native_plugin(mode: &str, args: &[String]) -> Result<(), RacpError> {
         Adapter::Gdb {
             executable,
             hash,
-            sessions: BTreeMap::new(),
-        }
-    } else if mode == "plugin-ghidra" {
-        let catalog = PathBuf::from(argument(args, "--runtime-catalog")?);
-        let hash = argument(args, "--runtime-catalog-sha256")?;
-        Adapter::Ghidra {
-            runtime: Ghidra::load(&catalog, &hash)?,
             sessions: BTreeMap::new(),
         }
     } else {
@@ -327,7 +278,8 @@ pub fn run_native_plugin(mode: &str, args: &[String]) -> Result<(), RacpError> {
         write_frame(&mut output, &response)?;
         worker.publish(&mut output)?;
     }
-    if let Adapter::Gdb { sessions, .. } = &mut worker.adapter {
+    let Adapter::Gdb { sessions, .. } = &mut worker.adapter;
+    {
         for driver in sessions.values_mut() {
             driver.close()?;
         }

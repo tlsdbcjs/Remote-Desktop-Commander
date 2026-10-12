@@ -7,9 +7,9 @@ on:
         type: boolean
         default: false
   push:
-    paths: ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "apps/agent-rust/**", "tests/rust_agent/**", ".github/workflows/rust-agent.yml"]
+    paths: ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "apps/agent-rust/**", "xtask/**", ".github/workflows/rust-agent.yml"]
   pull_request:
-    paths: ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "apps/agent-rust/**", "tests/rust_agent/**", ".github/workflows/rust-agent.yml"]
+    paths: ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/**", "apps/agent-rust/**", "xtask/**", ".github/workflows/rust-agent.yml"]
 concurrency:
   group: rust-agent-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: false
@@ -26,23 +26,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.23.0"
-      - name: Compile Windows Rust Agent (tests deferred)
-        run: cargo build -p racp-agent --release --locked --target x86_64-pc-windows-msvc
-      - name: Package standalone Windows Rust Agent
-        if: ${{ github.ref_name == 'master' || github.event_name == 'workflow_dispatch' }}
+      - name: Build and verify standalone Windows Rust Agent
         shell: pwsh
-        run: ./scripts/build_rust_agent.ps1 -BuildId "${{ github.run_id }}-${{ github.run_attempt }}"
+        run: |
+          cargo run --locked -p xtask -- stage-agent --build-id ci-${{ github.run_id }}-${{ github.run_attempt }}
+          if ($LASTEXITCODE -ne 0) { throw "Agent build failed" }
+          cargo run --locked -p xtask -- verify-agent --build-id ci-${{ github.run_id }}-${{ github.run_attempt }}
+          if ($LASTEXITCODE -ne 0) { throw "Agent integrity failed" }
       - uses: actions/upload-artifact@v4
         with:
           name: racp-agent-win-x64-${{ github.sha }}
           path: |
-            target/x86_64-pc-windows-msvc/release/racp-agent.exe
-            dist/rust-agent/**/*.zip
-            dist/rust-agent/**/SHA256SUMS
-            dist/rust-agent/**/build-manifest.json
+            dist/agent/**/ci-${{ github.run_id }}-${{ github.run_attempt }}/build/**
           if-no-files-found: error
           retention-days: 14
   windows-rust:
@@ -76,4 +71,3 @@ jobs:
       - run: cargo test --workspace --locked
       - run: cargo build -p racp-agent -p racp-runtime --examples --locked
       - run: cargo build -p racp-agent --locked
-      - run: uv run --frozen pytest tests/rust_agent -v --tb=short

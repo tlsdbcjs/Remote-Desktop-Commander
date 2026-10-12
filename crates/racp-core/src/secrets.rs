@@ -5,6 +5,22 @@ pub struct SecretStore {
     path: PathBuf,
 }
 impl SecretStore {
+    /// Runtime preflight before token consumption; no enrollment credential/application file is written.
+    pub fn probe_current_account() -> Result<(), RacpError> {
+        #[cfg(windows)]
+        {
+            let probe = b"RACP-native-DPAPI-readiness";
+            let encrypted = dpapi(probe, true)?;
+            if dpapi(&encrypted, false)? != probe {
+                return Err(RacpError::new("SECRET_BACKEND_UNAVAILABLE"));
+            }
+            Ok(())
+        }
+        #[cfg(not(windows))]
+        {
+            Err(RacpError::new("SECRET_BACKEND_UNAVAILABLE"))
+        }
+    }
     pub fn new(path: PathBuf) -> Self {
         Self { path }
     }

@@ -228,6 +228,9 @@ def create_app(
             return False
 
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
+    from racp_gateway.json_boundary import JsonBoundary
+
+    app.add_middleware(JsonBoundary)
 
     @app.exception_handler(RACPError)
     async def handle_error(request: Request, exc: RACPError) -> JSONResponse:

@@ -102,11 +102,19 @@ impl PinnedPeer {
             )
         };
         if raw.is_null() {
-            return Err(RacpError::new("PERMISSION_DENIED"));
+            return Err(RacpError::new(
+                if unsafe { GetLastError() } == ERROR_INVALID_PARAMETER {
+                    "PROCESS_NOT_FOUND"
+                } else {
+                    "PERMISSION_DENIED"
+                },
+            ));
         }
         let process = unsafe { OwnedHandle::from_raw_handle(raw) };
-        if unsafe { WaitForSingleObject(raw, 0) } != WAIT_TIMEOUT {
-            return Err(RacpError::new("PROCESS_NOT_FOUND"));
+        match unsafe { WaitForSingleObject(raw, 0) } {
+            WAIT_TIMEOUT => (),
+            WAIT_OBJECT_0 => return Err(RacpError::new("PROCESS_NOT_FOUND")),
+            _ => return Err(RacpError::new("PROCESS_STATE_UNKNOWN")),
         }
         let mut birth = FILETIME::default();
         let mut exit = birth;
@@ -173,20 +181,28 @@ impl PinnedPeer {
         peer.alive()?;
         Ok(peer)
     }
+    pub fn identity(&self) -> &PeerIdentity {
+        &self.identity
+    }
     pub(super) fn executable(&self) -> Result<std::path::PathBuf, RacpError> {
-        let mut raw = vec![0u16; 32768];
-        let mut size = raw.len() as u32;
+        let mut buffer = vec![0u16; 32768];
+        let mut length = buffer.len() as u32;
         if unsafe {
-            QueryFullProcessImageNameW(self.process.as_raw_handle(), 0, raw.as_mut_ptr(), &mut size)
+            QueryFullProcessImageNameW(
+                self.process.as_raw_handle(),
+                0,
+                buffer.as_mut_ptr(),
+                &mut length,
+            )
         } == 0
-            || size == 0
-            || size as usize >= raw.len()
+            || length == 0
+            || length as usize >= buffer.len()
         {
             return Err(RacpError::new("PERMISSION_DENIED"));
         }
-        let text = String::from_utf16(&raw[..size as usize])
+        let path = String::from_utf16(&buffer[..length as usize])
             .map_err(|_| RacpError::new("PERMISSION_DENIED"))?;
-        racp_core::validate_local_path(&std::path::PathBuf::from(text))
+        racp_core::validate_local_path(&std::path::PathBuf::from(path))
     }
     pub(super) fn outside_jobs(&self) -> Result<bool, RacpError> {
         let mut inside = 0;
@@ -203,20 +219,33 @@ impl PinnedPeer {
         self.alive()?;
         Ok(inside == 0)
     }
-    pub fn identity(&self) -> &PeerIdentity {
-        &self.identity
-    }
     pub fn alive(&self) -> Result<(), RacpError> {
-        if unsafe { WaitForSingleObject(self.process.as_raw_handle(), 0) } == WAIT_TIMEOUT {
-            Ok(())
-        } else {
-            Err(RacpError::new("PROCESS_NOT_FOUND"))
+        match self.exited()? {
+            false => Ok(()),
+            true => Err(RacpError::new("PROCESS_NOT_FOUND")),
         }
+    }
+    pub(super) fn exited(&self) -> Result<bool, RacpError> {
+        match unsafe { WaitForSingleObject(self.process.as_raw_handle(), 0) } {
+            WAIT_TIMEOUT => Ok(false),
+            WAIT_OBJECT_0 => Ok(true),
+            _ => Err(RacpError::new("PROCESS_STATE_UNKNOWN")),
+        }
+    }
+    pub(super) fn exit_success(&self) -> Result<bool, RacpError> {
+        if !self.exited()? {
+            return Ok(false);
+        }
+        let mut code = 0;
+        if unsafe { GetExitCodeProcess(self.process.as_raw_handle(), &mut code) } == 0 {
+            return Err(RacpError::new("PROCESS_STATE_UNKNOWN"));
+        }
+        Ok(code == 0)
     }
 }
 
 /// Synchronous query only. No await or GUI work is permitted while impersonating.
-pub(super) fn client_scope(pipe: HANDLE) -> Result<(String, u32), RacpError> {
+pub(crate) fn client_scope(pipe: HANDLE) -> Result<(String, u32), RacpError> {
     use windows_sys::Win32::System::Pipes::ImpersonateNamedPipeClient;
     if unsafe { ImpersonateNamedPipeClient(pipe) } == 0 {
         return Err(RacpError::new("PERMISSION_DENIED"));

@@ -2,6 +2,7 @@
 mod attach;
 pub mod cdp;
 mod events;
+mod expansion;
 mod files;
 mod keys;
 mod proxy;
@@ -21,40 +22,6 @@ pub struct BrowserConfig {
     pub cdp_enabled: bool,
 }
 impl BrowserConfig {
-    pub fn bundled() -> Self {
-        #[cfg(windows)]
-        let binary = "chrome-win64/chrome.exe";
-        #[cfg(not(windows))]
-        let binary = "chrome-linux64/chrome";
-        let mut candidates = vec![];
-        if let Ok(executable) = std::env::current_exe() {
-            if let Some(parent) = executable.parent() {
-                candidates.push(parent.join("chromium").join(if cfg!(windows) {
-                    "chrome.exe"
-                } else {
-                    "chrome"
-                }));
-                if let Some(root) = parent.parent() {
-                    candidates.push(root.join("chromium").join(if cfg!(windows) {
-                        "chrome.exe"
-                    } else {
-                        "chrome"
-                    }));
-                }
-            }
-        }
-        if cfg!(debug_assertions) {
-            candidates.push(
-                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../.tools/playwright/chromium-1243")
-                    .join(binary),
-            );
-        }
-        Self {
-            executable: candidates.into_iter().find(|p| p.is_file()),
-            ..Default::default()
-        }
-    }
     pub(super) fn script(&self) -> String {
         let origins = self
             .allow_origins

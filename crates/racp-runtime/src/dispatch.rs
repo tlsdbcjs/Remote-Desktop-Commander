@@ -11,6 +11,31 @@ use tokio_util::sync::CancellationToken;
 pub(crate) struct Execution {
     cancel: CancellationToken,
     reason: Arc<Mutex<String>>,
+    finished: Arc<std::sync::atomic::AtomicBool>,
+    done: Arc<tokio::sync::Notify>,
+}
+impl Execution {
+    /// Preserve the cause that first signaled cancellation. A later deadline or
+    /// retirement must not relabel an owner's cancellation during slow cleanup.
+    async fn signal_cancel(&self, reason: &str) {
+        let mut cause = self.reason.lock().await;
+        if !self.cancel.is_cancelled() {
+            *cause = reason.into();
+            self.cancel.cancel();
+        }
+    }
+    pub(crate) async fn request_cancel(
+        &self,
+        journal: &Journal,
+        id: &str,
+        reason: &str,
+    ) -> Result<Record, RacpError> {
+        let record = journal.request_cancel(id)?;
+        if !Journal::terminal(&record.state) {
+            self.signal_cancel(reason).await;
+        }
+        Ok(record)
+    }
 }
 fn allowed(operation: &str, profile: &str) -> bool {
     profile == "trusted_personal"
@@ -21,17 +46,37 @@ fn allowed(operation: &str, profile: &str) -> bool {
             && !["process.memory_read", "process.memory_regions"].contains(&operation))
 }
 impl Agent {
+    pub(crate) async fn publish_native_activity(&self, id: &str) {
+        let Some(hub) = &self.native_state else {
+            return;
+        };
+        if let Ok(record) = self.journal.get(id) {
+            let _ = hub
+                .activity(racp_contract::local_ipc::ActivitySummary {
+                    request_id: record.request["request_id"].as_str().unwrap_or("").into(),
+                    operation_id: record.id,
+                    operation: record.request["operation"].as_str().unwrap_or("").into(),
+                    state: record.state,
+                })
+                .await;
+        }
+    }
     pub(crate) fn authorize_record(&self, record: &Record) -> Result<(), RacpError> {
-        let permissions = self
-            .settings
-            .permissions
-            .clone()
-            .unwrap_or_else(|| racp_core::legacy_permissions(self.settings.desktop_enabled));
-        racp_core::authorize(
-            &permissions,
-            &record.request,
-            self.providers.owns_process(&record.request),
-        )?;
+        if self.native_settings_revision.is_some_and(|revision| {
+            record.request["_native_settings_revision"]
+                .as_u64()
+                .unwrap_or(0)
+                != revision
+        }) {
+            self.journal.block_publication(&record.id)?;
+            return Err(RacpError::new("PERMISSION_DENIED"));
+        }
+        if record.publication_blocked {
+            return Err(RacpError::new("PERMISSION_DENIED"));
+        }
+        let (revision, permissions) = self.current_permissions()?;
+        let approved = self.approvals.authorized(&record.request, revision);
+        self.authorize_request(&record.request)?;
         let operation = record.request["operation"].as_str().unwrap_or("");
         if !allowed(operation, &self.settings.profile) {
             return Err(RacpError::new("PERMISSION_DENIED"));
@@ -52,15 +97,18 @@ impl Agent {
                 .ok_or_else(|| RacpError::new("PERMISSION_DENIED"))?;
         }
         if !outputs.is_empty()
-            && (!racp_core::permission_allows_field(&permissions, "artifacts.export")
-                || matches!(
-                    operation,
-                    "process.inspect" | "process.list" | "process.tree"
-                ) && !record
-                    .result
-                    .as_ref()
-                    .is_some_and(|v| v["arguments_included"] == false)
-                    && !racp_core::permission_allows_field(&permissions, "process.arguments.read"))
+            && (!racp_core::permission_allows_approved_field(
+                &permissions,
+                "artifacts.export",
+                approved,
+            ) || matches!(
+                operation,
+                "process.inspect" | "process.list" | "process.tree"
+            ) && !record
+                .result
+                .as_ref()
+                .is_some_and(|v| v["arguments_included"] == false)
+                && !racp_core::permission_allows_field(&permissions, "process.arguments.read"))
         {
             return Err(RacpError::new("PERMISSION_DENIED"));
         }
@@ -71,10 +119,9 @@ impl Agent {
     }
     fn redact_arguments(&self, value: &mut Value) {
         let permissions = self
-            .settings
-            .permissions
-            .clone()
-            .unwrap_or_else(|| racp_core::legacy_permissions(self.settings.desktop_enabled));
+            .current_permissions()
+            .map(|(_, v)| v)
+            .unwrap_or(Value::Null);
         if racp_core::permission_allows_field(&permissions, "process.arguments.read") {
             return;
         }
@@ -103,15 +150,28 @@ impl Agent {
         let operation = record.request["operation"].as_str().unwrap_or("");
         let authorization = self.authorize_record(&record);
         if authorization.is_err() || !allowed(operation, &self.settings.profile) {
-            let mut value = self.base("error").await;
+            let mut value = self.base("result").await;
             for key in ["request_id", "trace_id"] {
                 value[key] = record.request[key].clone();
             }
             value["operation_id"] = json!(record.id);
-            value["code"] = json!(authorization
+            let code = authorization
                 .err()
                 .map(|e| e.code.0)
-                .unwrap_or("PERMISSION_DENIED"));
+                .unwrap_or("PERMISSION_DENIED");
+            value["state"] = json!("FAILED");
+            value["result"] = Value::Null;
+            value["outputs"] = json!([]);
+            value["error"] = error_value(
+                code,
+                "operation output withheld by local policy",
+                if record.state == "SUCCEEDED" {
+                    "executed"
+                } else {
+                    "unknown"
+                },
+            );
+            value["error"]["details"]["execution_outcome_state"] = json!(record.state);
             return Ok(value);
         }
         let mut value = self
@@ -153,6 +213,9 @@ impl Agent {
             .ok_or_else(|| RacpError::new("INVALID_ARGUMENT"))?
             .to_string();
         request["payload"] = validate_operation(&op, request["payload"].clone())?;
+        if let Some(revision) = self.native_settings_revision {
+            request["_native_settings_revision"] = json!(revision);
+        }
         let id = request["operation_id"]
             .as_str()
             .ok_or_else(|| RacpError::new("INVALID_ARGUMENT"))?
@@ -178,6 +241,7 @@ impl Agent {
         {
             return Err(RacpError::new("IDEMPOTENCY_CONFLICT"));
         }
+        self.publish_native_activity(&id).await;
         let mut ack = self.base("ack").await;
         for key in ["request_id", "operation_id", "trace_id"] {
             ack[key] = request[key].clone();
@@ -203,6 +267,7 @@ impl Agent {
                     "not_started",
                 )),
             )?;
+            self.publish_native_activity(&id).await;
             return self.send(self.outcome(record).await?).await;
         }
         if self.journal.get(&id)?.state != "ACCEPTED" {
@@ -211,10 +276,13 @@ impl Agent {
         let execution = Execution {
             cancel: CancellationToken::new(),
             reason: Arc::new(Mutex::new("requested".into())),
+            finished: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            done: Arc::new(tokio::sync::Notify::new()),
         };
         tasks.insert(id.clone(), execution.clone());
         drop(tasks);
         let agent = self.clone();
+        let completion = execution.clone();
         tokio::spawn(async move {
             let work = std::panic::AssertUnwindSafe(agent.execute(request, execution, deadline))
                 .catch_unwind()
@@ -236,8 +304,15 @@ impl Agent {
                 let _ = std::fs::remove_file(input);
             }
             let _ = agent.outputs.release(&id);
+            completion
+                .finished
+                .store(true, std::sync::atomic::Ordering::Release);
+            completion.done.notify_waiters();
+            agent.resources.remove(&format!("execution:{id}")).await;
+            agent.approvals.complete(&id);
             agent.tasks.lock().await.remove(&id);
             agent.completed.notify_waiters();
+            agent.publish_native_activity(&id).await;
             if let Ok(record) = agent.journal.get(&id) {
                 agent.log("agent_result",json!({"operation":record.request["operation"],"operation_id":id,"state":record.state}));
                 if let Ok(message) = agent.outcome(record).await {
@@ -255,42 +330,196 @@ impl Agent {
     ) -> Result<(), RacpError> {
         let id = request["operation_id"].as_str().unwrap().to_string();
         let op = request["operation"].as_str().unwrap().to_string();
-        let work=async{
-            let permissions=self.settings.permissions.clone().unwrap_or_else(||racp_core::legacy_permissions(self.settings.desktop_enabled));
-            racp_core::authorize(&permissions,&request,self.providers.owns_process(&request))?;
-            self.outputs.reserve(&id,&op,&request["payload"])?;
-            let profile=request["context"]["execution_profile_id"].as_str().unwrap_or("read_only");
-            if !allowed(&op,&self.settings.profile) || !allowed(&op,profile) || (profile=="trusted_personal"&&self.settings.profile!="trusted_personal"&&registry()[&op]["side_effect"]==true){return Err(RacpError::new("PERMISSION_DENIED"));}
-            let workspace=request["context"]["workspace_id"].as_str().unwrap_or("default");
-            if workspace!="default" && !self.settings.allowed_workspaces.iter().any(|s|s.id==workspace){return Err(RacpError::new("WORKSPACE_NOT_FOUND"));}
-            if self.lease_retiring.load(std::sync::atomic::Ordering::Acquire) || tokio::time::Instant::now()>=*self.lease.lock().await {return Err(RacpError::new("DEVICE_OFFLINE"));}
-            if deadline<=tokio::time::Instant::now(){return Err(RacpError::new("TIMEOUT"));}
-            if execution.cancel.is_cancelled(){return Err(RacpError::new("CANCELLED"));}
-            self.journal.transition(&id,"RUNNING",None,None)?;
-            self.log("agent_execution_started",json!({"operation":op,"operation_id":id,"state":"RUNNING"}));
-            if request["execution_mode"]=="job"{self.job_progress(&request,if op=="process.wait"{"WAITING"}else{"RUNNING"},if op=="process.wait"{Some("process_exit")}else{None}).await?;}
-            if ["filesystem.write","browser.upload"].contains(&op.as_str()) {
-                if let Some(artifact)=request["payload"]["artifact_id"].as_str(){
-                    let path=self.outputs.root().join(format!("{id}.input"));
-                    let metadata=tokio::select! {
+        let work = async {
+            let profile = request["context"]["execution_profile_id"]
+                .as_str()
+                .unwrap_or("read_only");
+            if !allowed(&op, &self.settings.profile)
+                || !allowed(&op, profile)
+                || (profile == "trusted_personal"
+                    && self.settings.profile != "trusted_personal"
+                    && registry()[&op]["side_effect"] == true)
+            {
+                return Err(RacpError::new("PERMISSION_DENIED"));
+            }
+            if self
+                .policy_retiring
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                return Err(RacpError::new("POLICY_RETIRING"));
+            }
+            let (revision, permissions) = self.current_permissions()?;
+            match racp_core::authorize(
+                &permissions,
+                &request,
+                self.providers.owns_process(&request),
+            ) {
+                Ok(()) => (),
+                Err(error) if error.code.0 == "APPROVAL_REQUIRED" => {
+                    let hub = self
+                        .native_state
+                        .as_ref()
+                        .ok_or_else(|| RacpError::new("APPROVAL_UNAVAILABLE"))?;
+                    let target = self.approval_target(&request).await?;
+                    let binding = self
+                        .approvals
+                        .wait(
+                            hub,
+                            &request,
+                            target.clone(),
+                            revision,
+                            deadline,
+                            execution.cancel.clone(),
+                        )
+                        .await?;
+                    let (current, _) = self.current_permissions()?;
+                    if !binding.matches(&request, current)
+                        || self.approval_target(&request).await? != target
+                    {
+                        return Err(RacpError::new("APPROVAL_TARGET_CHANGED"));
+                    }
+                    self.approvals.grant(binding)?;
+                }
+                Err(error) => return Err(error),
+            }
+            self.authorize_request(&self.journal.get(&id)?.request)?;
+            self.outputs.reserve(&id, &op, &request["payload"])?;
+            let workspace = request["context"]["workspace_id"]
+                .as_str()
+                .unwrap_or("default");
+            if workspace != "default"
+                && !self
+                    .settings
+                    .allowed_workspaces
+                    .iter()
+                    .any(|s| s.id == workspace)
+            {
+                return Err(RacpError::new("WORKSPACE_NOT_FOUND"));
+            }
+            if self
+                .lease_retiring
+                .load(std::sync::atomic::Ordering::Acquire)
+                || tokio::time::Instant::now() >= *self.lease.lock().await
+            {
+                return Err(RacpError::new("DEVICE_OFFLINE"));
+            }
+            if deadline <= tokio::time::Instant::now() {
+                return Err(RacpError::new("TIMEOUT"));
+            }
+            if execution.cancel.is_cancelled() {
+                return Err(RacpError::new("CANCELLED"));
+            }
+            if request["agent_boot_id"] != self.boot_id
+                || request["connection_epoch"] != self.status.read().await["connection_epoch"]
+            {
+                return Err(RacpError::new("STALE_CONNECTION"));
+            }
+            let cleanup = execution.clone();
+            let journal = self.journal.clone();
+            let operation_id = id.clone();
+            self.resources
+                .register(crate::resources::Resource {
+                    id: format!("execution:{id}"),
+                    scope: crate::resources::ResourceScope {
+                        device_id: self.settings.device_id.clone(),
+                        boot_id: self.boot_id.clone(),
+                        epoch: request["connection_epoch"].as_u64().unwrap_or(0),
+                        workspace_id: workspace.into(),
+                        policy_revision: revision,
+                    },
+                    kind: crate::resources::ResourceKind::Execution,
+                    ownership: crate::resources::Ownership::Owned,
+                    terminates_target: false,
+                    request: request.clone(),
+                    retire: Arc::new(move || {
+                        let cleanup = cleanup.clone();
+                        let journal = journal.clone();
+                        let id = operation_id.clone();
+                        Box::pin(async move {
+                            cleanup.signal_cancel("policy").await;
+                            if !Journal::terminal(&journal.get(&id)?.state) {
+                                let _ = journal.transition(&id, "CANCEL_REQUESTED", None, None);
+                            }
+                            loop {
+                                let notified = cleanup.done.notified();
+                                if cleanup.finished.load(std::sync::atomic::Ordering::Acquire) {
+                                    break;
+                                }
+                                notified.await;
+                            }
+                            Ok(())
+                        })
+                    }),
+                })
+                .await?;
+            self.journal.transition(&id, "RUNNING", None, None)?;
+            self.publish_native_activity(&id).await;
+            self.log(
+                "agent_execution_started",
+                json!({"operation":op,"operation_id":id,"state":"RUNNING"}),
+            );
+            if request["execution_mode"] == "job" {
+                self.job_progress(
+                    &request,
+                    if op == "process.wait" {
+                        "WAITING"
+                    } else {
+                        "RUNNING"
+                    },
+                    if op == "process.wait" {
+                        Some("process_exit")
+                    } else {
+                        None
+                    },
+                )
+                .await?;
+            }
+            if ["filesystem.write", "browser.upload"].contains(&op.as_str()) {
+                if let Some(artifact) = request["payload"]["artifact_id"].as_str() {
+                    let path = self.outputs.root().join(format!("{id}.input"));
+                    let metadata = tokio::select! {
                         _=execution.cancel.cancelled()=>return Err(RacpError::new("CANCELLED")),
                         _=tokio::time::sleep_until(deadline)=>return Err(RacpError::new("TIMEOUT")),
                         downloaded=self.artifacts.download(artifact,&path,&id)=>downloaded?,
                     };
-                    request["payload"]["_artifact_path"]=json!(path);request["payload"]["_artifact_sha256"]=metadata["sha256"].clone();request["payload"]["_artifact_size"]=metadata["size_bytes"].clone();
+                    request["payload"]["_artifact_path"] = json!(path);
+                    request["payload"]["_artifact_sha256"] = metadata["sha256"].clone();
+                    request["payload"]["_artifact_size"] = metadata["size_bytes"].clone();
                 }
             }
-            request["remaining_timeout_ms"]=json!((deadline.saturating_duration_since(tokio::time::Instant::now()).as_millis() as u64).max(1));
-            let provider=self.providers.execute(request,execution.cancel.clone());tokio::pin!(provider);
-            tokio::select!{biased;
+            request["remaining_timeout_ms"] = json!((deadline
+                .saturating_duration_since(tokio::time::Instant::now())
+                .as_millis() as u64)
+                .max(1));
+            self.authorize_request(&self.journal.get(&id)?.request)?;
+            if self.stopping.load(std::sync::atomic::Ordering::Acquire)
+                || execution.cancel.is_cancelled()
+            {
+                return Err(RacpError::new("CANCELLED"));
+            }
+            if request["connection_epoch"] != self.status.read().await["connection_epoch"] {
+                return Err(RacpError::new("STALE_CONNECTION"));
+            }
+            let (current_revision, current_permissions) = self.current_permissions()?;
+            request["_local_policy_revision"] = json!(current_revision);
+            request["_local_approved"] = json!(self
+                .approvals
+                .authorized(&self.journal.get(&id)?.request, current_revision));
+            request["_local_permissions"] = current_permissions;
+            let provider = self.providers.execute(request, execution.cancel.clone());
+            tokio::pin!(provider);
+            tokio::select! {biased;
                 result=&mut provider=>result,
                 _=tokio::time::sleep_until(deadline)=>{
-                    *execution.reason.lock().await="deadline".into();execution.cancel.cancel();provider.await
+                    execution.signal_cancel("deadline").await;provider.await
                 }
             }
-        }.await;
+        }
+        .await;
         let result = match work {
             Ok(mut outcome) => {
+                self.capture_resource(&self.journal.get(&id)?.request, &outcome)
+                    .await?;
                 if !Journal::terminal(outcome["state"].as_str().unwrap_or(""))
                     || (!outcome["result"].is_null() && !outcome["result"].is_object())
                     || (!outcome["error"].is_null() && !outcome["error"].is_object())
@@ -308,7 +537,16 @@ impl Agent {
                 ) {
                     self.redact_arguments(&mut outcome["result"]);
                 }
-                self.promote_output(&id, &mut outcome).await?;
+                if let Err(error) = self.promote_output(&id, &mut outcome).await {
+                    if matches!(
+                        error.code.0,
+                        "PERMISSION_DENIED" | "APPROVAL_REQUIRED" | "APPROVAL_REJECTED"
+                    ) {
+                        self.journal.block_publication(&id)?;
+                    } else {
+                        return Err(error);
+                    }
+                }
                 self.journal.transition(
                     &id,
                     outcome["state"].as_str().unwrap(),
@@ -355,11 +593,11 @@ impl Agent {
         Ok(())
     }
     async fn promote_output(&self, id: &str, outcome: &mut Value) -> Result<(), RacpError> {
-        let permissions = self
-            .settings
-            .permissions
-            .clone()
-            .unwrap_or_else(|| racp_core::legacy_permissions(self.settings.desktop_enabled));
+        let (revision, permissions) = self.current_permissions()?;
+        let approved = self
+            .approvals
+            .authorized(&self.journal.get(id)?.request, revision);
+        self.authorize_record(&self.journal.get(id)?)?;
         let limit = permissions["constraints"]["max_output_bytes"]
             .as_u64()
             .unwrap_or(1073741824);
@@ -388,7 +626,11 @@ impl Agent {
             return Err(RacpError::new("RESOURCE_EXHAUSTED"));
         }
         if (exporting || inline.len() > 65536)
-            && !racp_core::permission_allows_field(&permissions, "artifacts.export")
+            && !racp_core::permission_allows_approved_field(
+                &permissions,
+                "artifacts.export",
+                approved,
+            )
         {
             return Err(RacpError::new("PERMISSION_DENIED"));
         }
@@ -450,13 +692,78 @@ impl Agent {
         }
         Ok(())
     }
+    async fn capture_resource(&self, request: &Value, outcome: &Value) -> Result<(), RacpError> {
+        let handle = &outcome["result"]["handle"];
+        let Some(id) = handle["id"].as_str() else {
+            return Ok(());
+        };
+        if matches!(handle["state"].as_str(), Some("CLOSED" | "EXPIRED")) {
+            self.resources.remove(id).await;
+            return Ok(());
+        }
+        if self.resources.output_allowed(id).await {
+            return Ok(());
+        }
+        if !self.providers.inventory().iter().any(|h| h["id"] == id) {
+            return Ok(());
+        }
+        let providers = self.providers.clone();
+        let owned_handle = handle.clone();
+        let borrowed = handle["ownership"] == "borrowed"
+            || matches!(
+                request["operation"].as_str(),
+                Some("debugger.attach" | "native.prepare" | "proxy.prepare" | "browser.attach")
+            );
+        self.resources
+            .register(crate::resources::Resource {
+                id: id.into(),
+                scope: crate::resources::ResourceScope {
+                    device_id: self.settings.device_id.clone(),
+                    boot_id: self.boot_id.clone(),
+                    epoch: request["connection_epoch"].as_u64().unwrap_or(0),
+                    workspace_id: request["context"]["workspace_id"]
+                        .as_str()
+                        .unwrap_or("default")
+                        .into(),
+                    policy_revision: self.current_permissions()?.0,
+                },
+                kind: crate::resources::ResourceKind::Session,
+                ownership: if borrowed {
+                    crate::resources::Ownership::Borrowed
+                } else {
+                    crate::resources::Ownership::Owned
+                },
+                terminates_target: !borrowed,
+                request: request.clone(),
+                retire: Arc::new(move || {
+                    let providers = providers.clone();
+                    let handle = owned_handle.clone();
+                    Box::pin(async move { providers.retire_handle(&handle).await })
+                }),
+            })
+            .await?;
+        if self.authorize_request(request).is_err() {
+            let report = self
+                .resources
+                .retire(
+                    crate::resources::RetirementScope {
+                        resource_ids: Some(vec![id.into()]),
+                        ..Default::default()
+                    },
+                    Duration::from_secs(15),
+                )
+                .await;
+            if !report.failed_resource_ids.is_empty() {
+                return Err(RacpError::new("CLEANUP_UNKNOWN"));
+            }
+        }
+        Ok(())
+    }
     pub(crate) async fn cancel_execution(&self, id: &str, reason: &str) -> Result<(), RacpError> {
         let task = self.tasks.lock().await.get(id).cloned();
         if let Some(task) = task {
-            *task.reason.lock().await = reason.into();
-            self.journal
-                .transition(id, "CANCEL_REQUESTED", None, None)?;
-            task.cancel.cancel();
+            task.request_cancel(&self.journal, id, reason).await?;
+            self.publish_native_activity(id).await;
         }
         Ok(())
     }

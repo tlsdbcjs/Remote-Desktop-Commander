@@ -576,6 +576,22 @@ impl Terminal {
     }
 }
 impl Provider for Terminal {
+    fn retire_handle(&self, handle: &Value) -> BoxFuture<'_, Result<(), RacpError>> {
+        let id = handle["id"].as_str().unwrap_or("").to_owned();
+        Box::pin(async move {
+            let session = self
+                .sessions
+                .lock()
+                .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
+                .get(&id)
+                .cloned()
+                .ok_or_else(|| RacpError::new("HANDLE_NOT_FOUND"))?;
+            Self::close_session(session, true)
+                .await
+                .map(|_| ())
+                .map_err(|_| RacpError::new("CLEANUP_FAILED"))
+        })
+    }
     fn stream_read(&self, request: &Value) -> Result<Value, Value> {
         Terminal::stream_read(self, request)
     }

@@ -1,6 +1,45 @@
 use racp_contract::RacpError;
 use serde_json::{json, Value};
 use std::collections::VecDeque;
+
+pub(super) struct DiagnosticRecord {
+    pub page: String,
+    pub frame: String,
+    pub revision: u64,
+    pub origin: String,
+    pub kind: String,
+    pub sequence: u64,
+    pub data: Value,
+}
+#[derive(Default)]
+pub(super) struct DiagnosticBuffer {
+    pub records: VecDeque<DiagnosticRecord>,
+    pub sequence: u64,
+    pub gap: u64,
+}
+impl DiagnosticBuffer {
+    pub fn push(&mut self, mut record: DiagnosticRecord) {
+        if self.sequence >= i64::MAX as u64 {
+            return;
+        }
+        self.sequence += 1;
+        record.sequence = self.sequence;
+        if record.data.to_string().len() > 8192 {
+            self.gap = self.sequence;
+            return;
+        }
+        if self.records.len() >= 256 {
+            if let Some(old) = self.records.pop_front() {
+                self.gap = self.gap.max(old.sequence);
+            }
+        }
+        self.records.push_back(record);
+    }
+    pub fn clear(&mut self) {
+        self.records.clear();
+        self.gap = self.sequence;
+    }
+}
 /// Connection-independent metadata retained until a Gateway ACK confirms receipt.
 pub struct BrowserOutbox {
     instance: String,

@@ -3,16 +3,26 @@
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
+
+from racp_domain.version import VERSION
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--node", type=Path, default=Path(shutil.which("node") or "node"))
+    parser.add_argument("--build-id", default=datetime.now(UTC).strftime("local-%Y%m%d-%H%M%S-%f"))
     args = parser.parse_args()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", args.build_id):
+        parser.error("invalid build ID")
+    output = (Path("dist/console") / VERSION / "web" / args.build_id / "build").resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    web = output / "web"
     node = str(args.node.resolve())
     version = subprocess.check_output([node, "--version"], text=True).strip()
     if version != "v22.23.0":
@@ -70,25 +80,29 @@ def main() -> None:
             "--config",
             str(root / "vite.config.ts"),
             str(root),
+            "--outDir",
+            str(web),
         ],
         check=True,
     )
     manifest = {
+        "version": VERSION,
+        "build_id": args.build_id,
+        "component": "console",
         "node": version,
         "kind": "development-console",
         "lock_sha256": hashlib.sha256(Path("pnpm-lock.yaml").read_bytes()).hexdigest(),
         "artifacts": [
             {
-                "file": str(path.relative_to(root / "dist")),
+                "file": path.relative_to(web).as_posix(),
                 "size_bytes": path.stat().st_size,
                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             }
-            for path in sorted((root / "dist").rglob("*"))
+            for path in sorted(web.rglob("*"))
             if path.is_file()
         ],
     }
-    Path("dist").mkdir(exist_ok=True)
-    Path("dist/console-build-manifest.json").write_text(
+    (output / "build-manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
     )
 

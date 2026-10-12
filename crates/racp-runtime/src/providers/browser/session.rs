@@ -76,6 +76,8 @@ fn detach(page: &mut Page, session: &str, native: &str, swapping: bool) -> bool 
 
 pub(super) struct State {
     pub history: Vec<Value>,
+    pub diagnostic: super::events::DiagnosticBuffer,
+    pub contexts: BTreeMap<(String, u64), (String, String)>,
     pub uploads: usize,
     pub download: Option<super::files::Download>,
     pub handle: Value,
@@ -83,6 +85,7 @@ pub(super) struct State {
     pub expires: Instant,
 }
 pub(super) struct Session {
+    pub(super) capture_policy: Arc<Mutex<Value>>,
     pub(super) events: Arc<Mutex<super::BrowserOutbox>>,
     pub(super) siblings: std::sync::Weak<Mutex<BTreeMap<String, Arc<Session>>>>,
     pub opening_operation: String,
@@ -108,6 +111,7 @@ pub(super) struct Session {
 }
 #[derive(Clone)]
 pub struct Browser {
+    pub(super) capture_policy: Arc<Mutex<Value>>,
     pub(super) ready: Arc<std::sync::atomic::AtomicBool>,
     pub(super) outbox: Arc<Mutex<super::BrowserOutbox>>,
     pub(super) cursor: crate::providers::cursor::Cursor,
@@ -144,6 +148,7 @@ impl Browser {
         let markers = super::recovery::markers(&root)?;
         let instance = new_id("provider");
         let this = Self {
+            capture_policy: Arc::new(Mutex::new(settings.local_permissions()?)),
             ready: Arc::new(std::sync::atomic::AtomicBool::new(markers.is_empty())),
             outbox: Arc::new(Mutex::new(super::BrowserOutbox::new(&instance, 128))),
             cursor: Default::default(),
@@ -397,6 +402,7 @@ impl Browser {
         let now = timestamp();
         let handle = json!({"id":id,"type":"browser","device_id":self.device,"owner":request["context"]["principal_id"],"agent_boot_id":self.boot,"workspace_id":workspace,"provider_instance_id":self.instance,"resource_revision":"1","created_at":now,"last_access_at":now,"expires_at":(chrono::Utc::now()+chrono::Duration::hours(1)).to_rfc3339_opts(chrono::SecondsFormat::Micros,true),"state":"CREATING","availability":"unavailable","ownership":"racp_owned"});
         let session = Arc::new(Session {
+            capture_policy: self.capture_policy.clone(),
             events: self.outbox.clone(),
             siblings: Arc::downgrade(&self.sessions),
             opening_operation: request["operation_id"].as_str().unwrap_or("").into(),
@@ -409,6 +415,8 @@ impl Browser {
             context,
             state: Mutex::new(State {
                 history: vec![],
+                diagnostic: Default::default(),
+                contexts: Default::default(),
                 uploads: 0,
                 download: None,
                 handle,
@@ -778,6 +786,9 @@ impl Session {
         }));
     }
     async fn event(&self, event: Value, config: &BrowserConfig) -> Result<(), RacpError> {
+        if self.capture_diagnostic(&event, config)? {
+            return Ok(());
+        }
         let method = event["method"].as_str().unwrap_or("");
         let params = &event["params"];
         let session = event["sessionId"].as_str().unwrap_or("");
@@ -1143,6 +1154,7 @@ impl Session {
                 .state
                 .lock()
                 .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+            let mut binding = None;
             for page in state.pages.values_mut() {
                 if let Some(frame) = page
                     .frames
@@ -1150,13 +1162,36 @@ impl Session {
                     .find(|f| f.session == session && f.native == context["auxData"]["frameId"])
                 {
                     frame.context = context["uniqueId"].as_str().map(str::to_owned);
+                    if let (Some(number), Some(unique)) =
+                        (context["id"].as_u64(), frame.context.as_ref())
+                    {
+                        binding = Some((
+                            (session.to_owned(), number),
+                            (frame.native.clone(), unique.clone()),
+                        ));
+                    }
                 }
+            }
+            if let Some((key, value)) = binding {
+                if state.contexts.len() >= 1024 && !state.contexts.contains_key(&key) {
+                    return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+                }
+                state.contexts.insert(key, value);
+            }
+        } else if method == "Runtime.executionContextDestroyed" {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+            if let Some(id) = params["executionContextId"].as_u64() {
+                state.contexts.remove(&(session.into(), id));
             }
         } else if method == "Runtime.executionContextsCleared" {
             let mut state = self
                 .state
                 .lock()
                 .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+            state.contexts.retain(|(owner, _), _| owner != session);
             for page in state
                 .pages
                 .values_mut()
@@ -1243,6 +1278,45 @@ impl Session {
     }
 }
 impl Provider for Browser {
+    fn policy_changed(
+        &self,
+        policy: racp_core::policy::PolicySnapshot,
+    ) -> BoxFuture<'_, Result<(), RacpError>> {
+        Box::pin(async move {
+            let mut permissions = self
+                .capture_policy
+                .lock()
+                .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?;
+            *permissions = policy.permissions()?;
+            for session in self
+                .sessions
+                .lock()
+                .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+                .values()
+            {
+                session
+                    .state
+                    .lock()
+                    .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+                    .diagnostic
+                    .clear();
+            }
+            Ok(())
+        })
+    }
+    fn retire_handle(&self, handle: &Value) -> BoxFuture<'_, Result<(), RacpError>> {
+        let id = handle["id"].as_str().unwrap_or("").to_owned();
+        Box::pin(async move {
+            let session = self
+                .sessions
+                .lock()
+                .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
+                .get(&id)
+                .cloned()
+                .ok_or_else(|| RacpError::new("HANDLE_NOT_FOUND"))?;
+            session.close().await.map(|_| ())
+        })
+    }
     fn events_after(&self, after: u64) -> Vec<Value> {
         self.outbox
             .lock()
@@ -1320,6 +1394,14 @@ impl Provider for Browser {
             }
         }
         let available = installed || self.config.cdp_enabled;
+        if available {
+            operations.extend([
+                "browser.console_read",
+                "browser.network_read",
+                "browser.cookies_read",
+                "browser.storage_modify",
+            ]);
+        }
         let ready = self.ready.load(std::sync::atomic::Ordering::SeqCst);
         vec![
             json!({"name":"browser","version":"1.0.0","operations":operations,"installed":available,"supported":true,"enabled":true,"healthy":available && ready,"unavailable_reason":if !ready {json!("BROWSER_CLEANUP_UNKNOWN")}else if available {Value::Null}else{json!("BROWSER_RUNTIME_UNAVAILABLE")},"attributes":{"engine":"chromium","automation":"native_cdp","cdp_enabled":self.config.cdp_enabled}}),

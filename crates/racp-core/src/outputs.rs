@@ -31,7 +31,8 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
 impl OutputSpool {
     pub fn new(root: PathBuf, journal: Journal) -> Result<Self, RacpError> {
         private_dir(&root)?;
-        journal.connection()?.execute_batch("CREATE TABLE IF NOT EXISTS output_spool(id TEXT PRIMARY KEY,operation_id TEXT NOT NULL,filename TEXT NOT NULL,size_bytes INTEGER NOT NULL,sha256 TEXT NOT NULL,media_type TEXT NOT NULL,artifact_id TEXT,transfer_id TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,error_code TEXT); CREATE INDEX IF NOT EXISTS output_spool_operation ON output_spool(operation_id); CREATE INDEX IF NOT EXISTS output_spool_pending ON output_spool(artifact_id,updated_at);").map_err(db_error)?;
+        // Journal::open creates and verifies the entire format, including the
+        // spool. Adding tables here would invalidate that format on restart.
         Ok(Self {
             root: validate_local_path(&root)?,
             journal,

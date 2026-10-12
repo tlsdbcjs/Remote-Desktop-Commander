@@ -71,6 +71,15 @@ impl Browser {
             return Ok(json!({"browser_id":state.handle["id"],"handle":state.handle}));
         }
         let page_id = p["page_id"].as_str().unwrap_or("");
+        if matches!(
+            action,
+            "browser.console_read"
+                | "browser.network_read"
+                | "browser.cookies_read"
+                | "browser.storage_modify"
+        ) {
+            return self.expanded(&session, request, cancel, effect).await;
+        }
         if action == "browser.frames" {
             let state = session
                 .state

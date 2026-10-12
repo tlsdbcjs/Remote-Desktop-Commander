@@ -16,7 +16,17 @@ pub use broker::run_broker;
 #[cfg(windows)]
 mod provider;
 #[cfg(windows)]
+mod service_session;
+#[cfg(windows)]
+mod session_ledger;
+#[cfg(windows)]
 pub use provider::Desktop;
+#[cfg(windows)]
+pub use service_session::run as run_service_session;
+#[cfg(windows)]
+pub use session_ledger::{
+    recover as recover_service_sessions, RESULT_FILE as SESSION_RECOVERY_FILE,
+};
 #[cfg(windows)]
 pub mod native_identity;
 #[cfg(windows)]
@@ -40,9 +50,3 @@ mod clipboard;
 
 #[cfg(windows)]
 mod access;
-#[cfg(windows)]
-mod login;
-#[cfg(windows)]
-pub use login::{
-    configure_login, login_startup, register_login_broker, run_login_broker, verify_config_identity,
-};

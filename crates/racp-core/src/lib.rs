@@ -1,16 +1,32 @@
 mod journal;
+pub mod journal_schema;
 pub use journal::{error_value, Acceptance, Journal, Record};
+pub mod approval;
 mod connection;
+pub mod distribution;
+#[cfg(windows)]
+pub mod machine_service;
+mod native_directory;
+pub mod native_lifecycle;
+pub mod native_release;
+pub mod native_service;
+#[cfg(windows)]
+pub mod service_config;
+#[cfg(windows)]
+pub mod service_directory;
+pub use native_directory::{
+    create as create_private_native_directory, verify as verify_private_native_directory,
+};
 mod paths;
+pub mod policy;
+pub mod runtime_admission;
 mod secrets;
 mod settings;
+pub mod state_schema;
 pub use connection::{inspect_connection, load_connection, validate_ca, ConnectionFile};
 pub use paths::{atomic_write, private_dir, read_bounded, validate_local_path, InstanceLock};
 pub use secrets::SecretStore;
-pub use settings::{
-    credential_document, editable_settings, gateway_origin, information, load_settings,
-    update_settings, AgentSettings, WorkspaceSpec,
-};
+pub use settings::{gateway_origin, AgentSettings, WorkspaceSpec};
 mod outputs;
 pub use outputs::OutputSpool;
 
@@ -22,5 +38,6 @@ pub use outputs::browser_temporary_usage;
 
 mod permissions;
 pub use permissions::{
-    authorize, desktop_enabled, legacy_permissions, permission_allows_field, validate_permissions,
+    authorize, authorize_with_approval, desktop_enabled, permission_allows_approved_field,
+    permission_allows_field, validate_permissions,
 };

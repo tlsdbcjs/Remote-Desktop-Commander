@@ -9,8 +9,8 @@ description: >-
 # RACP Version Manager Skill
 
 > **Document ID**: `DOC-SKILL-VERSION`\
-> **Status**: Active · **Target Version**: v0.1.21\
-> **Last Updated**: 2026-10-10 · **Classification**: Version Operations
+> **Status**: Active · **Target Version**: v0.1.26\
+> **Last Updated**: 2026-10-12 · **Classification**: Version Operations
 
 This skill provides step-by-step procedures for managing semantic versioning in the RACP project.
 
@@ -82,11 +82,10 @@ Running `scripts/version.py` automatically updates:
 8. `packages/policy/pyproject.toml`
 9. `packages/protocol/pyproject.toml`
 10. `packages/sdk/pyproject.toml`
-11. `apps/client/package.json`
-12. `apps/console/package.json`
-13. `apps/client/src/main.tsx` (`CLIENT_VERSION`)
-14. `apps/client/src-tauri/Cargo.toml`
-15. `apps/client/src-tauri/tauri.conf.json`
+11. `apps/console/package.json`
+12. `apps/analysis-host/Cargo.toml` (independent optional host)
+13. Native GUI/Agent/xtask use the Cargo workspace SSOT and `racp_contract::VERSION`; no separate UI version constant
+14. `docs/protocol/console-openapi-v1.json` (`info.version` only, synchronized without changing API/schema definitions)
 
 ---
 

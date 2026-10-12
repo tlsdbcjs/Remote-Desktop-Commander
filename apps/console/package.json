@@ -1,6 +1,6 @@
 {
   "name": "@racp/console",
-  "version": "0.1.21",
+  "version": "0.1.26",
   "private": true,
   "type": "module",
   "scripts": {

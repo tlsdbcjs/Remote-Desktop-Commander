@@ -1,7 +1,13 @@
 import { defineConfig } from "@playwright/test";
+import { version } from "./package.json";
+
+const results =
+  process.env.RACP_TEST_RESULTS ??
+  `../../dist/verification/console/${version}/e2e-${Date.now()}`;
 
 export default defineConfig({
   testDir: "./tests",
+  outputDir: `${results}/test-results`,
   workers: 1,
   fullyParallel: false,
   retries: 0,
@@ -9,7 +15,7 @@ export default defineConfig({
   expect: { timeout: 10000 },
   reporter: [
     ["list"],
-    ["junit", { outputFile: "../../dist/console-test-results.xml" }],
+    ["junit", { outputFile: `${results}/test-results.xml` }],
   ],
   use: {
     baseURL: process.env.RACP_BASE_URL,

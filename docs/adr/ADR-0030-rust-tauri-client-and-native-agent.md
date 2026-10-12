@@ -1,8 +1,11 @@
 # ADR-0030: Rust Agent와 Tauri 클라이언트
 
 > **Document ID**: `DOC-ADR-0030`\
-> **Status**: Accepted · **Target Version**: v0.1.21\
-> **Last Updated**: 2026-10-10 · **Classification**: Architecture Decision Record
+> **Status**: Superseded for new Client source · v0.1.21 history preserved · **Target Version**: v0.1.21\
+> **Last Updated**: 2026-10-11 · **Classification**: Architecture Decision Record
+
+> [!NOTE]
+> 이 결정은 v0.1.21 Tauri/React 구현·배포 이력으로 보존한다. 새 Client source의 GUI·상태·runtime·build 결정은 [ADR-0031](ADR-0031-native-rust-client-and-isolated-state.md)이 대체한다. 생산 컴파일과 source 제거를 새 제품의 GUI·설치/업데이트/제거 인수 성공으로 처리하지 않는다. 기존 설치·Device·credential·사용자 상태는 보존한다.
 
 ## 결정
 

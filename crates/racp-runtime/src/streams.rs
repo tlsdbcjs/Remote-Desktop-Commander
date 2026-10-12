@@ -72,9 +72,20 @@ impl Streams {
         }
     }
     async fn send(&self, subscription: &Subscription, message: Value) -> Result<(), RacpError> {
-        tokio::select! {_=subscription.cancel.cancelled()=>Err(RacpError::new("DEVICE_OFFLINE")),sent=self.peer.send(message)=>sent}
+        let fence = if message["type"] == "stream_data" {
+            let agent = self.agent.clone();
+            let request = subscription.request.clone();
+            Some(crate::peer::EmissionFence {
+                gate: agent.emission_gate.clone(),
+                authorize: Arc::new(move || agent.authorize_stream(&request)),
+            })
+        } else {
+            None
+        };
+        tokio::select! {_=subscription.cancel.cancelled()=>Err(RacpError::new("DEVICE_OFFLINE")),sent=self.peer.send_checked(message,fence)=>sent}
     }
     pub async fn subscribe(&self, request: Value) -> Result<(), RacpError> {
+        self.agent.authorize_stream(&request)?;
         let id = request["stream_id"]
             .as_str()
             .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?
@@ -229,6 +240,16 @@ impl Streams {
                 let _ = task.await;
             }
         }
+    }
+}
+impl Agent {
+    pub(crate) fn authorize_stream(&self, request: &Value) -> Result<(), RacpError> {
+        if self.stopping.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(RacpError::new("DEVICE_OFFLINE"));
+        }
+        let (_, permissions) = self.current_permissions()?;
+        let probe = serde_json::json!({"operation":"terminal.read","timeout_ms":1,"context":request["context"],"payload":{"handle_id":request["handle_id"],"max_bytes":request["max_bytes"].as_u64().unwrap_or(65536)}});
+        racp_core::authorize(&permissions, &probe, false)
     }
 }
 #[cfg(test)]

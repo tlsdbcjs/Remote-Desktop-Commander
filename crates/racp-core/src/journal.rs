@@ -38,6 +38,7 @@ pub struct Record {
     pub result: Option<Value>,
     pub error: Option<Value>,
     pub outcome_available: bool,
+    pub publication_blocked: bool,
 }
 pub enum Acceptance {
     New(Record),
@@ -75,6 +76,7 @@ fn row_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<Record> {
         result: value(row, "result")?,
         error: value(row, "error")?,
         outcome_available: row.get("outcome_available")?,
+        publication_blocked: row.get("publication_blocked")?,
     })
 }
 fn get(db: &Connection, id: &str) -> Result<Record, RacpError> {
@@ -95,7 +97,7 @@ impl Journal {
             path.parent()
                 .ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?,
         )?;
-        let db = Connection::open(path).map_err(db_error)?;
+        let mut db = Connection::open(path).map_err(db_error)?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -103,54 +105,11 @@ impl Journal {
         }
         db.busy_timeout(std::time::Duration::from_secs(5))
             .map_err(db_error)?;
-        let version: u32 = db
-            .query_row("PRAGMA user_version", [], |r| r.get(0))
-            .map_err(db_error)?;
-        if version > 1 {
-            return Err(RacpError::new("CONFIG_UNREADABLE"));
-        }
-        db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;
-   CREATE TABLE IF NOT EXISTS outcome_retention_clocks(id TEXT PRIMARY KEY,clock_id TEXT NOT NULL,committed_monotonic REAL NOT NULL);
-   CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY,scope TEXT NOT NULL,key_hash TEXT NOT NULL,payload_hash TEXT NOT NULL,device_id TEXT NOT NULL,request TEXT NOT NULL,state TEXT NOT NULL,result TEXT,error TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(scope,key_hash));
-   CREATE TABLE IF NOT EXISTS audit(id TEXT PRIMARY KEY,timestamp TEXT NOT NULL,event TEXT NOT NULL,device_id TEXT NOT NULL,operation_id TEXT NOT NULL,operation TEXT NOT NULL,trace_id TEXT NOT NULL,request_id TEXT NOT NULL,summary TEXT NOT NULL);
-   PRAGMA user_version=1;").map_err(db_error)?;
-        for (table, name, definition) in [
-            ("audit", "owner_id", "TEXT NOT NULL DEFAULT 'owner_local'"),
-            (
-                "operations",
-                "outcome_available",
-                "INTEGER NOT NULL DEFAULT 1",
-            ),
-            ("operations", "mutation", "INTEGER NOT NULL DEFAULT 1"),
-            ("operations", "retain_key", "INTEGER NOT NULL DEFAULT 1"),
-        ] {
-            let columns: Vec<String> = db
-                .prepare(&format!("PRAGMA table_info({table})"))
-                .map_err(db_error)?
-                .query_map([], |r| r.get(1))
-                .map_err(db_error)?
-                .collect::<Result<_, _>>()
-                .map_err(db_error)?;
-            if !columns.iter().any(|c| c == name) {
-                db.execute_batch(&format!(
-                    "ALTER TABLE {table} ADD COLUMN {name} {definition}"
-                ))
-                .map_err(db_error)?;
-                if name == "mutation" {
-                    for (op, spec) in registry().as_object().unwrap() {
-                        if spec["side_effect"] == false {
-                            db.execute("UPDATE operations SET mutation=0 WHERE json_extract(request,'$.operation')=?",[op]).map_err(db_error)?;
-                        }
-                    }
-                }
-            }
-        }
-        db.execute_batch("CREATE TABLE IF NOT EXISTS idempotency_tombstones(scope TEXT NOT NULL,key_hash TEXT NOT NULL,payload_hash TEXT NOT NULL,operation_id TEXT NOT NULL UNIQUE,device_id TEXT NOT NULL,outcome_available INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(scope,key_hash));
-   CREATE TABLE IF NOT EXISTS operation_resolutions(id TEXT PRIMARY KEY,operation_id TEXT NOT NULL,digest TEXT NOT NULL,state TEXT NOT NULL,result TEXT,error TEXT,observed_at TEXT NOT NULL,outcome_available INTEGER NOT NULL DEFAULT 1,UNIQUE(operation_id,digest));
-   CREATE INDEX IF NOT EXISTS operations_retention ON operations(outcome_available,state,updated_at);
-   CREATE INDEX IF NOT EXISTS operations_mutation_device ON operations(device_id,mutation);
-   CREATE INDEX IF NOT EXISTS retired_transient_outcomes ON audit(operation_id,device_id,request_id,trace_id) WHERE event='transient_outcome_retired';
-   CREATE TABLE IF NOT EXISTS execution_progress(operation_id TEXT PRIMARY KEY,state TEXT NOT NULL,waiting_reason TEXT,progress REAL,revision INTEGER NOT NULL);").map_err(db_error)?;
+        crate::journal_schema::initialize(&mut db)?;
+        db.execute_batch(
+            "PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;",
+        )
+        .map_err(db_error)?;
         Ok(Self {
             db: Arc::new(Mutex::new(db)),
             clock: Arc::new(Clock {
@@ -252,6 +211,26 @@ impl Journal {
     }
     pub fn get(&self, id: &str) -> Result<Record, RacpError> {
         get(&*self.connection()?, id)
+    }
+    /// Revoked output stays retired even if a later policy widens the grant again.
+    pub fn block_publication(&self, id: &str) -> Result<(), RacpError> {
+        let mut db = self.connection()?;
+        let tx = db
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(db_error)?;
+        let record = get(&tx, id)?;
+        tx.execute(
+            "UPDATE operations SET publication_blocked=1 WHERE id=?",
+            [id],
+        )
+        .map_err(db_error)?;
+        audit(
+            &tx,
+            "output_retired",
+            &record.request,
+            serde_json::json!({"publication_blocked":true}),
+        )?;
+        tx.commit().map_err(db_error)
     }
     pub fn records(&self) -> Result<Vec<Record>, RacpError> {
         let db = self.connection()?;
@@ -357,6 +336,81 @@ impl Journal {
         let next = get(&tx, id)?;
         tx.commit().map_err(db_error)?;
         Ok(next)
+    }
+    /// Cancellation must not replace a terminal outcome when execution wins the race.
+    pub fn request_cancel(&self, id: &str) -> Result<Record, RacpError> {
+        let mut db = self.connection()?;
+        let tx = db
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(db_error)?;
+        let record = get(&tx, id)?;
+        if !Self::terminal(&record.state) {
+            tx.execute(
+                "UPDATE operations SET state='CANCEL_REQUESTED',updated_at=? WHERE id=?",
+                params![timestamp(), id],
+            )
+            .map_err(db_error)?;
+            audit(
+                &tx,
+                "state_changed",
+                &record.request,
+                json!({"state":"CANCEL_REQUESTED"}),
+            )?;
+        }
+        let result = get(&tx, id)?;
+        tx.commit().map_err(db_error)?;
+        Ok(result)
+    }
+    /// Metadata only for the native owner's UI; never includes RPC payload or outcomes.
+    pub fn recent_activity(
+        &self,
+        device_id: &str,
+        limit: usize,
+    ) -> Result<Vec<racp_contract::local_ipc::ActivitySummary>, RacpError> {
+        if !(1..=32).contains(&limit) {
+            return Err(RacpError::new("INVALID_ARGUMENT"));
+        }
+        let db = self.connection()?;
+        let mut query = db.prepare("SELECT id,json_extract(request,'$.request_id'),json_extract(request,'$.operation'),state FROM operations WHERE device_id=? ORDER BY rowid DESC LIMIT ?").map_err(db_error)?;
+        let mut activity = query
+            .query_map(params![device_id, limit as i64], |row| {
+                Ok(racp_contract::local_ipc::ActivitySummary {
+                    operation_id: row.get(0)?,
+                    request_id: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    operation: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                    state: row.get(3)?,
+                })
+            })
+            .map_err(db_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(db_error)?;
+        activity.reverse();
+        Ok(activity)
+    }
+    /// Persist intent before signaling an execution. This does not assert cancellation
+    /// or cleanup succeeded; the execution's later terminal transition is authoritative.
+    pub fn local_cancel_intent(&self, id: &str, receipt_id: &str) -> Result<(), RacpError> {
+        if receipt_id.is_empty()
+            || receipt_id.len() > 128
+            || !receipt_id
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
+        {
+            return Err(RacpError::new("INVALID_ARGUMENT"));
+        }
+        let mut db = self.connection()?;
+        let tx = db
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(db_error)?;
+        let record = get(&tx, id)?;
+        audit(
+            &tx,
+            "local_cancel_intent",
+            &record.request,
+            json!({"receipt_id":receipt_id,"source":"local_owner","observed_state":record.state}),
+        )?;
+        tx.commit().map_err(db_error)?;
+        Ok(())
     }
     pub fn recover_agent(&self) -> Result<(), RacpError> {
         for record in self.records()? {

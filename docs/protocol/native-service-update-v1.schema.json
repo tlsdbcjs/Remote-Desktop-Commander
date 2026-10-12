@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://racp.local/schemas/native-service-update-v1.schema.json",
+  "title": "Private stopped-service scope update",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["expected_revision", "expected_config_sha256", "config"],
+  "properties": {
+    "expected_revision": { "type": "integer", "minimum": 0, "maximum": 18446744073709551614 },
+    "expected_config_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "config": { "$ref": "native-service-config-v1.schema.json" }
+  },
+  "description": "Rust additionally requires next revision=expected+1, the current config hash/revision, unchanged normalized private/control roots and service SID, the actual virtual service actor, stopped Agent/cooperative locks, and known prior/next directory and file ACLs. No credentials are allowed."
+}

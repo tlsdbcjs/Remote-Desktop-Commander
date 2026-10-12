@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://racp.local/schemas/native-service-config-v1.schema.json",
+  "title": "Private native service config (source contract; provisioning incomplete)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format_version", "revision", "state_dir", "endpoint_dir", "scope"],
+  "properties": {
+    "format_version": { "type": "integer", "const": 1 },
+    "revision": { "type": "integer", "minimum": 0, "maximum": 18446744073709551615 },
+    "state_dir": { "type": "string", "minLength": 3, "maxLength": 32768 },
+    "endpoint_dir": { "type": "string", "minLength": 3, "maxLength": 32768 },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service_name", "service_sid", "controllers"],
+      "properties": {
+        "service_name": { "type": "string", "const": "RACPNativeAgent" },
+        "service_sid": { "type": "string", "pattern": "^S-1-5-80-(0|[1-9][0-9]{0,9})(-(0|[1-9][0-9]{0,9})){4}$" },
+        "controllers": {
+          "type": "array", "minItems": 1, "maxItems": 16,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["user_sid", "session_ids", "role"],
+            "properties": {
+              "user_sid": { "type": "string", "pattern": "^S-1-(5-21|12-1)-(0|[1-9][0-9]{0,9})(-(0|[1-9][0-9]{0,9})){3}$" },
+              "session_ids": { "type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": { "type": "integer", "minimum": 1, "maximum": 4294967295 } },
+              "role": { "type": "string", "enum": ["observer", "controller"] }
+            }
+          }
+        }
+      }
+    }
+  },
+  "description": "Rust additionally validates unique user SIDs, canonical u32 SID components, the OS-derived fixed service SID, normalized local paths and disjoint private/control directories. No credentials belong in this file."
+}

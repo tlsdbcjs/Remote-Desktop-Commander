@@ -1,5 +1,10 @@
 """Unit tests for RACP version definitions and version management logic."""
 
+import json
+import re
+import tomllib
+from pathlib import Path
+
 import pytest
 from racp_domain.version import VERSION, __version__
 
@@ -7,8 +12,19 @@ from scripts.version import calculate_next_version, parse_semver
 
 
 def test_package_version_constants() -> None:
-    assert VERSION == "0.1.21"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", VERSION)
     assert __version__ == VERSION
+    root = Path(__file__).resolve().parents[2]
+    cargo = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))
+    assert cargo["workspace"]["package"]["version"] == VERSION
+    host = tomllib.loads((root / "apps/analysis-host/Cargo.toml").read_text(encoding="utf-8"))
+    assert host["package"]["version"] == VERSION
+    console = json.loads((root / "apps/console/package.json").read_text(encoding="utf-8"))
+    assert console["version"] == VERSION
+    openapi = json.loads(
+        (root / "docs/protocol/console-openapi-v1.json").read_text(encoding="utf-8")
+    )
+    assert openapi["info"]["version"] == VERSION
 
     import racp_cli
     import racp_gateway

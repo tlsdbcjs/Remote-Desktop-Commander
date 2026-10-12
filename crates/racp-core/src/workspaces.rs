@@ -336,6 +336,29 @@ impl Directory {
             .file(std::ffi::OsStr::new(name), OpenMode::Read)
             .map_err(denied)
     }
+    /// Windows runtime pin: reject concurrent writers and renames for the lifetime of this handle.
+    pub fn open_pinned_read(&self, name: &str) -> Result<File, RacpError> {
+        Self::name(name)?;
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(1)
+                .custom_flags(0x00200000)
+                .open(self.path.join(name))
+                .map_err(os_error)?;
+            let metadata = FileInfo::from_file(&file)?;
+            if metadata.link || metadata.directory {
+                return Err(RacpError::new("PATH_ACCESS_DENIED"));
+            }
+            Ok(file)
+        }
+        #[cfg(not(windows))]
+        {
+            self.open_read(name)
+        }
+    }
     pub fn create(&self, name: &str) -> Result<File, RacpError> {
         Self::name(name)?;
         if self.info(name)?.is_some() {
@@ -575,10 +598,25 @@ impl Directory {
         target: &str,
         overwrite: bool,
     ) -> Result<(), RacpError> {
+        self.move_to_checked(source, other, target, overwrite, None)
+    }
+    pub fn move_to_checked(
+        &self,
+        source: &str,
+        other: &Self,
+        target: &str,
+        overwrite: bool,
+        expected_revision: Option<&str>,
+    ) -> Result<(), RacpError> {
         Self::name(source)?;
         Self::name(target)?;
         #[cfg(unix)]
         {
+            if let Some(expected) = expected_revision {
+                if self.info(source)?.is_none_or(|i| i.revision() != expected) {
+                    return Err(RacpError::new("PRECONDITION_FAILED"));
+                }
+            }
             use std::os::fd::AsRawFd;
             let source = std::ffi::CString::new(source).unwrap();
             let target = std::ffi::CString::new(target).unwrap();
@@ -615,29 +653,66 @@ impl Directory {
         }
         #[cfg(windows)]
         {
-            use std::os::windows::ffi::OsStrExt;
-            use windows_sys::Win32::Storage::FileSystem::MoveFileExW;
-            let source: Vec<u16> = self
-                .path
-                .join(source)
-                .as_os_str()
-                .encode_wide()
-                .chain(Some(0))
-                .collect();
-            let target: Vec<u16> = other
-                .path
-                .join(target)
-                .as_os_str()
-                .encode_wide()
-                .chain(Some(0))
-                .collect();
-            if unsafe {
-                MoveFileExW(
-                    source.as_ptr(),
-                    target.as_ptr(),
-                    if overwrite { 1 } else { 0 },
-                )
-            } == 0
+            self.rename_windows(source, other, target, overwrite, expected_revision)?;
+        }
+        self.sync()?;
+        other.sync()?;
+        Ok(())
+    }
+    #[cfg(windows)]
+    pub fn open_windows(&self, name: &str, access: u32) -> Result<File, RacpError> {
+        use std::os::windows::fs::OpenOptionsExt;
+        Self::name(name)?;
+        let file = std::fs::OpenOptions::new()
+            .access_mode(access)
+            .share_mode(3)
+            .custom_flags(0x02000000 | 0x00200000)
+            .open(self.path.join(name))
+            .map_err(os_error)?;
+        if FileInfo::from_file(&file)?.link {
+            return Err(RacpError::new("PATH_ACCESS_DENIED"));
+        }
+        Ok(file)
+    }
+    #[cfg(windows)]
+    fn rename_windows(
+        &self,
+        source: &str,
+        other: &Self,
+        target: &str,
+        overwrite: bool,
+        expected_revision: Option<&str>,
+    ) -> Result<(), RacpError> {
+        use std::os::windows::{ffi::OsStrExt, io::AsRawHandle};
+        use windows_sys::Win32::Storage::FileSystem::{
+            FileRenameInfo, SetFileInformationByHandle, FILE_RENAME_INFO,
+        };
+        let file = self.open_windows(source, 0x00010000 | 0x80)?;
+        if expected_revision
+            .is_some_and(|v| FileInfo::from_file(&file).map_or(true, |i| i.revision() != v))
+        {
+            return Err(RacpError::new("PRECONDITION_FAILED"));
+        }
+        let name: Vec<u16> = std::ffi::OsStr::new(target).encode_wide().collect();
+        let offset = std::mem::offset_of!(FILE_RENAME_INFO, FileName);
+        let size = offset + name.len() * 2;
+        let mut words = vec![0usize; size.div_ceil(std::mem::size_of::<usize>())];
+        let header = words.as_mut_ptr().cast::<FILE_RENAME_INFO>();
+        unsafe {
+            (*header).Anonymous.ReplaceIfExists = overwrite;
+            (*header).RootDirectory = other.handle().as_raw_handle();
+            (*header).FileNameLength = (name.len() * 2) as u32;
+            std::ptr::copy_nonoverlapping(
+                name.as_ptr(),
+                words.as_mut_ptr().cast::<u8>().add(offset).cast(),
+                name.len(),
+            );
+            if SetFileInformationByHandle(
+                file.as_raw_handle(),
+                FileRenameInfo,
+                words.as_ptr().cast(),
+                size as u32,
+            ) == 0
             {
                 let error = std::io::Error::last_os_error();
                 if error.raw_os_error() == Some(17) {
@@ -646,8 +721,6 @@ impl Directory {
                 return Err(os_error(error));
             }
         }
-        self.sync()?;
-        other.sync()?;
         Ok(())
     }
 }

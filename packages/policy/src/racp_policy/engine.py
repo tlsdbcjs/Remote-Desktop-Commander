@@ -3,6 +3,7 @@ from enum import StrEnum
 
 from racp_protocol.clipboard import CLIPBOARD_READS
 from racp_protocol.desktop import DESKTOP_MODELS, DESKTOP_READS
+from racp_protocol.expansions import EXPANSION_MODELS, EXPANSION_MUTATIONS
 from racp_protocol.native_operations import NATIVE_MODELS
 from racp_protocol.os_observation import OS_OBSERVATION_READS
 from racp_protocol.provider_models import SENSITIVE_PROCESS_READS
@@ -34,6 +35,7 @@ def evaluate(operation: str, rules: tuple[Rule, ...]) -> Decision:
 def profile_rules(profile: str) -> tuple[Rule, ...]:
     reads = frozenset(
         {
+            *(name for name in EXPANSION_MODELS if name not in EXPANSION_MUTATIONS),
             *DESKTOP_READS,
             *CLIPBOARD_READS,
             *OS_OBSERVATION_READS,
@@ -57,6 +59,7 @@ def profile_rules(profile: str) -> tuple[Rule, ...]:
     )
     mutations = frozenset(
         {
+            *EXPANSION_MUTATIONS,
             *NATIVE_MODELS,
             *PROXY_MODELS,
             *[name for name in DESKTOP_MODELS if name not in DESKTOP_READS],

@@ -28,6 +28,7 @@ Usage:
 """
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -48,17 +49,19 @@ TARGET_PYPROJECTS = [
 ]
 
 TARGET_PACKAGE_JSONS = [
-    ROOT / "apps/client/package.json",
     ROOT / "apps/console/package.json",
-    ROOT / "apps/client/src-tauri/tauri.conf.json",
 ]
 
-TARGET_CARGO = [ROOT / "Cargo.toml", ROOT / "apps/client/src-tauri/Cargo.toml"]
+TARGET_CARGO = [
+    ROOT / "Cargo.toml",
+    ROOT / "apps/analysis-host/Cargo.toml",
+]
 
 TARGET_CODE_FILES = [
     VERSION_FILE,
-    ROOT / "apps/client/src/main.tsx",
 ]
+
+TARGET_OPENAPI = ROOT / "docs/protocol/console-openapi-v1.json"
 
 
 def parse_semver(version_str: str) -> tuple[int, int, int]:
@@ -134,7 +137,7 @@ def update_file(path: Path, old_version: str, new_version: str, dry_run: bool) -
             original,
             flags=re.MULTILINE,
         )
-    elif path.name in {"package.json", "tauri.conf.json"}:
+    elif path.name == "package.json":
         updated = re.sub(
             r'("version"\s*:\s*")[^"]+(")',
             rf"\g<1>{new_version}\g<2>",
@@ -146,12 +149,10 @@ def update_file(path: Path, old_version: str, new_version: str, dry_run: bool) -
             rf"\g<1>{new_version}\g<2>",
             original,
         )
-    elif path.name == "main.tsx":
-        updated = re.sub(
-            r'(const CLIENT_VERSION\s*=\s*["\'])[^"\']+(["\'])',
-            rf"\g<1>{new_version}\g<2>",
-            original,
-        )
+    elif path == TARGET_OPENAPI:
+        document = json.loads(original)
+        document["info"]["version"] = new_version
+        updated = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
 
     if updated != original:
         if not dry_run:
@@ -169,6 +170,7 @@ def apply_version(new_version: str, dry_run: bool = False) -> list[str]:
     targets.extend(TARGET_PYPROJECTS)
     targets.extend(TARGET_PACKAGE_JSONS)
     targets.extend(TARGET_CARGO)
+    targets.append(TARGET_OPENAPI)
     targets.extend(TARGET_CODE_FILES)
 
     modified: list[str] = []
