@@ -76,6 +76,7 @@ pub fn detect_os_language() -> Language {
 pub enum TextKey {
     // Navigation & Header
     AppTitle,
+    AppBadge,
     NavStatus,
     NavPermissions,
     NavApprovals,
@@ -84,6 +85,10 @@ pub enum TextKey {
     NavQuit,
     DeviceIdentity,
     DpapiVaultEnforced,
+    StatusOnline,
+    RoleController,
+    RoleObserver,
+    BtnEmergencyStop,
 
     // Common Actions
     Save,

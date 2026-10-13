@@ -5,14 +5,19 @@ pub fn translate(key: TextKey) -> &'static str {
     match key {
         // Navigation & Header
         TextKey::AppTitle => "RACP Native Client",
-        TextKey::NavStatus => "상태",
-        TextKey::NavPermissions => "권한",
-        TextKey::NavApprovals => "승인",
+        TextKey::AppBadge => "Enterprise Agent",
+        TextKey::NavStatus => "상태 (Status)",
+        TextKey::NavPermissions => "권한 (Permissions)",
+        TextKey::NavApprovals => "승인 (Approvals)",
         TextKey::NavRuntime => "선택 런타임",
-        TextKey::NavSettings => "설정",
+        TextKey::NavSettings => "설정 (Settings)",
         TextKey::NavQuit => "종료",
-        TextKey::DeviceIdentity => "엔드포인트 식별자",
-        TextKey::DpapiVaultEnforced => "DPAPI 암호화 볼트 적용됨",
+        TextKey::DeviceIdentity => "Device Identity",
+        TextKey::DpapiVaultEnforced => "DPAPI Vault Enforced",
+        TextKey::StatusOnline => "Agent Online",
+        TextKey::RoleController => "Controller",
+        TextKey::RoleObserver => "Observer",
+        TextKey::BtnEmergencyStop => "긴급 정지",
 
         // Common Actions
         TextKey::Save => "저장",

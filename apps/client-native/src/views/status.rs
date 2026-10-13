@@ -172,6 +172,130 @@ pub fn view<'a>(app: &'a App) -> Element<'a, Message> {
 
     content = content.push(header_card);
 
+    // 4 Core Metric Cards Grid (From Demo)
+    if let Some(snapshot) = &app.model.snapshot {
+        let active_tasks_count = snapshot.activity.iter().filter(|a| matches!(a.state.as_str(), "RUNNING" | "DISPATCHED" | "ACCEPTED")).count();
+        let pending_count = snapshot.pending_approvals.len();
+
+        let card_pid = container(
+            column![
+                row![
+                    text("Agent 프로세스").size(11),
+                    container(text(if snapshot.status == AgentStatus::Online { "정상 가동" } else { "대기" }).size(9))
+                        .padding(Padding::from([1, 5]))
+                        .style(|_| container::Style {
+                            background: Some(iced::Background::Color(iced::Color::from_rgba(0.020, 0.588, 0.412, 0.15))),
+                            border: iced::Border {
+                                color: iced::Color::from_rgba(0.020, 0.588, 0.412, 0.3),
+                                width: 1.0,
+                                radius: 4.0.into(),
+                            },
+                            text_color: Some(crate::theme::ACCENT_EMERALD),
+                            shadow: iced::Shadow::default(),
+                        })
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
+                text(format!("Seq #{}", snapshot.sequence)).size(16),
+                text("Pipe IPC Connected").size(10),
+            ]
+            .spacing(4)
+        )
+        .style(card_container)
+        .padding(Padding::from(12))
+        .width(Length::FillPortion(1));
+
+        let card_tasks = container(
+            column![
+                row![
+                    text("활성 제어 작업").size(11),
+                    container(text(format!("{active_tasks_count} ACTIVE")).size(9))
+                        .padding(Padding::from([1, 5]))
+                        .style(|_| container::Style {
+                            background: Some(iced::Background::Color(iced::Color::from_rgba(0.388, 0.400, 0.945, 0.15))),
+                            border: iced::Border {
+                                color: iced::Color::from_rgba(0.388, 0.400, 0.945, 0.3),
+                                width: 1.0,
+                                radius: 4.0.into(),
+                            },
+                            text_color: Some(crate::theme::ACCENT_INDIGO),
+                            shadow: iced::Shadow::default(),
+                        })
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
+                text(format!("{active_tasks_count} / 32 Slots")).size(16),
+                text("안전 취소 핸들러 무장됨").size(10),
+            ]
+            .spacing(4)
+        )
+        .style(card_container)
+        .padding(Padding::from(12))
+        .width(Length::FillPortion(1));
+
+        let card_approvals = container(
+            column![
+                row![
+                    text("대기 중 승인 요청").size(11),
+                    container(text(format!("{pending_count} PENDING")).size(9))
+                        .padding(Padding::from([1, 5]))
+                        .style(|_| container::Style {
+                            background: Some(iced::Background::Color(iced::Color::from_rgba(0.882, 0.114, 0.282, 0.15))),
+                            border: iced::Border {
+                                color: iced::Color::from_rgba(0.882, 0.114, 0.282, 0.3),
+                                width: 1.0,
+                                radius: 4.0.into(),
+                            },
+                            text_color: Some(crate::theme::ACCENT_ROSE),
+                            shadow: iced::Shadow::default(),
+                        })
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
+                text(format!("{pending_count} 건")).size(16),
+                text("Zero-Trust Prompt").size(10),
+            ]
+            .spacing(4)
+        )
+        .style(card_container)
+        .padding(Padding::from(12))
+        .width(Length::FillPortion(1));
+
+        let card_guardian = container(
+            column![
+                row![
+                    text("화면/입력 가디언").size(11),
+                    container(text("Standby").size(9))
+                        .padding(Padding::from([1, 5]))
+                        .style(|_| container::Style {
+                            background: Some(iced::Background::Color(iced::Color::from_rgba(0.851, 0.467, 0.024, 0.15))),
+                            border: iced::Border {
+                                color: iced::Color::from_rgba(0.851, 0.467, 0.024, 0.3),
+                                width: 1.0,
+                                radius: 4.0.into(),
+                            },
+                            text_color: Some(crate::theme::ACCENT_AMBER),
+                            shadow: iced::Shadow::default(),
+                        })
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
+                text("Guardian Ready").size(16),
+                text("물리 입력 감지 시 원격 차단").size(10),
+            ]
+            .spacing(4)
+        )
+        .style(card_container)
+        .padding(Padding::from(12))
+        .width(Length::FillPortion(1));
+
+        let metrics_row = row![card_pid, card_tasks, card_approvals, card_guardian]
+            .spacing(12)
+            .width(Length::Fill);
+
+        content = content.push(metrics_row);
+    }
+
     // 2. Onboarding / Enrollment Section (Shown when local state is absent and not service)
     let needs_enrollment = !is_service && app.local.as_ref().and_then(|info| info.state.as_ref()).is_none();
     if needs_enrollment {

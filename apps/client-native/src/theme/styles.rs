@@ -330,3 +330,118 @@ pub fn grant_segment_button(
         }
     }
 }
+
+/// Top enterprise header container style
+pub fn header_container(_theme: &iced::Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(Color::from_rgb(0.059, 0.090, 0.165))), // #0f172a
+        border: Border {
+            color: BORDER_SUBTLE, // #1e293b
+            width: 1.0,
+            radius: 0.0.into(),
+        },
+        text_color: Some(TEXT_PRIMARY),
+        shadow: Shadow::default(),
+    }
+}
+
+/// Left navigation sidebar container style
+pub fn sidebar_container(_theme: &iced::Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(Color::from_rgb(0.047, 0.071, 0.133))), // #0c1222
+        border: Border {
+            color: BORDER_SUBTLE, // #1e293b
+            width: 1.0,
+            radius: 0.0.into(),
+        },
+        text_color: Some(TEXT_PRIMARY),
+        shadow: Shadow::default(),
+    }
+}
+
+/// Center status capsule container style
+pub fn status_capsule_container(_theme: &iced::Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(Color::from_rgba(0.059, 0.090, 0.165, 0.9))),
+        border: Border {
+            color: Color::from_rgb(0.2, 0.255, 0.333), // #334155
+            width: 1.0,
+            radius: 20.0.into(),
+        },
+        text_color: Some(TEXT_SECONDARY),
+        shadow: Shadow::default(),
+    }
+}
+
+/// Emergency Stop button style
+pub fn emergency_button(_theme: &iced::Theme, status: button::Status) -> button::Style {
+    let base = button::Style {
+        background: Some(Background::Color(Color::from_rgba(ACCENT_ROSE.r, ACCENT_ROSE.g, ACCENT_ROSE.b, 0.12))),
+        text_color: Color::from_rgb(0.98, 0.45, 0.55),
+        border: Border {
+            color: Color::from_rgba(ACCENT_ROSE.r, ACCENT_ROSE.g, ACCENT_ROSE.b, 0.35),
+            width: 1.0,
+            radius: 8.0.into(),
+        },
+        shadow: Shadow::default(),
+    };
+    match status {
+        button::Status::Hovered => button::Style {
+            background: Some(Background::Color(Color::from_rgba(ACCENT_ROSE.r, ACCENT_ROSE.g, ACCENT_ROSE.b, 0.25))),
+            text_color: Color::from_rgb(1.0, 0.6, 0.7),
+            ..base
+        },
+        button::Status::Pressed => button::Style {
+            background: Some(Background::Color(Color::from_rgba(ACCENT_ROSE.r, ACCENT_ROSE.g, ACCENT_ROSE.b, 0.35))),
+            ..base
+        },
+        _ => base,
+    }
+}
+
+/// Sidebar navigation full-width item button
+pub fn sidebar_nav_button(is_active: bool) -> impl Fn(&iced::Theme, button::Status) -> button::Style {
+    move |_theme, status| {
+        if is_active {
+            button::Style {
+                background: Some(Background::Color(Color::from_rgba(ACCENT_INDIGO.r, ACCENT_INDIGO.g, ACCENT_INDIGO.b, 0.15))),
+                text_color: Color::from_rgb(0.65, 0.7, 0.98),
+                border: Border {
+                    color: Color::from_rgba(ACCENT_INDIGO.r, ACCENT_INDIGO.g, ACCENT_INDIGO.b, 0.3),
+                    width: 1.0,
+                    radius: 8.0.into(),
+                },
+                shadow: Shadow::default(),
+            }
+        } else {
+            let base = button::Style {
+                background: Some(Background::Color(Color::TRANSPARENT)),
+                text_color: TEXT_MUTED,
+                border: Border {
+                    color: Color::TRANSPARENT,
+                    width: 1.0,
+                    radius: 8.0.into(),
+                },
+                shadow: Shadow::default(),
+            };
+            match status {
+                button::Status::Hovered => button::Style {
+                    background: Some(Background::Color(Color::from_rgba(1.0, 1.0, 1.0, 0.05))),
+                    text_color: TEXT_PRIMARY,
+                    border: Border {
+                        color: BORDER_SUBTLE,
+                        width: 1.0,
+                        radius: 8.0.into(),
+                    },
+                    ..base
+                },
+                button::Status::Pressed => button::Style {
+                    background: Some(Background::Color(Color::from_rgba(1.0, 1.0, 1.0, 0.08))),
+                    ..base
+                },
+                _ => base,
+            }
+        }
+    }
+}
+

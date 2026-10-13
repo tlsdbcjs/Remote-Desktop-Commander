@@ -1015,13 +1015,12 @@ impl App {
         crate::accessibility::begin(self.title());
 
         let lang = self.lang;
-
-        // Navigation Tabs with Active Highlighting & Badges
         let is_status = matches!(self.page, Page::Status);
         let is_permissions = matches!(self.page, Page::Permissions);
         let is_settings = matches!(self.page, Page::Settings);
         let is_runtime = matches!(self.page, Page::Runtime);
         let is_approvals = matches!(self.page, Page::Approvals);
+        let is_service = crate::control_target::service();
 
         let pending_count = self
             .model
@@ -1029,93 +1028,298 @@ impl App {
             .as_ref()
             .map_or(0, |s| s.pending_approvals.len());
 
-        let tab_status = custom_button(
-            text(tr(lang, TextKey::NavStatus)).size(13),
-            tr(lang, TextKey::NavStatus),
-        )
-        .padding(Padding::from([8, 16]))
-        .style(crate::theme::styles::nav_tab_button(is_status))
-        .on_press(Message::Navigate(Page::Status));
+        // --- 1. TOP ENTERPRISE HEADER BAR ---
+        let logo_icon = container(crate::components::icons::render_icon(crate::components::icons::IconType::Shield, 16.0))
+            .padding(Padding::from(6))
+            .style(|_theme| container::Style {
+                background: Some(iced::Background::Color(crate::theme::ACCENT_INDIGO)),
+                border: iced::Border {
+                    color: iced::Color::TRANSPARENT,
+                    width: 0.0,
+                    radius: 8.0.into(),
+                },
+                text_color: Some(crate::theme::TEXT_PRIMARY),
+                shadow: iced::Shadow::default(),
+            });
 
-        let tab_permissions = custom_button(
-            text(tr(lang, TextKey::NavPermissions)).size(13),
-            tr(lang, TextKey::NavPermissions),
-        )
-        .padding(Padding::from([8, 16]))
-        .style(crate::theme::styles::nav_tab_button(is_permissions))
-        .on_press(Message::Navigate(Page::Permissions));
+        let brand_title = text(self.title()).size(14);
+        let brand_badge = container(text(tr(lang, TextKey::AppBadge)).size(10))
+            .padding(Padding::from([2, 6]))
+            .style(|_theme| container::Style {
+                background: Some(iced::Background::Color(iced::Color::from_rgba(0.388, 0.400, 0.945, 0.15))),
+                border: iced::Border {
+                    color: iced::Color::from_rgba(0.388, 0.400, 0.945, 0.3),
+                    width: 1.0,
+                    radius: 4.0.into(),
+                },
+                text_color: Some(crate::theme::ACCENT_INDIGO),
+                shadow: iced::Shadow::default(),
+            });
+        let version_tag = text(format!("v{}", racp_contract::VERSION)).size(11);
 
-        let tab_approvals = {
-            let label = if pending_count > 0 {
-                format!("{} ({})", tr(lang, TextKey::NavApprovals), pending_count)
-            } else {
-                tr(lang, TextKey::NavApprovals).to_string()
-            };
-            custom_button(
-                text(label).size(13),
-                tr(lang, TextKey::NavApprovals),
-            )
-            .padding(Padding::from([8, 16]))
-            .style(crate::theme::styles::nav_tab_button(is_approvals))
-            .on_press(Message::Navigate(Page::Approvals))
+        let header_left = row![logo_icon, brand_title, brand_badge, version_tag]
+            .spacing(8)
+            .align_y(Alignment::Center);
+
+        // Center Status Capsule
+        let (status_text_color, status_text_str) = if is_service {
+            (crate::theme::ACCENT_INDIGO, "Service Mode")
+        } else if self.model.needs_resync {
+            (crate::theme::ACCENT_AMBER, tr(lang, TextKey::AgentStopped))
+        } else if let Some(snapshot) = &self.model.snapshot {
+            match snapshot.status {
+                racp_contract::local_ipc::AgentStatus::Online => (crate::theme::ACCENT_EMERALD, tr(lang, TextKey::StatusOnline)),
+                _ => (crate::theme::ACCENT_AMBER, tr(lang, TextKey::AgentStopped)),
+            }
+        } else {
+            (crate::theme::ACCENT_AMBER, tr(lang, TextKey::AgentStopped))
         };
 
-        let tab_runtime = custom_button(
-            text(tr(lang, TextKey::NavRuntime)).size(13),
-            tr(lang, TextKey::NavRuntime),
-        )
-        .padding(Padding::from([8, 16]))
-        .style(crate::theme::styles::nav_tab_button(is_runtime))
-        .on_press_maybe((!crate::control_target::service()).then_some(Message::Navigate(Page::Runtime)));
+        let status_dot = container(text("●").size(10))
+            .style(move |_theme| container::Style {
+                text_color: Some(status_text_color),
+                ..Default::default()
+            });
 
-        let tab_settings = custom_button(
-            text(tr(lang, TextKey::NavSettings)).size(13),
-            tr(lang, TextKey::NavSettings),
-        )
-        .padding(Padding::from([8, 16]))
-        .style(crate::theme::styles::nav_tab_button(is_settings))
-        .on_press_maybe((!crate::control_target::service()).then_some(Message::Navigate(Page::Settings)));
+        let role_label = match self.role {
+            Some(ControllerRole::Controller) => tr(lang, TextKey::RoleController),
+            Some(ControllerRole::Observer) => tr(lang, TextKey::RoleObserver),
+            None => "Standby",
+        };
 
-        let tab_quit = custom_button(
-            text(tr(lang, TextKey::NavQuit)).size(13),
-            tr(lang, TextKey::NavQuit),
-        )
-        .padding(Padding::from([8, 16]))
-        .style(crate::theme::styles::danger_button)
-        .on_press(Message::Quit);
-
-        let mut nav_row = row![tab_status, tab_permissions, tab_approvals];
-        if !crate::control_target::service() {
-            nav_row = nav_row.push(tab_runtime).push(tab_settings);
-        }
-        nav_row = nav_row.push(tab_quit).spacing(8).align_y(Alignment::Center);
-
-        // Header Top Row: Brand & Title
-        let header_top = row![
-            text(self.title()).size(22),
-            container(text(format!("v{}", racp_contract::VERSION)).size(11))
-                .padding(Padding::from([2, 6]))
-                .style(|_theme| container::Style {
-                    background: Some(iced::Background::Color(iced::Color::from_rgba(0.388, 0.400, 0.945, 0.15))),
-                    border: iced::Border {
-                        color: iced::Color::from_rgba(0.388, 0.400, 0.945, 0.3),
-                        width: 1.0,
-                        radius: 4.0.into(),
-                    },
-                    text_color: Some(crate::theme::ACCENT_INDIGO),
-                    shadow: iced::Shadow::default(),
-                }),
+        let capsule_content = row![
+            status_dot,
+            text(status_text_str).size(11),
+            text("·").size(11),
+            text(format!("Role: {role_label}")).size(11),
         ]
-        .spacing(10)
+        .spacing(8)
         .align_y(Alignment::Center);
 
-        let header = container(
-            column![header_top, nav_row].spacing(12).width(Length::Fill),
+        let header_center = container(capsule_content)
+            .padding(Padding::from([4, 12]))
+            .style(crate::theme::styles::status_capsule_container);
+
+        // Right controls
+        let emergency_stop_btn = custom_button(
+            row![
+                crate::components::icons::render_icon(crate::components::icons::IconType::Alert, 14.0),
+                text(tr(lang, TextKey::BtnEmergencyStop)).size(11),
+            ]
+            .spacing(6)
+            .align_y(Alignment::Center),
+            tr(lang, TextKey::BtnEmergencyStop),
         )
-        .style(crate::theme::styles::card_container)
-        .padding(Padding::from(16))
+        .padding(Padding::from([5, 10]))
+        .style(crate::theme::styles::emergency_button)
+        .on_press(Message::Stop);
+
+        let quit_btn = custom_button(
+            text(tr(lang, TextKey::NavQuit)).size(11),
+            tr(lang, TextKey::NavQuit),
+        )
+        .padding(Padding::from([5, 10]))
+        .style(crate::theme::styles::secondary_button)
+        .on_press(Message::Quit);
+
+        let header_right = row![emergency_stop_btn, quit_btn]
+            .spacing(8)
+            .align_y(Alignment::Center);
+
+        let header_bar = container(
+            row![
+                header_left,
+                row![header_center].width(Length::Fill).align_y(Alignment::Center),
+                header_right,
+            ]
+            .spacing(12)
+            .align_y(Alignment::Center)
+            .width(Length::Fill),
+        )
+        .style(crate::theme::styles::header_container)
+        .padding(Padding::from([8, 16]))
         .width(Length::Fill);
 
+        // --- 2. LEFT SIDEBAR NAVIGATION ---
+        // Tab 1: Status
+        let tab_status = custom_button(
+            row![
+                row![
+                    crate::components::icons::render_icon(crate::components::icons::IconType::Dashboard, 15.0),
+                    text(tr(lang, TextKey::NavStatus)).size(12),
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
+                container(text("●").size(8)).style(move |_| container::Style {
+                    text_color: Some(status_text_color),
+                    ..Default::default()
+                }),
+            ]
+            .width(Length::Fill)
+            .align_y(Alignment::Center),
+            tr(lang, TextKey::NavStatus),
+        )
+        .width(Length::Fill)
+        .padding(Padding::from([8, 10]))
+        .style(crate::theme::styles::sidebar_nav_button(is_status))
+        .on_press(Message::Navigate(Page::Status));
+
+        // Tab 2: Permissions
+        let tree_badge = container(text("Tree").size(9))
+            .padding(Padding::from([2, 5]))
+            .style(|_| container::Style {
+                background: Some(iced::Background::Color(iced::Color::from_rgba(0.388, 0.400, 0.945, 0.2))),
+                border: iced::Border {
+                    color: iced::Color::from_rgba(0.388, 0.400, 0.945, 0.3),
+                    width: 1.0,
+                    radius: 4.0.into(),
+                },
+                text_color: Some(crate::theme::ACCENT_INDIGO),
+                shadow: iced::Shadow::default(),
+            });
+
+        let tab_permissions = custom_button(
+            row![
+                row![
+                    crate::components::icons::render_icon(crate::components::icons::IconType::Shield, 15.0),
+                    text(tr(lang, TextKey::NavPermissions)).size(12),
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
+                tree_badge,
+            ]
+            .width(Length::Fill)
+            .align_y(Alignment::Center),
+            tr(lang, TextKey::NavPermissions),
+        )
+        .width(Length::Fill)
+        .padding(Padding::from([8, 10]))
+        .style(crate::theme::styles::sidebar_nav_button(is_permissions))
+        .on_press(Message::Navigate(Page::Permissions));
+
+        // Tab 3: Approvals
+        let approvals_badge_elem = if pending_count > 0 {
+            container(text(pending_count.to_string()).size(10))
+                .padding(Padding::from([1, 6]))
+                .style(|_| container::Style {
+                    background: Some(iced::Background::Color(crate::theme::ACCENT_ROSE)),
+                    border: iced::Border {
+                        color: iced::Color::TRANSPARENT,
+                        width: 0.0,
+                        radius: 10.0.into(),
+                    },
+                    text_color: Some(crate::theme::TEXT_PRIMARY),
+                    shadow: iced::Shadow::default(),
+                })
+        } else {
+            container(text("").size(0))
+        };
+
+        let tab_approvals = custom_button(
+            row![
+                row![
+                    crate::components::icons::render_icon(crate::components::icons::IconType::Bell, 15.0),
+                    text(tr(lang, TextKey::NavApprovals)).size(12),
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
+                approvals_badge_elem,
+            ]
+            .width(Length::Fill)
+            .align_y(Alignment::Center),
+            tr(lang, TextKey::NavApprovals),
+        )
+        .width(Length::Fill)
+        .padding(Padding::from([8, 10]))
+        .style(crate::theme::styles::sidebar_nav_button(is_approvals))
+        .on_press(Message::Navigate(Page::Approvals));
+
+        // Tab 4: Runtime
+        let tab_runtime = custom_button(
+            row![
+                row![
+                    crate::components::icons::render_icon(crate::components::icons::IconType::Package, 15.0),
+                    text(tr(lang, TextKey::NavRuntime)).size(12),
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
+                text("3 OK").size(10),
+            ]
+            .width(Length::Fill)
+            .align_y(Alignment::Center),
+            tr(lang, TextKey::NavRuntime),
+        )
+        .width(Length::Fill)
+        .padding(Padding::from([8, 10]))
+        .style(crate::theme::styles::sidebar_nav_button(is_runtime))
+        .on_press_maybe((!is_service).then_some(Message::Navigate(Page::Runtime)));
+
+        // Tab 5: Settings
+        let tab_settings = custom_button(
+            row![
+                crate::components::icons::render_icon(crate::components::icons::IconType::Settings, 15.0),
+                text(tr(lang, TextKey::NavSettings)).size(12),
+            ]
+            .spacing(8)
+            .align_y(Alignment::Center),
+            tr(lang, TextKey::NavSettings),
+        )
+        .width(Length::Fill)
+        .padding(Padding::from([8, 10]))
+        .style(crate::theme::styles::sidebar_nav_button(is_settings))
+        .on_press_maybe((!is_service).then_some(Message::Navigate(Page::Settings)));
+
+        let mut sidebar_nav = column![tab_status, tab_permissions, tab_approvals].spacing(4);
+        if !is_service {
+            sidebar_nav = sidebar_nav.push(tab_runtime).push(tab_settings);
+        }
+
+        // Sidebar Footer: Host Identity Card
+        let device_id_str = if let Some(identity) = self.model.snapshot.as_ref().and_then(|s| s.identity.as_ref()) {
+            identity.device_id.chars().take(16).collect::<String>() + "..."
+        } else if let Some(state) = self.local.as_ref().and_then(|i| i.state.as_ref()) {
+            state.device_id.chars().take(16).collect::<String>() + "..."
+        } else {
+            "dev_unregistered".to_string()
+        };
+
+        let device_card = container(
+            column![
+                text(tr(lang, TextKey::DeviceIdentity)).size(10),
+                text(device_id_str).size(10),
+                row![
+                    text("DPAPI Vault").size(10),
+                    row![
+                        crate::components::icons::render_icon(crate::components::icons::IconType::Lock, 10.0),
+                        text("Enforced").size(10),
+                    ]
+                    .spacing(4)
+                    .align_y(Alignment::Center),
+                ]
+                .spacing(6)
+                .align_y(Alignment::Center),
+            ]
+            .spacing(4),
+        )
+        .style(crate::theme::styles::elevated_box)
+        .padding(Padding::from(10))
+        .width(Length::Fill);
+
+        let sidebar = container(
+            column![
+                sidebar_nav,
+                column![].height(Length::Fill),
+                device_card,
+            ]
+            .spacing(8)
+            .height(Length::Fill),
+        )
+        .style(crate::theme::styles::sidebar_container)
+        .padding(Padding::from(10))
+        .width(Length::Fixed(210.0))
+        .height(Length::Fill);
+
+        // --- 3. MAIN CONTENT BODY ---
         let body: Element<'_, Message> = match self.page {
             Page::Status => crate::views::status::view(self),
             Page::Permissions => crate::views::permissions::view(self),
@@ -1124,13 +1328,13 @@ impl App {
             Page::Settings => crate::views::settings::view(self),
         };
 
-        let mut content = column![header, body].spacing(16);
+        let mut main_col = column![body].spacing(14).width(Length::Fill);
 
         // Bottom action toolbar (if active & can control)
         if !self.model.needs_resync && self.can_control() {
-            content = content.push(
+            main_col = main_col.push(
                 row![
-                    button("권한 저장").style(crate::theme::styles::primary_button).on_press(Message::SavePolicy),
+                    button(tr(lang, TextKey::BtnCommitCas)).style(crate::theme::styles::primary_button).on_press(Message::SavePolicy),
                     button("Agent 완전 종료").style(crate::theme::styles::danger_button).on_press(Message::Stop)
                 ]
                 .spacing(12),
@@ -1151,11 +1355,11 @@ impl App {
                     text_color: Some(crate::theme::ACCENT_ROSE),
                     shadow: iced::Shadow::default(),
                 });
-            content = content.push(err_box);
+            main_col = main_col.push(err_box);
         }
 
         if self.local_cancel.is_some() {
-            content = content.push(
+            main_col = main_col.push(
                 button("로컬 요청 취소")
                     .style(crate::theme::styles::secondary_button)
                     .on_press(Message::CancelLocal),
@@ -1163,20 +1367,26 @@ impl App {
         }
 
         if self.quitting && self.local_cancel.is_none() {
-            content = content.push(
+            main_col = main_col.push(
                 button("정리 요청 없이 앱만 종료")
                     .style(crate::theme::styles::danger_button)
                     .on_press(Message::ExitAnyway),
             );
         }
 
-        crate::controls::surface(
-            container(content)
-                .padding(20)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .into(),
-        )
+        let main_area = container(main_col)
+            .padding(16)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        let layout = column![
+            header_bar,
+            row![sidebar, main_area].width(Length::Fill).height(Length::Fill),
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+        crate::controls::surface(layout.into())
     }
 }
 fn show_window() -> Task<Message> {

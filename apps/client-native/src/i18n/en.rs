@@ -5,14 +5,19 @@ pub fn translate(key: TextKey) -> &'static str {
     match key {
         // Navigation & Header
         TextKey::AppTitle => "RACP Native Client",
+        TextKey::AppBadge => "Enterprise Agent",
         TextKey::NavStatus => "Status",
         TextKey::NavPermissions => "Permissions",
         TextKey::NavApprovals => "Approvals",
         TextKey::NavRuntime => "Runtimes",
         TextKey::NavSettings => "Settings",
         TextKey::NavQuit => "Quit",
-        TextKey::DeviceIdentity => "Endpoint Identity",
-        TextKey::DpapiVaultEnforced => "DPAPI Encrypted Vault Enforced",
+        TextKey::DeviceIdentity => "Device Identity",
+        TextKey::DpapiVaultEnforced => "DPAPI Vault Enforced",
+        TextKey::StatusOnline => "Agent Online",
+        TextKey::RoleController => "Controller",
+        TextKey::RoleObserver => "Observer",
+        TextKey::BtnEmergencyStop => "Emergency Stop",
 
         // Common Actions
         TextKey::Save => "Save",
