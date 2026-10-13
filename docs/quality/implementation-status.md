@@ -2578,4 +2578,38 @@ USB 동글의 용도는 사용자가 **원격 PC에 연결된 외장 장치/동�
      | **Native 배포 ZIP** | [`dist/client/0.1.26/win-x64/gui-20261013-a/packages/RACP-Native-0.1.26-win-x64.zip`](../../dist/client/0.1.26/win-x64/gui-20261013-a/packages/RACP-Native-0.1.26-win-x64.zip) | 37,937,682 bytes<br>`afa3f47c48b84211c54fd98f8c11fe307104c5686584a7a466785048c410f242` |
      | **Standalone Agent** | [`dist/agent/0.1.26/win-x64/gui-20261013-a/build/racp-agent.exe`](../../dist/agent/0.1.26/win-x64/gui-20261013-a/build/racp-agent.exe) | 21,947,392 bytes |
 
+### 2026-10-13 Enterprise Layout Parity & Rendering Optimization (`gui-20261013-d`)
+
+사용자 프로토타입(`enterprise_gui_demo.html`) 기준 시각적 일치 및 렌더링 지연 해결을 위한 최종 구조 개선 및 릴리스 패키징을 완료했다.
+
+1. **상단 엔터프라이즈 헤더 & 좌측 210px 사이드바 네비게이션 (`src/app.rs`)**:
+   - 상단 헤더: 실드 벡터 로고(`theme::ACCENT`), "RACP Native Client" 타이틀, "Enterprise Agent" 배지, 버전 태그("v0.1.26"), 중앙 실시간 시스템 상태 캡슐(Status Online 점, Role Controller, 통신 경로 표시), 우측 비상 정지(Emergency Stop) 및 종료 버튼.
+   - 좌측 210px 사이드바: 5대 네비게이션 버튼(상태, 권한 정책, 승인 요청, 런타임, 환경 설정)과 동적 배지(대기 승인 건수 펄스 배지), 하단 DPAPI Vault 호스트 식별 카드(Device ID 및 암호화 잠금 배지).
+   - 우측 본문: 100% 독립 스크롤 가능한 메인 뷰 컨테이너 구성.
+
+2. **상태 대시보드 4대 핵심 지표 카드 (`src/views/status.rs`)**:
+   - 1. Agent 프로세스 (PID / 시퀀스 번호 / Named Pipe IPC Connected).
+   - 2. 활성 제어 작업 (Active operation slots e.g. `X / 32 Slots`, 취소 핸들러 무장).
+   - 3. 대기 중 승인 요청 (Zero-Trust 실시간 건수 태그).
+   - 4. 화면/입력 가디언 (Guardian Ready, 물리 입력 감지 시 원격 차단 모니터).
+
+3. **초고속 렌더링 성능 최적화 (SVG Handle Lazy Caching)**:
+   - 프레임 렌더링 지연(Lag)의 근본 원인이었던 `tiny-skia` 소프트웨어 렌더러에서의 프레임별 `svg::Handle::from_memory` XML 재파싱을 제거.
+   - `std::sync::LazyLock<svg::Handle>` 정적 캐싱 구조를 도입하여 18종의 모든 SVG 벡터 핸들을 1회 파싱 후 `Arc::clone` 참조 방식으로 전환 (렌더링 소요 시간 100ms+ -> 2ms 미만).
+
+4. **검증 및 최종 산출물 (`dist/`, Build ID: `gui-20261013-d`)**:
+   - `cargo test -p racp-client-native`: 6개 단위 테스트 **100% 통과 (0.13s)**.
+   - `xtask stage`: Release 최적화 바이너리 스테이징 완료.
+   - `xtask verify-staging`: 4개 페이로드 정적 검증 PASS.
+   - `xtask package`: NSIS Windows Setup EXE, Portable EXE, 배포 ZIP 일괄 생성 완료.
+   - Oracle MCP 종합 검토 통과 (Session: `racp-native-client-iced-0`).
+   - 빌드 산출물 일람:
+     | 구분 | 경로 | 크기 / SHA-256 해시 |
+     |---|---|---|
+     | **Client 실행 바이너리** | [`dist/client/0.1.26/win-x64/gui-20261013-d/staging/payload/racp-client.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-d/staging/payload/racp-client.exe) | 15,866,880 bytes<br>`f78b5d23c53331471f7736d7339fa706dfa07f156a8dc5efa3f3e1ff734d3ab5` |
+     | **Companion Agent** | [`dist/client/0.1.26/win-x64/gui-20261013-d/staging/payload/racp-agent.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-d/staging/payload/racp-agent.exe) | 21,947,392 bytes |
+     | **Windows Setup 설치 파일** | [`dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64-setup.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64-setup.exe) | 10,584,430 bytes<br>`fee03d961c63f356570b37988a9fd17dbe1f66127020c5a837e53e5518ba5d79` |
+     | **Portable 배포 EXE** | [`dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64-portable.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64-portable.exe) | 40,649,816 bytes<br>`49f63d8f1bc4f25d89b7cb85972148bb68d5809680bf3fd99d0b9461da50269e` |
+     | **배포 패키지 ZIP** | [`dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64.zip`](../../dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64.zip) | 38,015,506 bytes<br>`6e2ec27e737206ac38c1bfeb21281ba27004e37c8d38cab4773959cd33e7eb63` |
+     | **Standalone Agent** | [`dist/agent/0.1.26/win-x64/gui-20261013-d/build/racp-agent.exe`](../../dist/agent/0.1.26/win-x64/gui-20261013-d/build/racp-agent.exe) | 21,947,392 bytes |
 
