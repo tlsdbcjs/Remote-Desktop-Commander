@@ -13,6 +13,8 @@ path = "src/main.rs"
 default = ["software-renderer"]
 software-renderer = []
 gpu-renderer = ["iced/wgpu"]
+# ADR-0032 migration frontend. Off by default until the Slint client replaces Iced.
+slint-ui = ["dep:slint", "dep:slint-build"]
 
 [dependencies]
 iced = { workspace = true, features = ["advanced", "svg"] }
@@ -25,6 +27,11 @@ serde_json.workspace = true
 image = { version = "=0.25.9", default-features = false, features = ["png"] }
 tokio-util.workspace = true
 raw-window-handle = "=0.6.2"
+# Slint 1.17+ needs Rust 1.92; the workspace pins Rust 1.90. Software renderer only (ADR-0032).
+slint = { version = "=1.16.1", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-software", "accessibility", "unstable-winit-030"], optional = true }
+
+[build-dependencies]
+slint-build = { version = "=1.16.1", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 racp-runtime = { path = "../../crates/racp-runtime" }

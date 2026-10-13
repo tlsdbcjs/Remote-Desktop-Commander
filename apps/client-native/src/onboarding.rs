@@ -14,46 +14,48 @@ pub struct LocalInfo {
     pub registration_pending: bool,
     pub login: Option<Value>,
 }
+/// Reads local registration, policy, runtime and login state. Blocking; call off the UI thread.
+pub fn load_local() -> Result<LocalInfo, String> {
+    let root =
+        racp_core::state_schema::default_user_root().map_err(|e| e.to_string())?;
+    let registered = root
+        .join(STATE_FILE)
+        .try_exists()
+        .map_err(|_| "LOCAL_STATE_FAILED".to_owned())?;
+    if !registered {
+        return Ok(LocalInfo {
+            state: None,
+            policy: None,
+            runtime: NativeRuntimeConfig::default(),
+            login: None,
+            registration_pending: root
+                .join("native-registration.pending")
+                .try_exists()
+                .map_err(|_| "LOCAL_STATE_FAILED".to_owned())?,
+        });
+    }
+    Ok(LocalInfo {
+        login: {
+            #[cfg(windows)] { Some(racp_runtime::native_login::status(&root).unwrap_or_else(|error|serde_json::json!({"error":error.code.0,"pending":true,"owned":false}))) }
+            #[cfg(not(windows))] { None }
+        },
+        state: Some(NativeState::load(&root).map_err(|e| e.to_string())?),
+        policy: Some(
+            racp_core::state_schema::load_policy(&root).map_err(|e| e.to_string())?,
+        ),
+        runtime: NativeRuntimeConfig::load(&root).map_err(|e| e.to_string())?,
+        registration_pending: false,
+    })
+}
 pub fn refresh() -> Task<Message> {
     if crate::control_target::service() {
         return Task::none();
     }
     Task::perform(
         async {
-            tokio::task::spawn_blocking(|| {
-                let root =
-                    racp_core::state_schema::default_user_root().map_err(|e| e.to_string())?;
-                let registered = root
-                    .join(STATE_FILE)
-                    .try_exists()
-                    .map_err(|_| "LOCAL_STATE_FAILED".to_owned())?;
-                if !registered {
-                    return Ok(LocalInfo {
-                        state: None,
-                        policy: None,
-                        runtime: NativeRuntimeConfig::default(),
-                        login: None,
-                        registration_pending: root
-                            .join("native-registration.pending")
-                            .try_exists()
-                            .map_err(|_| "LOCAL_STATE_FAILED".to_owned())?,
-                    });
-                }
-                Ok(LocalInfo {
-                    login: {
-                        #[cfg(windows)] { Some(racp_runtime::native_login::status(&root).unwrap_or_else(|error|serde_json::json!({"error":error.code.0,"pending":true,"owned":false}))) }
-                        #[cfg(not(windows))] { None }
-                    },
-                    state: Some(NativeState::load(&root).map_err(|e| e.to_string())?),
-                    policy: Some(
-                        racp_core::state_schema::load_policy(&root).map_err(|e| e.to_string())?,
-                    ),
-                    runtime: NativeRuntimeConfig::load(&root).map_err(|e| e.to_string())?,
-                    registration_pending: false,
-                })
-            })
-            .await
-            .map_err(|_| "LOCAL_STATE_FAILED".to_owned())?
+            tokio::task::spawn_blocking(load_local)
+                .await
+                .map_err(|_| "LOCAL_STATE_FAILED".to_owned())?
         },
         Message::LocalInfo,
     )
@@ -76,42 +78,50 @@ pub fn inspect(path: String) -> Task<Message> {
         Message::ConnectionInfo,
     )
 }
+/// Reports whether no registered Agent is running or it stopped cleanly. Blocking.
+pub fn stopped_cleanly(wait: bool) -> Result<bool, String> {
+    let root =
+        racp_core::state_schema::default_user_root().map_err(|e| e.to_string())?;
+    if !root
+        .join(STATE_FILE)
+        .try_exists()
+        .map_err(|_| "LOCAL_STATE_FAILED".to_owned())?
+    {
+        return Ok(true);
+    }
+    let deadline = std::time::Instant::now()
+        + std::time::Duration::from_secs(if wait { 10 } else { 0 });
+    loop {
+        match racp_core::native_lifecycle::stopped_cleanly(&root) {
+            Ok(clean) => return Ok(clean),
+            Err(error) if error.code.0 == "SETTINGS_BUSY" => {
+                if std::time::Instant::now() >= deadline {
+                    return Ok(false);
+                }
+            }
+            Err(error) => return Err(error.to_string()),
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
 pub fn exit_check(wait: bool) -> Task<Message> {
     if crate::control_target::service() {
         return Task::done(Message::ExitCheck(Ok(true)));
     }
     Task::perform(
         async move {
-            tokio::task::spawn_blocking(move || {
-                let root =
-                    racp_core::state_schema::default_user_root().map_err(|e| e.to_string())?;
-                if !root
-                    .join(STATE_FILE)
-                    .try_exists()
-                    .map_err(|_| "LOCAL_STATE_FAILED".to_owned())?
-                {
-                    return Ok(true);
-                }
-                let deadline = std::time::Instant::now()
-                    + std::time::Duration::from_secs(if wait { 10 } else { 0 });
-                loop {
-                    match racp_core::native_lifecycle::stopped_cleanly(&root) {
-                        Ok(clean) => return Ok(clean),
-                        Err(error) if error.code.0 == "SETTINGS_BUSY" => {
-                            if std::time::Instant::now() >= deadline {
-                                return Ok(false);
-                            }
-                        }
-                        Err(error) => return Err(error.to_string()),
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                }
-            })
-            .await
-            .map_err(|_| "LOCAL_STATE_FAILED".to_owned())?
+            tokio::task::spawn_blocking(move || stopped_cleanly(wait))
+                .await
+                .map_err(|_| "LOCAL_STATE_FAILED".to_owned())?
         },
         Message::ExitCheck,
     )
+}
+/// Starts the registered user Agent. Blocking.
+#[cfg(windows)]
+pub fn start_local_agent() -> Result<Value, String> {
+    let root = racp_core::state_schema::default_user_root().map_err(|e| e.to_string())?;
+    racp_runtime::local_agent::start(&root).map_err(|e| e.to_string())
 }
 pub fn start_agent() -> Task<Message> {
     if crate::control_target::service() {
@@ -123,11 +133,7 @@ pub fn start_agent() -> Task<Message> {
     {
         Task::perform(
             async {
-                tokio::task::spawn_blocking(|| {
-                    let root =
-                        racp_core::state_schema::default_user_root().map_err(|e| e.to_string())?;
-                    racp_runtime::local_agent::start(&root).map_err(|e| e.to_string())
-                })
+                tokio::task::spawn_blocking(start_local_agent)
                 .await
                 .map_err(|_| "EXECUTION_UNKNOWN".to_owned())?
             },

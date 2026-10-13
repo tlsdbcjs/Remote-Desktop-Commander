@@ -1,0 +1,434 @@
+import { Theme } from "theme.slint";
+import { Icon, Icons } from "icons.slint";
+
+// Small rounded tag such as "Enterprise Agent", "Tree", "1 RUNNING".
+export component Tag inherits Rectangle {
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    in property <string> text;
+    in property <color> fg: Theme.indigo-400;
+    in property <color> fill: fg.with-alpha(0.1);
+    in property <color> outline: fg.with-alpha(0.3);
+    in property <bool> pill: false;
+    in property <bool> mono: false;
+    in property <length> size: Theme.fs-11;
+    in property <int> weight: 600;
+    in property <length> pad-x: 6px;
+    in property <length> pad-y: 2px;
+    background: fill;
+    border-color: outline;
+    border-width: outline.alpha > 0 ? 1px : 0px;
+    border-radius: pill ? self.height / 2 : Theme.r-sm;
+    accessible-role: AccessibleRole.text;
+    accessible-label: text;
+    HorizontalLayout {
+        padding-left: pad-x;
+        padding-right: pad-x;
+        padding-top: pad-y;
+        padding-bottom: pad-y;
+        Text {
+            text: root.text;
+            color: fg;
+            font-size: size;
+            font-weight: weight;
+            font-family: mono ? Theme.mono : Theme.sans;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+export component Divider inherits Rectangle {
+    width: 1px;
+    height: 12px;
+    background: Theme.line-strong;
+}
+
+// Card surface: bg-[#111827] border-slate-800 rounded-xl shadow-sm.
+export component Card inherits Rectangle {
+    in property <color> outline: Theme.line;
+    background: Theme.card-bg;
+    border-color: outline;
+    border-width: 1px;
+    border-radius: Theme.r-xl;
+    drop-shadow-color: #0000000d;
+    drop-shadow-offset-y: 1px;
+    drop-shadow-blur: 2px;
+}
+
+// Generic button with optional icon + label and hover transition.
+export component Button inherits Rectangle {
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    in property <string> text;
+    in property <string> icon;
+    in property <color> fg: Theme.text-200;
+    in property <color> hover-fg: fg;
+    in property <color> fill: Theme.hover-800;
+    in property <color> hover-fill: Theme.hover-700;
+    in property <color> outline: transparent;
+    in property <color> hover-outline: outline;
+    in property <color> glow: transparent;
+    in property <length> font-size: Theme.fs-xs;
+    in property <int> font-weight: 500;
+    in property <length> pad-x: 10px;
+    in property <length> pad-y: 4px;
+    in property <length> icon-size: 14px;
+    in property <length> radius: Theme.r-md;
+    in property <string> tooltip;
+    callback clicked();
+    out property <bool> hovered: ta.has-hover;
+
+    background: ta.has-hover ? hover-fill : fill;
+    border-color: ta.has-hover ? hover-outline : outline;
+    border-width: (outline.alpha > 0 || hover-outline.alpha > 0) ? 1px : 0px;
+    border-radius: radius;
+    drop-shadow-color: glow;
+    drop-shadow-blur: glow.alpha > 0 ? 8px : 0px;
+    drop-shadow-offset-y: glow.alpha > 0 ? 3px : 0px;
+    animate background, border-color { duration: Theme.t-fast; easing: ease-in-out; }
+
+    accessible-role: button;
+    accessible-label: text != "" ? text : tooltip;
+    accessible-description: tooltip;
+    accessible-action-default => { root.clicked(); }
+    forward-focus: fs;
+
+    fs := FocusScope {
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            fs.focus();
+            root.clicked();
+        }
+    }
+
+    Rectangle {
+        border-radius: radius;
+        border-width: fs.has-focus ? 2px : 0px;
+        border-color: Theme.indigo-500;
+    }
+
+    HorizontalLayout {
+        padding-left: pad-x;
+        padding-right: pad-x;
+        padding-top: pad-y;
+        padding-bottom: pad-y;
+        spacing: 6px;
+        alignment: center;
+        if icon != "": VerticalLayout {
+            alignment: center;
+            Icon {
+                data: icon;
+                tint: lbl.color;
+                width: icon-size;
+                height: icon-size;
+            }
+        }
+        lbl := Text {
+            visible: root.text != "";
+            text: root.text;
+            color: ta.has-hover ? hover-fg : fg;
+            font-size: root.font-size;
+            font-weight: root.font-weight;
+            vertical-alignment: center;
+            animate color { duration: Theme.t-fast; }
+        }
+    }
+}
+
+// Sidebar navigation entry.
+export component NavItem inherits Rectangle {
+    in property <string> icon;
+    in property <string> text;
+    in property <bool> active;
+    // 0 none, 1 status dot, 2 tag, 3 count pill, 4 mono hint
+    in property <int> badge-kind;
+    in property <string> badge;
+    in property <color> dot-color: Theme.emerald-400;
+    callback clicked();
+
+    height: 40px;
+    border-radius: Theme.r-lg;
+    background: active ? Theme.indigo-600.with-alpha(0.1) : ta.has-hover ? Theme.hover-800-60 : transparent;
+    border-width: 1px;
+    border-color: active ? Theme.indigo-500.with-alpha(0.2) : transparent;
+    animate background, border-color { duration: Theme.t-fast; }
+
+    accessible-role: tab;
+    accessible-label: text;
+    accessible-item-selectable: true;
+    accessible-item-selected: active;
+    accessible-description: badge;
+    accessible-action-default => { root.clicked(); }
+    forward-focus: fs;
+
+    fs := FocusScope {
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            fs.focus();
+            root.clicked();
+        }
+    }
+
+    Rectangle {
+        border-radius: Theme.r-lg;
+        border-width: fs.has-focus ? 2px : 0px;
+        border-color: Theme.indigo-500;
+    }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                data: root.icon;
+                tint: lbl.color;
+            }
+        }
+        lbl := Text {
+            text: root.text;
+            font-size: Theme.fs-sm;
+            font-weight: 500;
+            color: active ? Theme.indigo-400 : ta.has-hover ? Theme.text-200 : Theme.text-400;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            animate color { duration: Theme.t-fast; }
+        }
+        if badge-kind == 1: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 6px;
+                height: 6px;
+                border-radius: 3px;
+                background: dot-color;
+            }
+        }
+        if badge-kind == 2: VerticalLayout {
+            alignment: center;
+            Tag {
+                text: badge;
+                mono: true;
+                size: Theme.fs-10;
+                fg: Theme.indigo-300;
+                fill: Theme.indigo-500.with-alpha(0.2);
+                outline: transparent;
+            }
+        }
+        if badge-kind == 3: VerticalLayout {
+            alignment: center;
+            Tag {
+                text: badge;
+                pill: true;
+                weight: 700;
+                fg: white;
+                fill: Theme.rose-500;
+                outline: transparent;
+                pad-y: 0px;
+            }
+        }
+        if badge-kind == 4: Text {
+            text: badge;
+            font-family: Theme.mono;
+            font-size: Theme.fs-11;
+            color: Theme.text-400;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// One segment of the Deny / RequireApproval / Allow selector.
+export component GrantSegment inherits Rectangle {
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    in property <string> icon;
+    in property <string> text;      // visible label (batch only)
+    in property <string> label;     // accessible name
+    in property <color> accent;     // hover colour
+    in property <color> solid;      // selected fill
+    in property <bool> selected;
+    in property <length> icon-size: 16px;
+    callback clicked();
+
+    border-radius: Theme.r-sm;
+    background: selected ? solid : ta.has-hover ? Theme.header-bg : transparent;
+    drop-shadow-color: selected ? solid.with-alpha(0.3) : transparent;
+    drop-shadow-blur: selected ? 6px : 0px;
+    drop-shadow-offset-y: selected ? 2px : 0px;
+    animate background { duration: Theme.t-fast; }
+
+    accessible-role: radio-button;
+    accessible-label: label;
+    accessible-checkable: true;
+    accessible-checked: selected;
+    accessible-action-default => { root.clicked(); }
+    forward-focus: fs;
+
+    fs := FocusScope {
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            fs.focus();
+            root.clicked();
+        }
+    }
+
+    Rectangle {
+        border-radius: Theme.r-sm;
+        border-width: fs.has-focus ? 2px : 0px;
+        border-color: Theme.indigo-400;
+    }
+
+    HorizontalLayout {
+        padding: 6px;
+        spacing: 4px;
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                data: root.icon;
+                weight: 2.2;
+                width: icon-size;
+                height: icon-size;
+                tint: selected ? white : ta.has-hover ? accent : Theme.text-400;
+            }
+        }
+        if root.text != "": Text {
+            text: root.text;
+            font-size: Theme.fs-11;
+            font-weight: 500;
+            color: ta.has-hover ? accent : Theme.text-400;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Segmented 3-way control. grant: 0 = Deny, 1 = RequireApproval, 2 = Allow, -1 = none (batch).
+export component GrantSelector inherits Rectangle {
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    in property <int> grant: -1;
+    in property <bool> labelled: false;
+    in property <bool> enabled: true;
+    in property <string> subject;
+    in property <length> icon-size: 16px;
+    callback chosen(int);
+
+    background: Theme.well-bg;
+    border-color: Theme.line;
+    border-width: 1px;
+    border-radius: Theme.r-lg;
+    opacity: enabled ? 1 : 0.45;
+    accessible-role: groupbox;
+    accessible-label: subject;
+
+    HorizontalLayout {
+        padding: 4px;
+        spacing: 4px;
+        GrantSegment {
+            icon: Icons.deny;
+            text: labelled ? @tr("Batch deny") : "";
+            label: subject + " — " + (labelled ? @tr("Batch deny") : @tr("Deny"));
+            accent: Theme.rose-400;
+            solid: Theme.rose-500;
+            selected: grant == 0;
+            icon-size: root.icon-size;
+            clicked => {
+                if (enabled) {
+                    root.chosen(0);
+                }
+            }
+        }
+        GrantSegment {
+            icon: Icons.prompt;
+            text: labelled ? @tr("Batch approve") : "";
+            label: subject + " — " + (labelled ? @tr("Batch require approval") : @tr("Require approval"));
+            accent: Theme.amber-400;
+            solid: Theme.amber-600;
+            selected: grant == 1;
+            icon-size: root.icon-size;
+            clicked => {
+                if (enabled) {
+                    root.chosen(1);
+                }
+            }
+        }
+        GrantSegment {
+            icon: Icons.allow;
+            text: labelled ? @tr("Batch allow") : "";
+            label: subject + " — " + (labelled ? @tr("Batch allow") : @tr("Allow"));
+            accent: Theme.emerald-400;
+            solid: Theme.emerald-600;
+            selected: grant == 2;
+            icon-size: root.icon-size;
+            clicked => {
+                if (enabled) {
+                    root.chosen(2);
+                }
+            }
+        }
+    }
+}
+
+// Thin custom scrollbar matching ::-webkit-scrollbar (6px, slate-700/80 thumb).
+export component ScrollBar inherits Rectangle {
+    in property <length> viewport-height;
+    in-out property <length> viewport-y;
+    in property <length> visible-height;
+    width: 6px;
+    background: viewport-height > visible-height ? #0f172a99 : transparent;
+    property <float> ratio: viewport-height > 0 ? min(1, visible-height / viewport-height) : 1;
+    property <length> max-scroll: max(1px, viewport-height - visible-height);
+    accessible-role: none;
+
+    thumb := Rectangle {
+        visible: root.ratio < 1;
+        width: root.width;
+        height: max(24px, root.height * root.ratio);
+        y: (root.height - self.height) * (-root.viewport-y / root.max-scroll);
+        border-radius: 3px;
+        background: drag.has-hover || drag.pressed ? #475569 : #334155cc;
+        drag := TouchArea {
+            property <length> start-y;
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.down) {
+                    self.start-y = root.viewport-y;
+                }
+            }
+            moved => {
+                if (self.pressed) {
+                    root.viewport-y = clamp(self.start-y - (self.mouse-y - self.pressed-y) * root.max-scroll / max(1px, root.height - thumb.height), -root.max-scroll, 0px);
+                }
+            }
+        }
+    }
+}

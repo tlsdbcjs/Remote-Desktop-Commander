@@ -1,0 +1,94 @@
+msgid ""
+msgstr ""
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "Agent status"
+msgstr "Agent 상태"
+
+msgid "Agent Online"
+msgstr "Agent 온라인"
+
+msgid "Agent Connecting"
+msgstr "Agent 연결 중"
+
+msgid "Agent Stopped"
+msgstr "Agent 중지됨"
+
+msgid "Agent Offline"
+msgstr "Agent 오프라인"
+
+msgid "Not registered"
+msgstr "미등록"
+
+msgid "Path:"
+msgstr "경로:"
+
+msgid "Role:"
+msgstr "권한:"
+
+msgid "Controller"
+msgstr "제어"
+
+msgid "Observer"
+msgstr "조회 전용"
+
+msgid "Standby"
+msgstr "대기"
+
+msgid "RACP Native Client"
+msgstr "RACP Native Client"
+
+msgid "RACP Service Control"
+msgstr "RACP 서비스 제어"
+
+msgid "Enterprise Agent"
+msgstr "Enterprise Agent"
+
+msgid "Emergency Stop"
+msgstr "긴급 정지"
+
+msgid "Minimize to tray"
+msgstr "트레이로 숨기기"
+
+msgid "Quit app"
+msgstr "앱 종료"
+
+msgid "Stop Agent and quit"
+msgstr "Agent 정리 후 앱 종료"
+
+msgid "Navigation"
+msgstr "탐색"
+
+msgid "Status"
+msgstr "상태"
+
+msgid "Permissions"
+msgstr "권한"
+
+msgid "Approvals"
+msgstr "승인"
+
+msgid "Optional runtimes"
+msgstr "선택 런타임"
+
+msgid "Settings"
+msgstr "설정"
+
+msgid "Device Identity"
+msgstr "장치 식별"
+
+msgid "DEVICE IDENTITY"
+msgstr "장치 식별"
+
+msgid "Enforced"
+msgstr "적용됨"
+
+msgid "Quit without cleanup"
+msgstr "정리 요청 없이 앱만 종료"
+
+msgid "This screen moves to the Slint client in migration step {}. Use the default (Iced) build until then."
+msgstr "이 화면은 이전 {}단계에서 Slint Client로 옮겨집니다. 그 전까지는 기본(Iced) 빌드를 사용하세요."

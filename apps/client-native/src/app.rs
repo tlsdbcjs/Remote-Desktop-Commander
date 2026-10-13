@@ -1399,27 +1399,7 @@ fn show_window() -> Task<Message> {
 fn command_task(command: ControlCommand) -> Task<Message> {
     #[cfg(windows)]
     {
-        Task::perform(
-            async move {
-                let endpoint = tokio::task::spawn_blocking(crate::control_target::endpoint)
-                    .await
-                    .map_err(|_| "LOCAL_STATE_FAILED".to_owned())?
-                    .map_err(|e| e.to_string())?;
-                let mut session = racp_runtime::local_ipc::connect(&endpoint)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                session
-                    .request(&racp_contract::local_ipc::ControlRequest {
-                        protocol: 1,
-                        request_id: racp_contract::new_id("ui"),
-                        deadline_ms: 5000,
-                        command,
-                    })
-                    .await
-                    .map_err(|e| e.to_string())
-            },
-            Message::Reply,
-        )
+        Task::perform(crate::ipc::request(command), Message::Reply)
     }
     #[cfg(not(windows))]
     {
@@ -1432,65 +1412,21 @@ fn command_task(command: ControlCommand) -> Task<Message> {
 fn accessibility_events() -> impl iced::futures::Stream<Item = Message> {
     iced::stream::channel(32, crate::accessibility::events)
 }
+#[cfg(windows)]
 fn ipc_events() -> impl iced::futures::Stream<Item = Message> {
     use iced::futures::SinkExt;
-    use racp_contract::local_ipc::*;
-    iced::stream::channel(32, |mut output| async move {
-        let mut delay = std::time::Duration::from_millis(500);
-        loop {
-            let result: Result<(), racp_contract::RacpError> = async {
-                // Filesystem/OS identity queries run away from the UI event loop.
-                let endpoint = tokio::task::spawn_blocking(crate::control_target::endpoint)
-                    .await
-                    .map_err(|_| racp_contract::RacpError::new("LOCAL_STATE_FAILED"))??;
-                let mut session = racp_runtime::local_ipc::connect(&endpoint).await?;
-                let reply = session
-                    .request(&ControlRequest {
-                        protocol: PROTOCOL,
-                        request_id: racp_contract::new_id("ui"),
-                        deadline_ms: 5_000,
-                        command: ControlCommand::Subscribe {
-                            boot_id: "resync".into(),
-                            after_sequence: 0,
-                        },
-                    })
-                    .await?;
-                let ControlResult::Subscribed { snapshot, role } = reply.result else {
-                    return Err(racp_contract::RacpError::new("RUNTIME_RESPONSE_INVALID"));
+    iced::stream::channel(32, |output| async move {
+        crate::ipc::subscribe(|feed| {
+            let mut output = output.clone();
+            async move {
+                let message = match feed {
+                    crate::ipc::Feed::Snapshot(snapshot, role) => Message::Snapshot(snapshot, role),
+                    crate::ipc::Feed::Event(event) => Message::Event(event),
+                    crate::ipc::Feed::Disconnected => Message::Disconnected,
                 };
-                if crate::control_target::service()
-                    && !snapshot.identity.as_ref().is_some_and(|identity| {
-                        matches!(identity.execution_scope, ExecutionScope::Service)
-                    })
-                {
-                    return Err(racp_contract::RacpError::new("SERVICE_SCOPE_INVALID"));
-                }
-                let mut boot_id = snapshot.boot_id.clone();
-                let mut sequence = snapshot.sequence;
-                output
-                    .send(Message::Snapshot(snapshot, role))
-                    .await
-                    .map_err(|_| racp_contract::RacpError::new("CANCELLED"))?;
-                loop {
-                    let event = session.next_event().await?;
-                    if event.boot_id != boot_id || sequence.checked_add(1) != Some(event.sequence) {
-                        return Err(racp_contract::RacpError::new("RESYNC_REQUIRED"));
-                    }
-                    boot_id.clone_from(&event.boot_id);
-                    sequence = event.sequence;
-                    output
-                        .send(Message::Event(event))
-                        .await
-                        .map_err(|_| racp_contract::RacpError::new("CANCELLED"))?;
-                }
+                output.send(message).await.is_ok()
             }
-            .await;
-            if result.is_err() && output.send(Message::Disconnected).await.is_err() {
-                break;
-            }
-            // Only disconnected sessions retry. Healthy sessions wait for events without polling.
-            tokio::time::sleep(delay).await;
-            delay = (delay * 2).min(std::time::Duration::from_secs(10));
-        }
+        })
+        .await
     })
 }

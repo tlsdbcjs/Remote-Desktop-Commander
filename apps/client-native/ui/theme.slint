@@ -1,0 +1,64 @@
+// Slate design tokens transcribed from docs/spec/enterprise_gui_demo.html (Tailwind palette).
+export global Theme {
+    // Surfaces
+    out property <color> app-bg: #0b0f19;
+    out property <color> header-bg: #0f172af2;
+    out property <color> sidebar-bg: #0c1222;
+    out property <color> card-bg: #111827;
+    out property <color> inset-bg: #0f172acc;      // slate-900/80
+    out property <color> inset-strong: #0f172ae6;  // slate-900/90
+    out property <color> well-bg: #020617;         // slate-950
+    out property <color> terminal-bg: #000000cc;   // black/80
+    // Lines
+    out property <color> line: #1e293b;            // slate-800
+    out property <color> line-soft: #1e293bcc;     // slate-800/80
+    out property <color> line-strong: #334155;     // slate-700
+    // Text
+    out property <color> text-strong: #ffffff;
+    out property <color> text-100: #f1f5f9;
+    out property <color> text-200: #e2e8f0;
+    out property <color> text-300: #cbd5e1;
+    out property <color> text-400: #94a3b8;
+    out property <color> text-500: #64748b;
+    // Hover fills
+    out property <color> hover-800: #1e293b;
+    out property <color> hover-800-60: #1e293b99;
+    out property <color> hover-700: #334155;
+    // Accents
+    out property <color> indigo-300: #a5b4fc;
+    out property <color> indigo-400: #818cf8;
+    out property <color> indigo-500: #6366f1;
+    out property <color> indigo-600: #4f46e5;
+    out property <color> blue-400: #60a5fa;
+    out property <color> blue-600: #2563eb;
+    out property <color> emerald-400: #34d399;
+    out property <color> emerald-500: #10b981;
+    out property <color> emerald-600: #059669;
+    out property <color> rose-400: #fb7185;
+    out property <color> rose-500: #f43f5e;
+    out property <color> amber-400: #fbbf24;
+    out property <color> amber-500: #f59e0b;
+    out property <color> amber-600: #d97706;
+    out property <color> sky-400: #38bdf8;
+    // Radii
+    out property <length> r-sm: 4px;
+    out property <length> r-md: 6px;
+    out property <length> r-lg: 8px;
+    out property <length> r-xl: 12px;
+    // Typography
+    in-out property <string> sans: "Segoe UI";
+    in-out property <string> mono: "Cascadia Mono";
+    out property <length> fs-10: 10px;
+    out property <length> fs-11: 11px;
+    out property <length> fs-xs: 12px;
+    out property <length> fs-sm: 14px;
+    out property <length> fs-base: 16px;
+    out property <length> fs-xl: 20px;
+    out property <length> fs-2xl: 24px;
+    // Motion: Tailwind `transition` default is 150ms cubic-bezier(0.4,0,0.2,1)
+    out property <duration> t-fast: 150ms;
+    // Ambient (infinite) animations such as animate-ping/pulse keep the window redrawing.
+    in-out property <bool> ambient-animations: false;
+
+    pure function tint(c: color, a: float) -> color { c.with-alpha(a) }
+}

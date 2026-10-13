@@ -2788,3 +2788,29 @@ GUI 툴킷은 Iced에서 **Slint 1.16.x(소프트웨어 렌더러 기본)**로 �
 
 > [!IMPORTANT]
 > 문서 결정만 바뀌었다. `apps/client-native`와 배포 빌드는 여전히 Iced 0.13.1/tiny-skia다. 코드 변경, 빌드, 버전 bump, GUI 실행은 이 배치에서 하지 않았다. 이전 순서와 단계별 완료 조건은 ADR-0032 5절을 따른다.
+
+### 2026-10-13 Slint 이전 1단계: 기반 — v0.1.30
+
+[ADR-0032](../adr/ADR-0032-native-client.md) 5절의 1단계를 구현했다. PATCH **0.1.29→0.1.30 한 번**, uv/Cargo lock을 갱신했다. 기본 빌드는 그대로 Iced이고, Slint 화면은 opt-in feature `slint-ui`로만 빌드된다.
+
+- **공통 계층**: [ipc.rs](../../apps/client-native/src/ipc.rs)가 인증 IPC 구독(`subscribe`)과 명령 전송(`request`)을 GUI 툴킷과 무관하게 제공한다. [onboarding.rs](../../apps/client-native/src/onboarding.rs)는 `load_local`·`stopped_cleanly`·`start_local_agent` 함수를 분리했다. Iced 화면도 같은 함수를 호출한다.
+- **Slint 화면**: [slint_ui.rs](../../apps/client-native/src/slint_ui.rs)와 [ui/](../../apps/client-native/ui/app.slint). Slint 1.16.1, 소프트웨어 렌더러를 직접 지정한다.
+  - 데모 디자인의 헤더·사이드바와 장치 식별 카드
+  - Agent 상태 구독, 트레이 아이콘 상태·제어 권한 갱신
+  - 창 닫기·⌄ 버튼으로 트레이 숨김, 단일 인스턴스 활성화로 복원
+  - Iced와 같은 종료 절차, 승인 요청 시 창 표시
+  - 서비스 모드에서는 런타임·설정 탭 숨김
+  - `@tr()` 한국어 번역. 본문 화면은 2단계부터 이전
+- **다시 표시 문제 수정**: Windows는 숨긴 창의 버퍼를 지우는데 softbuffer는 재사용 버퍼로 보고한다. 그래서 복원 후 헤더가 흰색으로 남았다. `SLINT_DESTROY_WINDOW_ON_HIDE`로 숨길 때 창을 없애고 표시할 때 새로 만들어 해결했다. 숨김은 입력 이벤트가 끝난 뒤 실행한다.
+- CI [client.yml](../../.github/workflows/client.yml)에 `slint-ui` 컴파일 검사를 추가했다.
+
+| 검사 | 결과 |
+|---|---|
+| `cargo check --locked`(기본·`slint-ui`) | PASS, `racp-client-native` 신규 경고 없음 |
+| clippy `--no-deps -D warnings` | 신규 오류 없음. 기존 `accessibility.rs` 2건·`native.rs` 1건 유지(이번 변경 전부터 존재) |
+| rustfmt(새 파일), inventory-check, version 단위 시험 | PASS / 114 ops·143 permissions·18 categories / 6 passed |
+| 실기(Windows 10 VM, 150% DPI, OpenGL 없음, 빈 상태) | 창 표시·한국어·사이드바·키보드 포커스·창 닫기→트레이·재실행→복원·복원 후 전체 다시 그리기 PASS. 메모리 실행 직후 40.1MB, 숨김 30.3MB(working set). UIA Invoke로 헤더 버튼 PASS |
+| 헤더 버튼 마우스 입력 | 자동화 도구가 주입한 마우스 이동이 창에 전달되지 않아 처음에는 실패로 보였다. 디버그 로그와 사용자 실제 마우스 클릭으로 hover·숨김 PASS를 확인했다. 제품 결함 아님 |
+
+> [!NOTE]
+> 실행 중인 Agent·등록 상태가 없는 환경에서 확인했다. 실제 Agent 연결, 종료 시 Agent 정리, 승인 요청 표시는 2단계 이후 실기 확인 대상이다. `--state-dir`는 스테이징된 payload manifest가 필요해 단독 빌드로는 실행되지 않았다. 설치·서비스 등록·등록 상태 변경은 하지 않았고 `%LOCALAPPDATA%\RACP\native-client`도 생성되지 않았다. `racp-core` clippy 오류 3건과 Iced 화면 파일의 기존 rustfmt 실패(`views/status.rs` 줄 끝 공백)는 이번 범위 밖이다.

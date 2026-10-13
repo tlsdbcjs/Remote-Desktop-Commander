@@ -1,17 +1,21 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod accessibility;
 mod app;
+pub mod components;
 mod constraints;
 mod control_target;
 mod controls;
 pub mod i18n;
-pub mod theme;
-pub mod components;
-pub mod views;
+#[cfg(windows)]
+mod ipc;
 #[cfg(windows)]
 mod native;
 mod onboarding;
+#[cfg(all(windows, feature = "slint-ui"))]
+mod slint_ui;
+pub mod theme;
 mod ui_model;
+pub mod views;
 
 fn main() -> iced::Result {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -80,6 +84,42 @@ fn main() -> iced::Result {
             std::process::exit(4);
         }
     };
+    #[cfg(all(windows, feature = "slint-ui"))]
+    return run_slint(&args);
+    #[cfg(not(all(windows, feature = "slint-ui")))]
+    run_iced(args)
+}
+
+/// ADR-0032 migration frontend: Slint with the software renderer only.
+#[cfg(all(windows, feature = "slint-ui"))]
+fn run_slint(args: &[String]) -> iced::Result {
+    if args.iter().any(|arg| arg == "--gpu") {
+        native::startup_error("GPU_RENDERER_NOT_COMPILED");
+        std::process::exit(4);
+    }
+    // Windows clears a hidden window's buffer but softbuffer still reports it as reused, so
+    // Slint's partial repaint leaves stale areas after tray restore. Recreate it on show instead.
+    // Set before the tray thread starts.
+    unsafe {
+        std::env::set_var("SLINT_DESTROY_WINDOW_ON_HIDE", "1");
+    }
+    let shell = match native::Shell::new() {
+        Ok(Some(shell)) => Some(shell),
+        Ok(None) => return Ok(()),
+        Err(code) => {
+            eprintln!("native shell startup warning: {code}");
+            None
+        }
+    };
+    if let Err(code) = slint_ui::run(shell, args.iter().any(|arg| arg == "--start-agent")) {
+        native::startup_error(&code);
+        std::process::exit(4);
+    }
+    Ok(())
+}
+
+#[cfg(not(all(windows, feature = "slint-ui")))]
+fn run_iced(args: Vec<String>) -> iced::Result {
     // Select before tray/Iced/Tokio create any other threads. Software is the product default.
     let gpu = args.iter().any(|arg| arg == "--gpu");
     if gpu && !cfg!(feature = "gpu-renderer") {
