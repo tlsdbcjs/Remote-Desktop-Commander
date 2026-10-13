@@ -152,3 +152,55 @@ impl UiModel {
         true
     }
 }
+
+/// Tone of an audit log line: 1 success, 2 info, 3 warning, 4 error.
+pub type Tone = i32;
+
+/// One-line summary of a control completion receipt: (receipt id, text, tone).
+/// Missing records never mean cleanup success, so anything short of a clean result is a warning.
+pub fn completion_line(receipt: &ControlCompletion) -> (String, String, Tone) {
+    match receipt {
+        ControlCompletion::Cancellation {
+            receipt_id,
+            operation_id,
+            cancel_requested,
+            state,
+            terminal,
+            cleanup_status,
+            error_code,
+        } => (
+            receipt_id.clone(),
+            format!(
+                "작업 {operation_id} · 취소 신호 {cancel_requested} · 관찰 상태 {state} · 종료 {terminal} · 정리 {cleanup_status}{}",
+                error_code.as_ref().map(|code| format!(" · {code}")).unwrap_or_default()
+            ),
+            if error_code.is_some() { 4 } else { 2 },
+        ),
+        ControlCompletion::Policy {
+            receipt_id,
+            revision,
+            committed,
+            retirement_state,
+            failed_resource_ids,
+        } => (
+            receipt_id.clone(),
+            format!(
+                "정책 revision {revision} · 저장 {committed} · 회수 {retirement_state} · 실패 자원 {}",
+                failed_resource_ids.join(", ")
+            ),
+            if *committed && failed_resource_ids.is_empty() { 1 } else { 3 },
+        ),
+        ControlCompletion::Stop {
+            receipt_id,
+            cleanup_state,
+            failed_resource_ids,
+        } => (
+            receipt_id.clone(),
+            format!(
+                "Agent 정리 {cleanup_state} · 실패 자원 {}",
+                failed_resource_ids.join(", ")
+            ),
+            if cleanup_state == "complete" && failed_resource_ids.is_empty() { 1 } else { 3 },
+        ),
+    }
+}

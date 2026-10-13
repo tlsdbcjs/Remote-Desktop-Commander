@@ -1,7 +1,7 @@
 # ADR-0032: Native Client 구조와 Slint GUI
 
 > **Document ID**: `DOC-ADR-0032`\
-> **Status**: Accepted · GUI 이전 진행 전 · **Target Version**: v0.1.29\
+> **Status**: Accepted · Slint 이전 완료, 실기 인수 일부 보류 · **Target Version**: v0.1.34\
 > **Last Updated**: 2026-10-13 · **Classification**: Architecture Decision Record
 
 ---
@@ -11,7 +11,7 @@
 이 문서는 `apps/client-native` Client의 현재 결정을 하나로 모은 기록이다. 이전 Client ADR(0023~0031)은 Electron·Python·Tauri 시절의 구현 설명과 이력이 섞여 있어 삭제했다. 그중 현재도 유효한 결정만 현재 코드 기준으로 이 문서에 다시 적는다. 과거 구현과 검증 이력은 git 기록과 [구현 현황](../quality/implementation-status.md)에 남는다.
 
 > [!IMPORTANT]
-> GUI 툴킷 결정은 Iced에서 **Slint**로 바뀌었다. 현재 저장소의 `apps/client-native`와 배포 빌드는 아직 **Iced**다. Slint 이전은 [5절](#5-gui-이전-순서와-완료-조건)의 순서로 진행하며, 완료 전에는 Iced 빌드가 계속 제품 기준이다.
+> GUI는 v0.1.34부터 **Slint 단일 빌드**다. Iced 코드와 의존성은 삭제했다. 이전 순서와 남은 실기 인수 항목은 [5절](#5-gui-이전-결과와-남은-인수-항목)에 있다.
 
 ---
 
@@ -21,7 +21,7 @@
 - [2. GUI 툴킷: Slint](#2-gui-툴킷-slint)
 - [3. 등록·설정·상태](#3-등록설정상태)
 - [4. 수명·트레이·자동 시작·설치](#4-수명트레이자동-시작설치)
-- [5. GUI 이전 순서와 완료 조건](#5-gui-이전-순서와-완료-조건)
+- [5. GUI 이전 결과와 남은 인수 항목](#5-gui-이전-결과와-남은-인수-항목)
 - [6. 보안 원칙](#6-보안-원칙)
 - [7. 관련 문서](#7-관련-문서)
 
@@ -126,26 +126,42 @@ PoC(`apps/client-slint-poc`, 미병합 브랜치)를 GPU가 없는 Windows VM에
 - 제거해도 등록 정보와 사용자 데이터는 보존한다.
 - 개발 빌드는 서명하지 않는다. clean-machine 설치, 업그레이드, 서명은 별도 gate다.
 
-## 5. GUI 이전 순서와 완료 조건
+## 5. GUI 이전 결과와 남은 인수 항목
 
-별도 계획서는 두지 않는다. 진행 결과는 [구현 현황](../quality/implementation-status.md)에만 기록한다.
+별도 계획서는 두지 않는다. 단계별 검증 수치와 증거는 [구현 현황](../quality/implementation-status.md)에만 기록한다.
 
-| 단계 | 내용 |
+| 단계 | 내용 | 버전 |
+|---|---|---|
+| 1. 기반 | Slint 창, 소프트웨어 렌더러 지정, IPC 구독, Win32 트레이·단일 인스턴스, 종료 절차 | v0.1.30 |
+| 2. Status | 등록 폼(.racp), Agent 시작·정지, 지표 카드, 작업 취소, 감사 로그 | v0.1.31 |
+| 3. Permissions | 카테고리 트리, 3-Way 선택기, 제약 편집, revision CAS 저장 | v0.1.32 |
+| 4. Approvals·Runtime·Settings | 승인 결정, 선택 runtime, 언어·작업 폴더·로그인 시작 | v0.1.33 |
+| 5. 정리 | Iced 코드·의존성·접근성 래퍼·Iced 전용 i18n 삭제, Slint 기본 빌드, CI·문서 갱신 | v0.1.34 |
+
+### 화면 원칙
+
+- `.slint`는 표시만 한다. 상태와 명령은 `src/slint_ui.rs`의 `Controller`가 소유하고, 백그라운드 결과는 `slint::invoke_from_event_loop`로 UI 스레드에 전달한다.
+- Agent가 보내지 않는 값(PID, 가동 시간, 위험도 추정, 남은 TTL 등)은 화면에 만들어 넣지 않는다.
+- 목록은 바뀐 행만 갱신해 편집 중인 포커스와 펼침 상태를 유지한다.
+
+### Slint 1.16에서 확인한 제약과 우회
+
+| 제약 | 우회 |
 |---|---|
-| 1. 기반 | Slint 창, 소프트웨어 렌더러 지정, `ui_model.rs` 바인딩, IPC 구독(`slint::invoke_from_event_loop`), Win32 트레이·단일 인스턴스 연결 |
-| 2. Status | 등록 폼(.racp), Agent 시작·정지, 지표 카드, 감사 로그 |
-| 3. Permissions | 카테고리 트리, 3-Way 선택기, 제약 편집, revision CAS 저장 |
-| 4. Approvals·Runtime·Settings | 승인 큐, 선택 runtime, 설정 편집·언어·자동 시작 |
-| 5. 정리 | Iced 의존성, `accessibility.rs`, `controls.rs` 접근성 래퍼, `i18n/*.rs` 삭제. 이 문서와 AGENTS.md를 갱신 |
+| 기본 backend는 OpenGL이 없으면 종료한다 | `BackendSelector`로 winit + software를 직접 지정 |
+| Windows가 숨긴 창의 버퍼를 지우지만 softbuffer는 재사용으로 보고해, 복원 후 일부가 다시 그려지지 않는다 | `SLINT_DESTROY_WINDOW_ON_HIDE`로 숨길 때 창을 없애고 표시할 때 새로 만든다. 숨김은 입력 이벤트가 끝난 뒤 실행 |
+| 소프트웨어 렌더러는 `Path` 회전을 적용하지 않는다 | 방향별 아이콘 경로를 따로 둔다 |
+| `accessible-expandable`을 지정하면 UIA Invoke가 사라진다 | 펼침 상태는 설명으로 전달 |
+| 트리 생성 중에 만들어진 컴포넌트·반복 항목 안의 `if`가 UIA 트리에 늦게 반영되거나 빠진다 | 자주 바뀌는 영역은 미리 만들고 높이·`visible`로 접는다. 구조 변경 150ms 뒤 빈 요소를 만들었다 없애 전체 트리 재구성을 유도한다 |
 
-각 단계의 완료 조건:
-- 디자인 기준과 나란히 놓은 스크린샷
-- 소프트웨어 렌더러의 hover·스크롤 프레임 시간
-- GPU가 없는 환경과 RDP 연결 상태에서 실행
-- 한글 IME와 Narrator 확인
-- `cargo clippy -D warnings` 통과
+### 남은 실기 인수 항목
 
-PoC에서 남은 문제(카테고리 머리글 Tab 이동, 펼친 화살표 방향)는 3단계에서 해결한다.
+아래 항목은 이전 과정에서 확인하지 못했다. 제품 인수 전에 확인한다.
+- 실행 중인 Agent에 연결한 상태의 동작: 지표·작업 목록·작업 취소, Agent 정지와 종료 절차, 정책 저장, 승인 결정
+- 로컬 helper를 실행하는 동작: 새 등록, 런타임 승인·선택 저장, 설정 저장, 로그인 시작 항목 변경
+- 서비스 모드 화면 연결
+- RDP 세션 실행, 실제 GPU가 있는 PC, Narrator 음성 확인(현재는 UIA 트리로 대신 확인)
+- 실제 GUI 화면에서 hover·스크롤 프레임 시간 측정(현재는 PoC 측정값)
 
 ## 6. 보안 원칙
 

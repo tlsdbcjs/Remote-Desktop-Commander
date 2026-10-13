@@ -1,0 +1,591 @@
+// Status view (ADR-0032 migration step 2). Presentation only; Rust owns state and commands.
+import { Theme } from "theme.slint";
+import { Icon, Icons } from "icons.slint";
+import { Tag, Card, Button, ScrollBar, TextField } from "widgets.slint";
+import { SectionTitle, FieldLabel, IdentityItem, ChoiceButton, PrimaryButton, DangerButton } from "common.slint";
+import { ShellModel } from "shell.slint";
+
+export struct StatusModel {
+    // Agent state from the authenticated feed. Metric values are shown only when `connected`.
+    connected: bool,
+    sequence: string,
+    boot-id: string,
+    policy-revision: string,
+    active-count: int,
+    pending-count: int,
+    activity-stale: bool,
+    // Local registration (user mode) or service identity.
+    registered: bool,
+    registration-pending: bool,
+    device-id: string,
+    gateway: string,
+    workspace: string,
+    profile: string,
+    state-root: string,
+    // Commands currently allowed.
+    can-start: bool,
+    can-stop: bool,
+    local-busy: bool,
+    can-enroll: bool,
+    // Service mode current-user desktop session.
+    can-connect-desktop: bool,
+    desktop-connected: bool,
+}
+
+export struct ActivityRow {
+    operation-id: string,
+    operation: string,
+    state: string,
+    request-id: string,
+    cancellable: bool,
+}
+
+export struct LogLine {
+    receipt: string,
+    message: string,
+    // 1 success, 2 info, 3 warning, 4 error
+    tone: int,
+}
+
+export struct EnrollPreview {
+    shown: bool,
+    gateway: string,
+    expires: string,
+    ca-hash: string,
+}
+
+component MetricCard inherits Card {
+    in property <color> accent;
+    in property <string> title;
+    in property <string> chip;
+    in property <string> value;
+    in property <color> value-color: Theme.text-strong;
+    in property <string> footer;
+    clip: true;
+    accessible-role: groupbox;
+    accessible-label: title;
+    Rectangle {
+        y: 0;
+        height: 4px;
+        background: accent;
+    }
+    VerticalLayout {
+        padding: 16px;
+        spacing: 8px;
+        HorizontalLayout {
+            spacing: 6px;
+            Text {
+                text: title;
+                font-size: Theme.fs-xs;
+                font-weight: 500;
+                color: Theme.text-400;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            if chip != "": Tag {
+                text: chip;
+                pill: true;
+                fg: accent.brighter(0.25);
+                fill: accent.with-alpha(0.1);
+                outline: accent.with-alpha(0.2);
+                pad-x: 8px;
+            }
+        }
+        Text {
+            text: value;
+            font-size: Theme.fs-2xl;
+            font-weight: 700;
+            font-family: Theme.mono;
+            color: value-color;
+            overflow: elide;
+        }
+        @children
+        if footer != "": Text {
+            text: footer;
+            font-size: Theme.fs-11;
+            color: Theme.text-400;
+            wrap: word-wrap;
+        }
+    }
+}
+
+component LogTerminal inherits Rectangle {
+    in property <[LogLine]> lines;
+    height: 220px;
+    background: Theme.terminal-bg;
+    border-color: #1e293be6;
+    border-width: 1px;
+    border-radius: Theme.r-lg;
+    clip: true;
+    accessible-role: list;
+    accessible-label: @tr("Audit log");
+
+    flick := Flickable {
+        x: 12px;
+        y: 12px;
+        width: parent.width - 24px - 8px;
+        height: parent.height - 24px;
+        viewport-height: col.preferred-height;
+        col := VerticalLayout {
+            width: flick.width;
+            spacing: 6px;
+            alignment: start;
+            if lines.length == 0: Text {
+                text: @tr("No control receipts in this Agent session yet.");
+                font-family: Theme.mono;
+                font-size: Theme.fs-xs;
+                color: Theme.text-500;
+            }
+            for line in lines: Text {
+                text: "[" + line.receipt + "] " + line.message;
+                font-family: Theme.mono;
+                font-size: Theme.fs-xs;
+                wrap: word-wrap;
+                color: line.tone == 1 ? Theme.emerald-400 : line.tone == 2 ? Theme.sky-400 : line.tone == 3 ? Theme.amber-400 : line.tone == 4 ? Theme.rose-400 : Theme.text-400;
+                accessible-role: list-item;
+                accessible-label: self.text;
+            }
+        }
+    }
+    ScrollBar {
+        x: parent.width - 8px;
+        y: 4px;
+        height: parent.height - 8px;
+        viewport-height: flick.viewport-height;
+        visible-height: flick.height;
+        viewport-y <=> flick.viewport-y;
+    }
+}
+
+export component StatusView inherits VerticalLayout {
+    in property <ShellModel> shell;
+    in property <StatusModel> model;
+    in property <[ActivityRow]> activity;
+    in property <[LogLine]> log-lines;
+    in property <EnrollPreview> preview;
+    in-out property <string> connection-path;
+    in-out property <string> connection-hash;
+    in-out property <string> workspace-draft;
+    in-out property <string> profile;
+    callback refresh-local();
+    callback start-agent();
+    callback stop-agent();
+    callback cancel-local();
+    callback connect-desktop();
+    callback disconnect-desktop();
+    callback connection-path-edited(string);
+    callback inspect-connection();
+    callback enroll();
+    callback cancel-operation(int);
+    callback clear-log();
+    callback open-approvals();
+    alignment: start;
+    spacing: 20px;
+
+    // 1. Endpoint control state
+    Card {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 12px;
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: start;
+                Text {
+                    text: @tr("Endpoint control status");
+                    font-size: Theme.fs-xl;
+                    font-weight: 700;
+                    color: Theme.text-strong;
+                    vertical-alignment: center;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Tag {
+                        pill: true;
+                        pad-x: 8px;
+                        text: shell.agent-status == 3 ? @tr("Agent Online")
+                            : shell.agent-status == 2 ? @tr("Agent Connecting")
+                            : shell.agent-status == 1 ? @tr("Agent Stopped")
+                            : shell.agent-status == 0 ? @tr("Not registered")
+                            : @tr("Agent Offline");
+                        fg: shell.agent-status == 3 ? Theme.emerald-400 : shell.agent-status == 4 ? Theme.rose-400 : Theme.amber-400;
+                    }
+                }
+            }
+            Text {
+                text: shell.service ? (shell.role == 1 ? @tr("Service control role: Controller") : shell.role == 2 ? @tr("Service control role: Observer (read-only)") : @tr("Waiting for the service connection."))
+                    : !model.registered ? @tr("Register this PC with a connection file (.racp) to start.")
+                    : model.connected ? @tr("Connected to the Agent over authenticated local IPC.")
+                    : @tr("The Agent is not connected. Start the Agent to connect.");
+                font-size: Theme.fs-sm;
+                color: Theme.text-300;
+                wrap: word-wrap;
+            }
+            IdentityItem {
+                name: shell.service ? @tr("Service control path") : @tr("State path");
+                value: model.state-root;
+            }
+            if model.device-id != "": HorizontalLayout {
+                spacing: 16px;
+                alignment: start;
+                IdentityItem {
+                    name: "Device";
+                    value: model.device-id;
+                }
+                IdentityItem {
+                    name: "Gateway";
+                    value: model.gateway;
+                }
+                if model.workspace != "": IdentityItem {
+                    name: "Workspace";
+                    value: model.workspace;
+                }
+                if model.profile != "": IdentityItem {
+                    name: "Profile";
+                    value: model.profile;
+                }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                if !shell.service: Button {
+                    text: @tr("Refresh local status");
+                    icon: Icons.sliders;
+                    pad-x: 12px;
+                    pad-y: 6px;
+                    radius: Theme.r-lg;
+                    clicked => { root.refresh-local(); }
+                }
+                if model.can-start: PrimaryButton {
+                    text: @tr("Start Agent");
+                    clicked => { root.start-agent(); }
+                }
+                if model.can-stop: DangerButton {
+                    text: @tr("Stop Agent");
+                    icon: Icons.warning;
+                    clicked => { root.stop-agent(); }
+                }
+                if model.local-busy: Button {
+                    text: @tr("Cancel local request");
+                    pad-x: 12px;
+                    pad-y: 6px;
+                    radius: Theme.r-lg;
+                    clicked => { root.cancel-local(); }
+                }
+                if shell.service && model.can-connect-desktop: PrimaryButton {
+                    text: @tr("Connect current desktop");
+                    icon: Icons.monitor;
+                    clicked => { root.connect-desktop(); }
+                }
+                if shell.service && model.desktop-connected: DangerButton {
+                    text: @tr("Disconnect current desktop");
+                    clicked => { root.disconnect-desktop(); }
+                }
+            }
+            if shell.service: Text {
+                text: @tr("Connects the desktop of the signed-in user. Permission policy and per-request approval still apply, and the shared service keeps running after this app closes.");
+                font-size: Theme.fs-11;
+                color: Theme.text-400;
+                wrap: word-wrap;
+            }
+        }
+    }
+
+    // 2. Metric cards: only values the Agent reports
+    if model.connected: HorizontalLayout {
+        spacing: 16px;
+        MetricCard {
+            horizontal-stretch: 1;
+            accent: shell.agent-status == 3 ? Theme.emerald-500 : Theme.amber-500;
+            title: @tr("Agent process");
+            chip: shell.agent-status == 3 ? @tr("Online") : @tr("Not online");
+            value: "Seq #" + model.sequence;
+            footer: "Boot " + model.boot-id;
+        }
+        MetricCard {
+            horizontal-stretch: 1;
+            accent: Theme.indigo-500;
+            title: @tr("Active control tasks");
+            chip: model.active-count + " ACTIVE";
+            value: model.active-count;
+            footer: @tr("Cancellation receipts appear in the audit log.");
+        }
+        MetricCard {
+            horizontal-stretch: 1;
+            accent: Theme.rose-500;
+            title: @tr("Pending approval requests");
+            chip: model.pending-count + " PENDING";
+            value: model.pending-count;
+            value-color: model.pending-count > 0 ? Theme.rose-400 : Theme.text-strong;
+            HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: @tr("Open approvals");
+                    fg: Theme.indigo-400;
+                    fill: transparent;
+                    hover-fill: Theme.hover-800;
+                    pad-x: 4px;
+                    pad-y: 2px;
+                    clicked => { root.open-approvals(); }
+                }
+            }
+        }
+        MetricCard {
+            horizontal-stretch: 1;
+            accent: Theme.amber-500;
+            title: @tr("Policy revision");
+            chip: "CAS";
+            value: "r" + model.policy-revision;
+            footer: @tr("Changes are saved against this revision.");
+        }
+    }
+
+    // 3. Enrollment: user mode without local registration
+    if !shell.service && !model.registered: Card {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 12px;
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                VerticalLayout {
+                    alignment: start;
+                    Icon {
+                        data: Icons.folder;
+                        tint: Theme.indigo-400;
+                        width: 18px;
+                        height: 18px;
+                    }
+                }
+                SectionTitle {
+                    title: @tr("Register this PC");
+                    subtitle: @tr("Existing client settings and credentials are never imported. Verify the distributed connection file (.racp) first.");
+                }
+            }
+            FieldLabel { text: @tr("Connection file path (.racp)"); }
+            HorizontalLayout {
+                spacing: 8px;
+                TextField {
+                    horizontal-stretch: 1;
+                    label: @tr("Connection file path (.racp)");
+                    mono: true;
+                    text <=> root.connection-path;
+                    enabled: model.can-enroll;
+                    edited(value) => { root.connection-path-edited(value); }
+                }
+                if model.can-enroll: VerticalLayout {
+                    alignment: center;
+                    PrimaryButton {
+                        text: @tr("Verify file");
+                        icon: Icons.shield-check;
+                        clicked => { root.inspect-connection(); }
+                    }
+                }
+            }
+            if preview.shown: Rectangle {
+                background: Theme.inset-bg;
+                border-color: Theme.emerald-500.with-alpha(0.3);
+                border-width: 1px;
+                border-radius: Theme.r-lg;
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 6px;
+                    Text {
+                        text: @tr("Connection file verified. Only the Gateway, expiry and public CA hash are shown.");
+                        font-size: Theme.fs-xs;
+                        font-weight: 600;
+                        color: Theme.emerald-400;
+                        wrap: word-wrap;
+                    }
+                    IdentityItem { name: "Gateway"; value: preview.gateway; }
+                    IdentityItem { name: @tr("Expires"); value: preview.expires; }
+                    IdentityItem { name: "CA SHA-256"; value: preview.ca-hash; }
+                }
+            }
+            FieldLabel { text: @tr("Connection file SHA-256 (filled by verification)"); }
+            TextField {
+                label: @tr("Connection file SHA-256 (filled by verification)");
+                mono: true;
+                text <=> root.connection-hash;
+                enabled: model.can-enroll;
+            }
+            FieldLabel { text: @tr("Default workspace folder"); }
+            TextField {
+                label: @tr("Default workspace folder");
+                mono: true;
+                text <=> root.workspace-draft;
+                enabled: model.can-enroll;
+            }
+            FieldLabel { text: @tr("Execution profile"); }
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                ChoiceButton {
+                    text: "read_only";
+                    selected: root.profile == "read_only";
+                    clicked => { root.profile = "read_only"; }
+                }
+                ChoiceButton {
+                    text: "standard";
+                    selected: root.profile == "standard";
+                    clicked => { root.profile = "standard"; }
+                }
+                ChoiceButton {
+                    text: "trusted_personal";
+                    selected: root.profile == "trusted_personal";
+                    clicked => { root.profile = "trusted_personal"; }
+                }
+            }
+            Text {
+                text: @tr("Registration uses the current Permissions selection. The initial selection denies everything.");
+                font-size: Theme.fs-11;
+                color: Theme.text-400;
+                wrap: word-wrap;
+            }
+            if model.registration-pending: Rectangle {
+                background: Theme.amber-500.with-alpha(0.08);
+                border-color: Theme.amber-500.with-alpha(0.3);
+                border-width: 1px;
+                border-radius: Theme.r-lg;
+                VerticalLayout {
+                    padding: 12px;
+                    Text {
+                        text: @tr("A previous registration result is uncertain. A new registration is not retried until the pending state is checked.");
+                        font-size: Theme.fs-xs;
+                        color: Theme.amber-400;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+            HorizontalLayout {
+                alignment: start;
+                if model.can-enroll: Button {
+                    text: @tr("Submit new registration");
+                    fill: Theme.emerald-600;
+                    hover-fill: Theme.emerald-500;
+                    fg: white;
+                    pad-x: 14px;
+                    pad-y: 7px;
+                    radius: Theme.r-lg;
+                    clicked => { root.enroll(); }
+                }
+            }
+        }
+    }
+
+    // 4. In-flight operations
+    if activity.length > 0: Card {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 12px;
+            SectionTitle {
+                title: model.activity-stale ? @tr("Last known operations (connection lost)") : @tr("In-flight remote operations");
+                subtitle: @tr("A cancel receipt is not task termination. Check the task state and cleanup result separately.");
+            }
+            for row[index] in activity: Rectangle {
+                background: Theme.inset-bg;
+                border-color: Theme.line;
+                border-width: 1px;
+                border-radius: Theme.r-lg;
+                HorizontalLayout {
+                    padding: 12px;
+                    spacing: 12px;
+                    VerticalLayout {
+                        spacing: 4px;
+                        horizontal-stretch: 1;
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: start;
+                            Tag {
+                                text: row.operation;
+                                mono: true;
+                                size: Theme.fs-xs;
+                                fg: Theme.indigo-300;
+                                fill: Theme.indigo-500.with-alpha(0.2);
+                                outline: Theme.indigo-500.with-alpha(0.3);
+                                pad-x: 8px;
+                            }
+                            Text {
+                                text: row.operation-id;
+                                font-family: Theme.mono;
+                                font-size: Theme.fs-xs;
+                                color: Theme.text-300;
+                                vertical-alignment: center;
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                Tag {
+                                    text: row.state;
+                                    size: Theme.fs-10;
+                                    weight: 500;
+                                    fg: row.state == "RUNNING" ? Theme.emerald-400 : Theme.amber-400;
+                                }
+                            }
+                        }
+                        Text {
+                            text: "Req: " + row.request-id;
+                            font-family: Theme.mono;
+                            font-size: Theme.fs-xs;
+                            color: Theme.text-400;
+                        }
+                    }
+                    if row.cancellable: VerticalLayout {
+                        alignment: center;
+                        DangerButton {
+                            text: @tr("Cancel task");
+                            icon: Icons.x;
+                            clicked => { root.cancel-operation(index); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Audit log of control receipts
+    Card {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 12px;
+            HorizontalLayout {
+                spacing: 8px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    horizontal-stretch: 1;
+                    VerticalLayout {
+                        alignment: center;
+                        Icon {
+                            data: Icons.terminal;
+                            tint: Theme.emerald-400;
+                        }
+                    }
+                    Text {
+                        text: @tr("Control receipts (audit log)");
+                        font-size: Theme.fs-sm;
+                        font-weight: 700;
+                        color: Theme.text-strong;
+                        vertical-alignment: center;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        text: @tr("Clear log");
+                        fg: Theme.text-300;
+                        radius: Theme.r-sm;
+                        clicked => { root.clear-log(); }
+                    }
+                }
+            }
+            LogTerminal {
+                lines: log-lines;
+            }
+            Text {
+                text: @tr("Shows up to 16 recent receipts. A lost connection, Agent restart or missing record does not mean cleanup succeeded.");
+                font-size: Theme.fs-11;
+                color: Theme.text-400;
+                wrap: word-wrap;
+            }
+        }
+    }
+}

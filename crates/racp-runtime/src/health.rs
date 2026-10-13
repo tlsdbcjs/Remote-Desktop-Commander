@@ -112,12 +112,13 @@ impl HealthSource {
             .upgrade()
             .ok_or_else(unavailable)?
             .load(Ordering::Acquire);
+        let lifecycle = self.lifecycle.snapshot();
         Ok(
             json!({"observed":true,"consistency":"sampled","observed_at":racp_contract::timestamp(),
             "runtime_state":state,"gateway_phase":phase,"gateway_connected":connected,
-            "execution_lease_valid":connected && phase=="ready" && lease_valid && !retiring && !stopping,
+            "execution_lease_valid":connected && phase=="ready" && lease_valid && !retiring && !stopping && lifecycle["cleanup_phase"]=="not_requested",
             "stopping":stopping,"active_operations":active,"resources":self.resources.counts()?,
-            "lifecycle":self.lifecycle.snapshot()}),
+            "lifecycle":lifecycle}),
         )
     }
 }

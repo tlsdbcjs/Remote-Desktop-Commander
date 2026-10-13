@@ -77,7 +77,7 @@ RACP 플랫폼의 핵심 설계 원칙, 프로토콜 계약, 상태 머신, 권�
 
 ### 2.2 [운영 및 사용자 가이드 (docs/guides/)](guides/README.md)
 실제 사용자 및 운영자를 위한 실전 가이드라인입니다.
-- [데스크톱 클라이언트 사용 가이드](guides/desktop-client-guide.md): Rust/Iced Client·동반 Agent의 Windows 설치본과 native 운용
+- [데스크톱 클라이언트 사용 가이드](guides/desktop-client-guide.md): Rust/Slint Client·동반 Agent의 Windows 설치본과 native 운용
 - [PC 등록 및 온보딩 가이드](guides/pc-connect-guide.md): 신규 장비 안전 등록, 토큰 발급, 연결 수립
 - [다중 작업 폴더(Named Workspaces) 가이드](guides/named-workspaces-guide.md): 작업 폴더 권한 격리 및 경로 보안
 - [백그라운드 에이전트 가이드](guides/background-agent-guide.md): `racp-agentctl` 수명주기 제어 및 데몬 관리

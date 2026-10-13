@@ -1,7 +1,7 @@
 ---
 name: desktop-build
 description: >-
-  Build and package the native RACP Iced/Rust client and Rust Agent,
+  Build and package the native RACP Slint/Rust client and Rust Agent,
   define Windows/macOS/Linux setup and portable artifacts, or maintain desktop build CI.
 ---
 

@@ -64,8 +64,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Rust formatting failed" }
           cargo run --locked -p xtask -- inventory-check
           if ($LASTEXITCODE -ne 0) { throw "Contract inventory failed" }
-          cargo check --locked -p racp-client-native --features gpu-renderer --target x86_64-pc-windows-msvc
-          if ($LASTEXITCODE -ne 0) { throw "GPU feature compilation failed" }
+          cargo clippy --locked -p racp-client-native --no-deps --target x86_64-pc-windows-msvc -- -D warnings
+          if ($LASTEXITCODE -ne 0) { throw "Client clippy failed" }
       - name: Build native static CRT staging (no tests or GUI)
         run: |
           cargo run --locked -p xtask -- stage --platform win --arch x64 --build-id $env:NATIVE_BUILD_ID

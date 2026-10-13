@@ -9,7 +9,7 @@
 > [!IMPORTANT]
 > 현재 Agent 서비스의 후속 구현·미완성·시험 계획은 [Agent 서비스 전용 계획](../spec/agent-service-implementation-and-test-plan.md)을 따른다. GUI는 재구성 예정으로 해당 계획에서 제외한다. 아래 user-mode/Client 연동 설명과 과거 보류 기록은 서비스 계정의 실제 SCM 인수 증거가 아니며, 최신 실제 설치 금지 지시를 유지한다.
 
-Rust Agent는 Iced native Client의 원격 실행과 로컬 권한·승인·작업 추적을 담당한다. 개발 빌드·격리 user-mode 원격 시험은 구현 현황의 해당 버전/EXE 증거를 따른다. 실제 서비스 계정·SCM 인수는 설치 금지로 보류한다. 생산 빌드 성공을 실제 기능 성공으로 판단하지 않는다.
+Rust Agent는 Slint native Client의 원격 실행과 로컬 권한·승인·작업 추적을 담당한다. 개발 빌드·격리 user-mode 원격 시험은 구현 현황의 해당 버전/EXE 증거를 따른다. 실제 서비스 계정·SCM 인수는 설치 금지로 보류한다. 생산 빌드 성공을 실제 기능 성공으로 판단하지 않는다.
 
 Client payload는 Agent·Client·LICENSE·SBOM과 파일 manifest다. Agent 서비스 payload는 명시 `native-agent-service` 역할로 Agent·LICENSE·SBOM만 허용한다. 브라우저/분석 도구는 별도 admission된 선택 runtime이며 기본 패키지에서 자동 검색하거나 다운로드하지 않는다. 구 Tauri/React Client와 TCP bridge·구 credential 설정 변환·이전 서비스 로그인 명령은 폐기했다. 과거 v0.1.21 실행 증거는 [구현 현황](../quality/implementation-status.md)에 이력으로 보존한다.
 

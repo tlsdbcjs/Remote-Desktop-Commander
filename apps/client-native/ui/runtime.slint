@@ -1,0 +1,187 @@
+// Optional runtimes view (ADR-0032 migration step 4). Admission and selection run in the Agent helper.
+import { Theme } from "theme.slint";
+import { Icon, Icons } from "icons.slint";
+import { Tag, Card, Button, TextField, TextArea } from "widgets.slint";
+import { SectionTitle, FieldLabel, IdentityItem, ChoiceButton, PrimaryButton } from "common.slint";
+
+// Saved runtime selection as read from local state.
+export struct RuntimeModel {
+    loaded: bool,
+    revision: string,
+    chromium: string,
+    cdb: string,
+    gdb: string,
+    analysis: string,
+    origin-count: int,
+    external-cdp: bool,
+    // Admission and selection change files the Agent pins, so the Agent must be stopped.
+    agent-stopped: bool,
+    busy: bool,
+}
+
+export component RuntimeView inherits VerticalLayout {
+    in property <RuntimeModel> model;
+    in-out property <string> manifest-file;
+    in-out property <string> manifest-hash;
+    in-out property <string> source-directory;
+    in-out property <string> chromium-hash;
+    in-out property <string> cdb-hash;
+    in-out property <string> gdb-hash;
+    in-out property <string> analysis-hash;
+    in-out property <string> browser-origins;
+    in-out property <bool> external-cdp;
+    callback admit-runtime();
+    callback configure-runtime();
+    alignment: start;
+    spacing: 16px;
+
+    Card {
+        VerticalLayout {
+            padding: 20px;
+            SectionTitle {
+                title: @tr("Optional runtimes");
+                subtitle: @tr("Chromium, CDB, GDB and the analysis host are separate bundles. Each is admitted by manifest hash, size, OS and architecture, and pinned while it runs.");
+            }
+        }
+    }
+
+    // Current selection
+    Card {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 8px;
+            Text {
+                text: @tr("Saved selection");
+                font-size: Theme.fs-sm;
+                font-weight: 700;
+                color: Theme.text-strong;
+            }
+            if !model.loaded: Text {
+                text: @tr("Local state is not loaded yet.");
+                font-size: Theme.fs-xs;
+                color: Theme.text-400;
+            }
+            if model.loaded: VerticalLayout {
+                spacing: 6px;
+                IdentityItem { name: "Revision"; value: model.revision; }
+                IdentityItem { name: "Chromium"; value: model.chromium != "" ? model.chromium : @tr("not selected"); }
+                IdentityItem { name: "CDB"; value: model.cdb != "" ? model.cdb : @tr("not selected"); }
+                IdentityItem { name: "GDB"; value: model.gdb != "" ? model.gdb : @tr("not selected"); }
+                IdentityItem { name: @tr("Analysis host"); value: model.analysis != "" ? model.analysis : @tr("not selected"); }
+                IdentityItem {
+                    name: @tr("Browser origins");
+                    value: model.origin-count;
+                }
+                IdentityItem {
+                    name: "External CDP";
+                    value: model.external-cdp ? @tr("allowed") : @tr("not allowed");
+                }
+            }
+        }
+    }
+
+    if !model.agent-stopped: Rectangle {
+        background: Theme.amber-500.with-alpha(0.08);
+        border-color: Theme.amber-500.with-alpha(0.3);
+        border-width: 1px;
+        border-radius: Theme.r-lg;
+        VerticalLayout {
+            padding: 12px;
+            Text {
+                text: @tr("Stop the Agent completely before admitting a runtime or saving the selection.");
+                font-size: Theme.fs-xs;
+                color: Theme.amber-400;
+                wrap: word-wrap;
+            }
+        }
+    }
+
+    // Admission
+    Card {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 10px;
+            SectionTitle {
+                title: @tr("Admit a runtime bundle");
+                subtitle: @tr("A local hash agreement is not verification by an official signed trust catalog.");
+            }
+            FieldLabel { text: @tr("Manifest file"); }
+            TextField {
+                label: @tr("Manifest file");
+                mono: true;
+                text <=> root.manifest-file;
+            }
+            FieldLabel { text: @tr("Manifest SHA-256"); }
+            TextField {
+                label: @tr("Manifest SHA-256");
+                mono: true;
+                text <=> root.manifest-hash;
+            }
+            FieldLabel { text: @tr("Bundle source folder"); }
+            TextField {
+                label: @tr("Bundle source folder");
+                mono: true;
+                text <=> root.source-directory;
+            }
+            HorizontalLayout {
+                alignment: start;
+                if model.agent-stopped && !model.busy: PrimaryButton {
+                    text: @tr("Admit runtime");
+                    icon: Icons.shield-check;
+                    clicked => { root.admit-runtime(); }
+                }
+            }
+        }
+    }
+
+    // Selection
+    Card {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 10px;
+            SectionTitle {
+                title: @tr("Runtime selection");
+                subtitle: @tr("Enter the manifest hash of an admitted bundle. Leave a field empty to use none. Applies from the next Agent start.");
+            }
+            HorizontalLayout {
+                spacing: 16px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 6px;
+                    FieldLabel { text: "Chromium"; }
+                    TextField { label: "Chromium manifest SHA-256"; mono: true; text <=> root.chromium-hash; }
+                    FieldLabel { text: "CDB"; }
+                    TextField { label: "CDB manifest SHA-256"; mono: true; text <=> root.cdb-hash; }
+                }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 6px;
+                    FieldLabel { text: "GDB"; }
+                    TextField { label: "GDB manifest SHA-256"; mono: true; text <=> root.gdb-hash; }
+                    FieldLabel { text: @tr("Analysis host"); }
+                    TextField { label: @tr("Analysis host"); mono: true; text <=> root.analysis-hash; }
+                }
+            }
+            FieldLabel { text: @tr("Allowed browser origins (one per line)"); }
+            TextArea {
+                height: 72px;
+                label: @tr("Allowed browser origins (one per line)");
+                text <=> root.browser-origins;
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                ChoiceButton {
+                    text: root.external-cdp ? @tr("External CDP attach: allowed") : @tr("External CDP attach: not allowed");
+                    icon: root.external-cdp ? Icons.allow : Icons.deny;
+                    selected: root.external-cdp;
+                    clicked => { root.external-cdp = !root.external-cdp; }
+                }
+                if model.agent-stopped && !model.busy: PrimaryButton {
+                    text: @tr("Save runtime selection");
+                    clicked => { root.configure-runtime(); }
+                }
+            }
+        }
+    }
+}

@@ -1,23 +1,21 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-mod accessibility;
-mod app;
 mod constraints;
 mod control_target;
-mod controls;
-pub mod i18n;
-pub mod theme;
-pub mod components;
-pub mod views;
+mod i18n;
+#[cfg(windows)]
+mod ipc;
 #[cfg(windows)]
 mod native;
 mod onboarding;
+#[cfg(windows)]
+mod slint_ui;
 mod ui_model;
 
-fn main() -> iced::Result {
+fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--version") {
         println!("racp-client {}", racp_contract::VERSION);
-        return Ok(());
+        return;
     }
     let startup =
         || -> Result<Option<racp_core::distribution::PinnedPayload>, racp_contract::RacpError> {
@@ -80,58 +78,39 @@ fn main() -> iced::Result {
             std::process::exit(4);
         }
     };
-    // Select before tray/Iced/Tokio create any other threads. Software is the product default.
-    let gpu = args.iter().any(|arg| arg == "--gpu");
-    if gpu && !cfg!(feature = "gpu-renderer") {
-        eprintln!("GPU renderer is not compiled in this build");
-        #[cfg(windows)]
+    run(&args);
+}
+
+/// Slint GUI with the software renderer only (ADR-0032).
+#[cfg(windows)]
+fn run(args: &[String]) {
+    if args.iter().any(|arg| arg == "--gpu") {
         native::startup_error("GPU_RENDERER_NOT_COMPILED");
         std::process::exit(4);
     }
+    // Windows clears a hidden window's buffer but softbuffer still reports it as reused, so
+    // Slint's partial repaint leaves stale areas after tray restore. Recreate it on show instead.
+    // Set before the tray thread starts.
     unsafe {
-        std::env::set_var("ICED_BACKEND", if gpu { "wgpu" } else { "tiny-skia" });
+        std::env::set_var("SLINT_DESTROY_WINDOW_ON_HIDE", "1");
     }
-    #[cfg(windows)]
     let shell = match native::Shell::new() {
         Ok(Some(shell)) => Some(shell),
-        Ok(None) => return Ok(()),
+        Ok(None) => return,
         Err(code) => {
             eprintln!("native shell startup warning: {code}");
             None
         }
     };
-    let icon = image::load_from_memory_with_format(
-        include_bytes!("../assets/app.png"),
-        image::ImageFormat::Png,
-    )
-    .ok()
-    .and_then(|image| {
-        let rgba = image.to_rgba8();
-        let (width, height) = rgba.dimensions();
-        iced::window::icon::from_rgba(rgba.into_raw(), width, height).ok()
-    });
-    let result = iced::application(app::App::title, app::App::update, app::App::view)
-        .theme(|_| iced::Theme::Dark)
-        .subscription(app::App::subscription)
-        .default_font(iced::Font::with_name("Malgun Gothic"))
-        .window(iced::window::Settings {
-            size: iced::Size::new(960.0, 680.0),
-            visible: true,
-            icon,
-            exit_on_close_request: !cfg!(windows),
-            ..Default::default()
-        })
-        .run_with(move || {
-            let (mut app, task) = app::App::new(args.iter().any(|arg| arg == "--start-agent"));
-            #[cfg(windows)]
-            if let Some(shell) = shell {
-                app.attach_shell(shell);
-            }
-            (app, task)
-        });
-    #[cfg(windows)]
-    if result.is_err() {
-        native::startup_error("GUI_RENDERER_OR_WINDOW_FAILED");
+    if let Err(code) = slint_ui::run(shell, args.iter().any(|arg| arg == "--start-agent")) {
+        native::startup_error(&code);
+        std::process::exit(4);
     }
-    result
+}
+
+/// macOS and Linux GUI adapters are deferred (ADR-0032 §1).
+#[cfg(not(windows))]
+fn run(_: &[String]) {
+    eprintln!("NATIVE_PLATFORM_DEFERRED");
+    std::process::exit(4);
 }

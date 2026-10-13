@@ -142,6 +142,9 @@ fn is_admitted(name: &str) -> bool {
         // Native AccessKit/UIA provider: UiaReturnRawElementProvider is
         // exported by this Windows system DLL (uiautomationcoreapi.h).
         "uiautomationcore.dll",
+        // Preserve Slint's admitted system font and shell URL dependencies.
+        "shlwapi.dll",
+        "dwrite.dll",
         "oleaut32.dll",
         "ws2_32.dll",
         "iphlpapi.dll",
