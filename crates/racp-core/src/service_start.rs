@@ -10,6 +10,7 @@ pub const INTENT_FILE: &str = "native-service-start-intent.json";
 pub const ADMIN_LOCK: &str = "native-service-admin.lock";
 pub const EXECUTION_LOCK: &str = "native-service-execution.lock";
 pub const INTENT_LOCK: &str = "native-service-start-intent.lock";
+pub const MAINTENANCE_RECEIPT_FILE: &str = "native-service-maintenance.json";
 const MAX_INTENT_BYTES: usize = 4096;
 const MAX_RECEIPT_BYTES: usize = 16384;
 

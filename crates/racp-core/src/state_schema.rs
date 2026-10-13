@@ -229,6 +229,22 @@ pub struct NativeRegistration {
 impl NativeRegistration {
     fn ensure_empty(root: &Path, service: bool) -> Result<(), RacpError> {
         if root.try_exists()? {
+            let restored = if service {
+                // The SCM host has already proved its actor and holds EXECUTION.
+                // Admit only an idle gate, or a receipt-confirmed restored root.
+                let directory = crate::Workspaces::new(root, &[])?.directory("default", root)?;
+                let store = crate::service_start::StartStore::new(directory)?;
+                let record = store.snapshot()?;
+                if record
+                    .as_ref()
+                    .is_some_and(|record| !record.intent.permits_normal_run())
+                {
+                    return Err(RacpError::new("SERVICE_START_BLOCKED"));
+                }
+                Self::confirmed_restore(root, record.as_ref())?
+            } else {
+                false
+            };
             for item in root.read_dir()? {
                 let name = item?.file_name();
                 let fixed_service_input = service
@@ -236,15 +252,74 @@ impl NativeRegistration {
                         crate::native_service::CONFIG_FILE,
                         crate::native_service::BOOTSTRAP_FILE,
                         crate::native_service::CONNECTION_FILE,
+                        crate::service_start::INTENT_FILE,
+                        crate::service_start::INTENT_LOCK,
+                        crate::service_start::ADMIN_LOCK,
+                        crate::service_start::EXECUTION_LOCK,
                     ]
                     .iter()
                     .any(|value| name == *value);
-                if name != "native-registration.lock" && !fixed_service_input {
+                let restore_artifact = restored
+                    && [
+                        crate::native_service::CONFIG_LOCK,
+                        "native-agent.lock",
+                        "native-settings.lock",
+                        crate::service_start::MAINTENANCE_RECEIPT_FILE,
+                        "native-service-restore.json",
+                        "native-service-detach.json",
+                    ]
+                    .iter()
+                    .any(|value| name == *value);
+                if name != "native-registration.lock" && !fixed_service_input && !restore_artifact {
                     return Err(RacpError::new("STATE_ALREADY_EXISTS"));
                 }
             }
         }
         Ok(())
+    }
+    fn confirmed_restore(
+        root: &Path,
+        record: Option<&crate::service_start::StartSnapshot>,
+    ) -> Result<bool, RacpError> {
+        use racp_contract::service_start::{MaintenancePurpose, StartCommand, StartPhase};
+        let Some(record) = record else {
+            return Ok(false);
+        };
+        let (
+            StartCommand::Maintenance {
+                purpose: MaintenancePurpose::Restore,
+                request_id,
+            },
+            StartPhase::Acknowledged { receipt_sha256, .. },
+        ) = (&record.intent.command, &record.intent.phase)
+        else {
+            return Ok(false);
+        };
+        let raw = read_bounded(
+            &root.join(crate::service_start::MAINTENANCE_RECEIPT_FILE),
+            16384,
+            false,
+        )?;
+        reject_duplicate_keys(&raw)?;
+        let value: serde_json::Value = serde_json::from_slice(&raw)?;
+        if racp_contract::digest(&raw) != *receipt_sha256
+            || value["format_version"] != 1
+            || value["request_id"] != *request_id
+            || value["preflight_complete"] != true
+            || value["registered"] != false
+            || value.get("device_id") != Some(&serde_json::Value::Null)
+            || value["state_preserved"] != true
+            || value["credential_accessed"] != false
+            || value["config_sha256"]
+                != racp_contract::digest(read_bounded(
+                    &root.join(crate::native_service::CONFIG_FILE),
+                    16384,
+                    false,
+                )?)
+        {
+            return Err(RacpError::new("SERVICE_START_RECEIPT_INVALID"));
+        }
+        Ok(true)
     }
     /// Reserve before consuming a one-use token. A crash marker blocks accidental reenrollment.
     pub fn begin(root: &Path) -> Result<Self, RacpError> {
@@ -313,4 +388,76 @@ pub fn load_policy(root: &Path) -> Result<NativePolicy, RacpError> {
     let policy: NativePolicy = document(&root.join(POLICY_FILE))?;
     policy.permissions()?;
     Ok(policy)
+}
+
+#[cfg(test)]
+mod service_registration_tests {
+    use super::*;
+    use crate::{service_start::*, Workspaces};
+    use racp_contract::{digest, service_start::*};
+
+    #[test]
+    fn service_first_registration_accepts_execution_gate_and_only_confirmed_restore_artifacts() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("private");
+        crate::create_private_native_directory(&root).unwrap();
+        let store = StartStore::new(
+            Workspaces::new(&root, &[])
+                .unwrap()
+                .directory("default", &root)
+                .unwrap(),
+        )
+        .unwrap();
+        let _execution = store.execution_guard().unwrap();
+        assert!(NativeRegistration::ensure_empty(&root, true).is_ok());
+        assert!(NativeRegistration::ensure_empty(&root, false).is_err());
+        let config = b"{}";
+        atomic_write(&root.join(crate::native_service::CONFIG_FILE), config, true).unwrap();
+        let nonce = racp_contract::new_id("maintenance");
+        let intent = store
+            .prepare(StartCommand::Maintenance {
+                purpose: MaintenancePurpose::Restore,
+                request_id: nonce.clone(),
+            })
+            .unwrap();
+        assert!(NativeRegistration::ensure_empty(&root, true).is_err());
+        let receipt = serde_json::to_vec(&serde_json::json!({"format_version":1,"request_id":nonce,
+            "preflight_complete":true,"config_sha256":digest(config),"registered":false,"device_id":null,
+            "state_preserved":true,"credential_accessed":false})).unwrap();
+        store
+            .execute_once(&intent.intent.request_id, |_| {
+                atomic_write(
+                    &root.join("native-service-maintenance.json"),
+                    &receipt,
+                    true,
+                )?;
+                Ok(receipt.clone())
+            })
+            .unwrap();
+        let completed = store.snapshot().unwrap().unwrap();
+        assert!(NativeRegistration::ensure_empty(&root, true).is_err());
+        store
+            .acknowledge(&intent.intent.request_id, &completed.sha256, &receipt)
+            .unwrap();
+        for name in [
+            crate::native_service::CONFIG_LOCK,
+            "native-agent.lock",
+            "native-settings.lock",
+            "native-service-restore.json",
+            "native-service-detach.json",
+        ] {
+            atomic_write(&root.join(name), b"{}", true).unwrap();
+        }
+        assert!(NativeRegistration::ensure_empty(&root, true).is_ok());
+        atomic_write(&root.join("native-service-maintenance.json"), b"{}", true).unwrap();
+        assert!(NativeRegistration::ensure_empty(&root, true).is_err());
+        atomic_write(
+            &root.join("native-service-maintenance.json"),
+            &receipt,
+            true,
+        )
+        .unwrap();
+        atomic_write(&root.join("unrecognized.json"), b"{}", true).unwrap();
+        assert!(NativeRegistration::ensure_empty(&root, true).is_err());
+    }
 }

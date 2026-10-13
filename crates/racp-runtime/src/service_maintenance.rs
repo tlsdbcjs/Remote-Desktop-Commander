@@ -3,7 +3,7 @@ use racp_contract::{digest, RacpError};
 use racp_core::{native_service::*, state_schema::*, InstanceLock};
 use serde_json::{json, Value};
 use std::path::Path;
-pub const RESULT_FILE: &str = "native-service-maintenance.json";
+pub const RESULT_FILE: &str = racp_core::service_start::MAINTENANCE_RECEIPT_FILE;
 pub fn inspect(root: &Path, nonce: &str) -> Result<(), RacpError> {
     if !nonce.strip_prefix("maintenance_").is_some_and(|id| {
         id.len() == 32

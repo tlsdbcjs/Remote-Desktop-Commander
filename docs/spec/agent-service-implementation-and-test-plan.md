@@ -218,6 +218,8 @@ AS09의 다음 실행 경계 묶음은 durable 일회성 start intent다. 공통
 > [!WARNING]
 > claimed/failed outcome은 자동 해제하지 않는다. 현재 inspect/abort는 설치된 stopped service를 요구하므로, service 생성 전 실패한 restore의 prepared intent와 namespace 없는 root의 일반 복구는 별도 AS08 orchestration이 필요하다. 실제 SCM/가상 계정 시험과 queued restart·boot admission은 미완료다.
 
+첫 service bootstrap의 등록 예약은 service actor/config 확인 뒤 실행 gate의 네 고정 파일만 추가 허용한다. intent의 정상 Run 허용 phase를 다시 확인하며 미확정 intent는 token 소비 전에 차단한다. unregistered restore 후 남은 고정 maintenance/restore/detach·config/agent/settings lock은 **Acknowledged Restore와 현재 maintenance receipt hash/nonce·config hash·registered=false/device=null/state-preserved/credential-unread**가 확인된 경우에만 허용한다. 일반 사용자 등록의 empty-root 검사는 그대로 유지하고, 임의 파일·미완료/다른 purpose·변조된 receipt로 등록을 재개하지 않는다.
+
 <a id="section-05"></a>
 
 ## 5. 테스트 계획
