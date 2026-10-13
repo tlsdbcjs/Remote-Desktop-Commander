@@ -1,7 +1,7 @@
 # Rust Agent 서비스 구현 및 검증 작업 계획
 
 > **Document ID**: `DOC-PLAN-AGENT-SERVICE`\
-> **Status**: Active · **Target Version**: v0.1.29 source / Agent 서비스 릴리스 인수 미완료\
+> **Status**: Active · **Target Version**: v0.1.30 source / Agent 서비스 릴리스 인수 미완료\
 > **Last Updated**: 2026-10-13 · **Classification**: Service Implementation & Test Plan
 
 ## 개요
@@ -195,7 +195,7 @@ P0는 Agent 서비스의 독립 실행·원격 제어·권한/정리 경계, P1�
 | AS05 / P0 | **구현됨·서비스 조건 검증 필요: 원격 핵심 작업** | 실제 MCP/API→Gateway→service Agent의 파일/전송·명령 stdout/stderr/exit·process·ConPTY 작업을 검사. service account의 workspace/executable 권한과 실제 부작용·최종 결과 일치. 다른 Device·폴더·process를 실행 대상으로 채택하지 않음 |
 | AS06 / P0 | **구현됨·검증 필요: journal/멱등성/재연결** | ACK·결과 유실, Agent/Gateway 재시작, 중복·충돌·정책 변경·취소 경합 검사. 동일 변경 중복 실행 없음, 완료 결과 불변, 불확실한 부작용은 UNKNOWN 보존. 재연결 자체를 작업 성공으로 보지 않음 |
 | AS07 / P0 | **구현됨·검증 필요: drain/자원 정리** | STOP/취소/revoke/lease 만료/단절 때 소유 child tree·ConPTY·stream·Broker/Guardian·입력 lease를 추적. 종료 예산과 정리 불확실성의 durable 기록을 확인. 소유하지 않은 process/session에 영향 없음 |
-| AS08 / P1 | **미완성·검증 필요: partial provision/관리 복구** | helper/state/SCM 생성/ACL/bootstrap/config 변경 단계별 실패를 재현하고 pending/실제 상태/CAS를 대조. 안전한 중단·명시 복구·재시도 가능한 상태와 현지 확인이 필요한 상태를 구분. 기존 service/root를 자동 채택하지 않음 |
+| AS08 / P1 | **부분 구현: 미생성 restore intent 검사·CAS 취소 / partial provision 인수 미완료** | helper/state/SCM 생성/ACL/bootstrap/config 변경 단계별 실패를 재현하고 pending/실제 상태/CAS를 대조. 안전한 중단·명시 복구·재시도 가능한 상태와 현지 확인이 필요한 상태를 구분. 기존 service/root를 자동 채택하지 않음 |
 | AS09 / P1 | **부분 구현: NONE recovery readback·durable 일회성 intent·완료 maintenance CAS 재개 / 자동 활성화 보류** | 현재 demand-start와 배포 시 auto-start의 선택, SCM failure actions, crash 재시작·backoff·영구 auth 실패·사용자 stop 후 재시작 여부를 확정. 무한 재시작/중복 Agent/재등록 반복 없음. 실제 부팅/SCM 시험은 설치 금지 해제 후 수행 |
 | AS10 / P1 | **보완: 서비스 health/진단·audit** | service/local READY/Gateway 상태, boot ID·최종 오류·작업/queue/spool·cleanup 상태를 bounded status/log로 제공. RPC 거부/승인/취소/복구 원인을 추적하되 credential/token·원문 민감 출력은 노출하지 않음. 이미 연결된 diagnostics API를 재작성하지 않음 |
 | AS11 / P1 | **보완·검증 필요: Session 0과 desktop backend** | 사용자 세션 Broker 등록/launch 주체·identity·session 변경·Guardian 정리를 확정. GUI app 없이 세션 backend를 연결/시험. 세션 없는 경우 정직한 unavailable 결과, 잠금/UAC/session mismatch에서 입력 금지, 사용자의 입력 개입 시 원격 입력 해제 |
@@ -216,9 +216,11 @@ AS09의 다음 실행 경계 묶음은 durable 일회성 start intent다. 공통
 관리 helper의 `inspect_start_intent`는 private root의 typed snapshot/sha256을 반환한다. `abort_start_intent`는 `request_id`/`expected_sha256` CAS로 prepared만 취소하며, `acknowledge_start_intent`는 completed configure/reconcile/recover_sessions의 현재 receipt와 stopped/PID 0/exit 0/NONE recovery 확인 뒤에만 정상 Run을 허용한다. completed maintenance에는 일반 acknowledge를 적용하지 않는다. 제거·복원의 마지막 SYSTEM 처리가 실패하면 기존 `remove_service`/`restore_service` 입력에 **`resume_request_id`와 `resume_expected_sha256` 두 필드**를 추가해 동일한 completed purpose만 명시 재개한다. 현재 owned service 정의·실행 파일·stopped/PID 0/exit 0·NONE recovery 및 receipt/config/device를 다시 확인하고 final lock 아래 현재 state/schema/credential 존재·pending 상태를 확인한다. maintenance, 등록, bootstrap은 다시 실행하지 않는다. 제거는 DeleteService 뒤에도 barrier를 보존하고 namespace 부재를 확인한 restore만 이를 소비한다. 복원은 demand-start readback/release publish/receipt 작성 뒤 CAS acknowledge한다. 새 restore 정의에는 disabled 상태에서 NONE recovery를 먼저 설정한다. unregistered 사전검사의 allowlist에는 정확한 start-intent 파일과 세 lock 파일만 추가한다.
 
 > [!WARNING]
-> claimed/failed outcome은 자동 해제하지 않는다. 현재 inspect/abort는 설치된 stopped service를 요구하므로, service 생성 전 실패한 restore의 prepared intent와 namespace 없는 root의 일반 복구는 별도 AS08 orchestration이 필요하다. 실제 SCM/가상 계정 시험과 queued restart·boot admission은 미완료다.
+> claimed/failed outcome은 자동 해제하지 않는다. 일반 inspect/abort는 설치된 stopped service를 요구하며, service 생성 전 실패한 prepared restore만 아래 AS08의 sealed-root 경로로 검사/취소한다. 그 외 namespace 없는 root의 일반 복구와 실제 SCM/가상 계정 시험 및 queued restart·boot admission은 미완료다.
 
 첫 service bootstrap의 등록 예약은 service actor/config 확인 뒤 실행 gate의 네 고정 파일만 추가 허용한다. intent의 정상 Run 허용 phase를 다시 확인하며 미확정 intent는 token 소비 전에 차단한다. unregistered restore 후 남은 고정 maintenance/restore/detach·config/agent/settings lock은 **Acknowledged Restore와 현재 maintenance receipt hash/nonce·config hash·registered=false/device=null/state-preserved/credential-unread**가 확인된 경우에만 허용한다. 일반 사용자 등록의 empty-root 검사는 그대로 유지하고, 임의 파일·미완료/다른 purpose·변조된 receipt로 등록을 재개하지 않는다.
+
+AS08의 첫 복구 경계는 `inspect_restore_intent`와 `abort_uncreated_restore`다. 요청 계약은 공통 contract, prepared Restore 전용 CAS 전이는 core, SYSTEM/SCM 증거는 Windows adapter에 둔다. 두 요청은 `expected_config_sha256`을 요구하며 `NativeServiceConfig::read_restore`의 고정 machine root·sealed SID/private ACL·config hash 검증 뒤 ADMIN→EXECUTION→config/agent lock을 유지한다. inspect는 bounded snapshot과 namespace `absent`/`present`/`unconfirmed`를 보고하고 의도 파일을 바꾸지 않는다. abort에는 추가 `request_id`/`expected_sha256`을 요구하며 **SCM의 고정 이름 조회에서 정확히 ERROR_SERVICE_DOES_NOT_EXIST가 나온 경우에만** Prepared Maintenance Restore를 Aborted로 CAS 전이한다. namespace 증거를 JSON으로 받지 않고 SDK error를 handle cleanup 전에 보존한다. 기존 service, 접근 거부, 삭제 대기, 알 수 없는 오류 및 claimed/failed/completed·다른 purpose·stale ID/hash는 해제하지 않는다. 취소 후에는 새 UUID의 명시 restore가 필요하며 늦게 온 이전 start는 claim할 수 없다. 이 요청은 service 생성/시작/중지/제거/재설정·credential 읽기·재등록을 하지 않는다. 계약/phase/CAS/namespace 분류와 실제 파일 불변 시험 RED–GREEN→SYSTEM handoff 연결/검토→Windows 회귀·개발 payload→main 순서로 검증한다. 보호 config를 만들기 전의 partial provision, 이미 생성된 불확실한 service 및 실제 SCM 인수는 별도다.
 
 <a id="section-05"></a>
 

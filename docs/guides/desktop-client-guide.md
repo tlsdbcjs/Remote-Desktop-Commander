@@ -1,7 +1,7 @@
 # RACP native 데스크톱 클라이언트 운용 가이드
 
 > **Document ID**: `DOC-GDE-DESKTOP`\
-> **Status**: Active · **Target Version**: v0.1.29 native development\
+> **Status**: Active · **Target Version**: v0.1.30 native development\
 > **Last Updated**: 2026-10-13 · **Classification**: User & Operations Guide
 
 ## 개요
@@ -177,7 +177,7 @@ packaged native GUI의 `--service-control <shared-control-dir>`는 하나의 exp
 
 SYSTEM helper는 private root identity에 묶인 일회성 start intent를 저장하고 SCM `StartService`에 `--admin-intent <UUID>`만 전달한다. 기존 `--configure-sha256`/`--reconcile-config` start arguments는 거부한다. 등록된 ImagePath/credential을 변경하거나 command line에 토큰을 넣지 않는다. service actor는 효과 전에 claim을 저장하며 이 maintenance 실행은 config 작업만 수행하고 정지한다. Agent/WSS는 시작하지 않는다. [Microsoft ServiceMain argument 설명](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nc-winsvc-lpservice_main_functionw)의 서비스명 다음 argument 규칙을 사용한다. completed receipt hash·STOPPED/PID 0/exit 0 확인 뒤 helper가 acknowledge하며, claimed/failed 또는 receipt 불일치는 정상 시작을 차단한다. 실제 SYSTEM/SCM 실행 인수는 후속이다.
 
-`native-service-admin`의 `inspect_start_intent`, `abort_start_intent`, `acknowledge_start_intent`와 완료 maintenance의 명시 CAS 재개 규칙은 [Agent 계획 AS09](../spec/agent-service-implementation-and-test-plan.md)에 정의한다. 아직 설치된 stopped service가 없는 prepared restore 복구, queued restart 중지와 boot admission은 미완료이며 운영 절차로 실행하지 않는다.
+`native-service-admin`의 `inspect_start_intent`, `abort_start_intent`, `acknowledge_start_intent`와 완료 maintenance의 명시 CAS 재개 규칙은 [Agent 계획 AS08/AS09](../spec/agent-service-implementation-and-test-plan.md)에 정의한다. v0.1.30의 `inspect_restore_intent`는 SYSTEM이 sealed config 해시로 root를 확인한 뒤 의도 snapshot/namespace 상태를 검사하며, `abort_uncreated_restore`는 namespace 부재와 정확한 Prepared Restore ID/hash가 확인된 경우에만 취소한다. 서비스가 있거나 부재가 불확실한 경우에는 해제하지 않는다. 이미 생성된 service의 partial provision, queued restart 중지와 boot admission 및 실제 SCM 인수는 미완료이며 운영 절차로 실행하지 않는다.
 
 변경 전 old/new config와 입력 hash를 durable pending intent에 저장한다. public directory 및 endpoint/lock 파일은 service owner와 고정 inherited read ACL을 확인하고, 이전/목표 ACL로 확인된 항목만 변경하거나 reconcile한다. 알려지지 않은 SID·쓰기 권한·protected child ACL·추가 파일은 conflict로 남긴다. 실행 중인 IPC lock의 보안 조회는 기존 writer를 허용하는 read handle로 수행한다. config commit과 ACL readback 후 결과 receipt를 쓰고 pending을 제거한다. 일반 Agent 시작은 pending을 거부하므로 불확실한 변경을 자동 성공으로 처리하지 않는다.
 

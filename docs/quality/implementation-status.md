@@ -1,7 +1,7 @@
 # RACP 구현 작업 및 검증 현황 (Implementation Status)
 
 > **Document ID**: `DOC-QA-STATUS`\
-> **Status**: Active · **Target Version**: v0.1.29\
+> **Status**: Active · **Target Version**: v0.1.30\
 > **Last Updated**: 2026-10-13 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
@@ -2788,3 +2788,26 @@ GUI 툴킷은 Iced에서 **Slint 1.16.x(소프트웨어 렌더러 기본)**로 �
 
 > [!IMPORTANT]
 > 문서 결정만 바뀌었다. `apps/client-native`와 배포 빌드는 여전히 Iced 0.13.1/tiny-skia다. 코드 변경, 빌드, 버전 bump, GUI 실행은 이 배치에서 하지 않았다. 이전 순서와 단계별 완료 조건은 ADR-0032 5절을 따른다.
+
+### 2026-10-13 AS08 미생성 restore 의도 검사·CAS 취소 — v0.1.30
+
+PATCH **0.1.29→0.1.30 한 번**과 Python/Rust/optional analysis-host lock의 로컬 package version을 동기화했다. 외부 dependency pin은 변경하지 않았다. [요청 계약](../../crates/racp-contract/src/service_start.rs)의 `inspect_restore_intent`/`abort_uncreated_restore`는 config hash 및 취소 UUID/intent SHA를 검증하고 namespace 증거 등 추가 필드를 거부한다. [core 전이](../../crates/racp-core/src/service_start.rs)는 root-bound **Prepared Maintenance Restore만** CAS로 Aborted 처리한다. 다른 purpose·phase·stale ID/hash는 보존하며 늦은 이전 UUID의 claim은 거부한다.
+
+[Windows adapter](../../apps/agent/src/platform/windows/service/service_restore.rs)는 SYSTEM/현재 payload·protected image·sealed machine root/SID/private ACL/config hash 확인 뒤 ADMIN→EXECUTION→config/agent lock 아래 고정 이름의 namespace를 조회한다. 설치된 virtual account lookup을 요구하는 일반 service admin 경로 앞에서 분기한다. [Microsoft OpenServiceW 계약](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nf-winsvc-openservicew)에 따라 exact ERROR_SERVICE_DOES_NOT_EXIST만 absent로 분류하고 handle cleanup 전에 SDK error를 보존한다. present·접근 거부·삭제 대기·알 수 없는 상태에는 취소하지 않는다. inspect는 snapshot과 absent/present/unconfirmed·bounded error를 보고하며 intent 파일은 바꾸지 않는다. 취소는 service/credential/Device를 생성·수정하거나 재등록하지 않고 후속 명시 restore를 요구한다.
+
+[core RED](../../dist/verification/agent/0.1.30/restore-intent-20261013/abort-core-red.log)→[GREEN](../../dist/verification/agent/0.1.30/restore-intent-20261013/abort-core-green.log), [요청 RED](../../dist/verification/agent/0.1.30/restore-intent-20261013/request-red.log)→[GREEN](../../dist/verification/agent/0.1.30/restore-intent-20261013/request-green.log), [namespace RED](../../dist/verification/agent/0.1.30/restore-intent-20261013/namespace-red.log)→[GREEN](../../dist/verification/agent/0.1.30/restore-intent-20261013/namespace-green.log), [취소 gate RED](../../dist/verification/agent/0.1.30/restore-intent-20261013/namespace-abort-red.log)→[최종 Agent GREEN](../../dist/verification/agent/0.1.30/restore-intent-20261013/namespace-abort-green.log)을 확인했다. focused contract **3**, core **9**, Agent **12 PASS**에 신규 **5개** 시험이 포함되며, SYSTEM/SCM 호출 없는 grammar·private fixture/CAS·SDK 결과 분류 모델 시험이다. read-only reviewer는 actor/root admission·정확한 CAS·재실행 거절·namespace 불확실성 보존·lock 순서를 검사해 **추가 수정 사항 없음**으로 보고했다. reviewer도 실제 SCM/빌드/시험을 실행하지 않았다.
+
+> [!IMPORTANT]
+> AS08는 보호 config가 존재하는 **미생성 restore의 source 복구 경계**까지 진행했다. config 생성 전 partial provision, 이미 생성된 불확실한 service, claimed/failed effect recovery 및 실제 SCM/virtual account 인수는 미완료다. AS09 queued restart/사용자 Stop·boot admission·bounded restart 활성화, AS07 간헐 Browser cleanup, AS16–AS18 USB/장치 구현·물리 인수도 남아 있다. 실제 설치·서비스 등록/시작/설정·driver/device IO·기존 profile 변경은 하지 않았다.
+
+| 검사 | 결과·범위 |
+|---|---|
+| 전체 Rust 직렬 실행 | [로그](../../dist/verification/agent/0.1.30/restore-intent-20261013/rust-workspace-serial.log), **92 PASS / 1 FAIL**에서 중단, exit 101. Browser `failed_evaluation_records_started_effect_and_retains_no_child_after_timeout`가 TIMED_OUT 대신 UNKNOWN 반환. 전체 suite PASS로 판정하지 않음 |
+| 중단 뒤 미실행 target | [Filesystem/Memory/Process/Shell/Terminal](../../dist/verification/agent/0.1.30/restore-intent-20261013/runtime-remaining.log) **15 PASS / 4 fixture ignored**, [Desktop 모델/identity/wire](../../dist/verification/agent/0.1.30/restore-intent-20261013/desktop-regression.log) **11 PASS**, [xtask](../../dist/verification/agent/0.1.30/restore-intent-20261013/xtask-tests.log) **3 PASS**. 개별 target 실행으로 전체 FAIL을 덮어쓰지 않음 |
+| Python·정적 검사 | [Python](../../dist/verification/agent/0.1.30/restore-intent-20261013/python.log) **11 PASS**, [Ruff](../../dist/verification/agent/0.1.30/restore-intent-20261013/ruff.log) PASS, [mypy](../../dist/verification/agent/0.1.30/restore-intent-20261013/mypy.log) **98 files PASS**, scoped Rust fmt/diff check PASS, [inventory](../../dist/verification/agent/0.1.30/restore-intent-20261013/inventory.log) **114 ops / 143 permissions / 18 categories**, frozen 100 baseline 유지 |
+| Windows Agent 개발 payload | [manifest](../../dist/agent/0.1.30/win-x64/restore-intent-20261013-a/staging/build-manifest.json)·[stage](../../dist/verification/agent/0.1.30/restore-intent-20261013/stage.log)·[verify](../../dist/verification/agent/0.1.30/restore-intent-20261013/verify-stage.log), Rust 1.90.0 Windows x64 release/static CRT·3-file GUI-free allowlist·PE/native imports/hash PASS. 설치 artifact 생성/실행 없음 |
+| 최종 EXE 실제 원격 회귀 | [results](../../dist/verification/agent/0.1.30/restore-intent-e2e-20261013-a/results.json)·[로그](../../dist/verification/agent/0.1.30/restore-intent-20261013/e2e.log), **21 PASS / 0 FAIL**, exit 0. 격리 HTTPS/WSS·인증 IPC/headless·승인/replay·파일·ConPTY·CAS/cancel/stop/재시작. 기존 profile 및 SCM/service-account 미사용이며 실제 AS08 SYSTEM/namespace 인수로 해석하지 않음 |
+
+최종 EXE **22,391,296 bytes**, SHA-256 **`62affae11742147e5501994c3545d9936e226f72592d69fba7bceb9bf80cf8d3`**, payload manifest **`c21623a32dbb020e978c499f3758ba3c20dd7f043122137fcfd85ac91912765e`**, source input digest **`454a18ebefa8eafaae2b5a71b1030ab5ff634a8b4944ef9f40797b32fe834a0a`**다. 최종 E2E EXE hash는 manifest와 일치하고 harness SHA는 **`fd9b319d459948f5fed9dc5b8b6b8ed6de46e249392c8f4191ccd9fa93d65a1e`**다. baseline `635d08a` 및 당시 dirty source를 기록한 unsigned 개발 후보이며 기능 전체 검증/서비스 릴리스를 선언하지 않는다.
+
+AS07 실패 조사: [단독 재실행](../../dist/verification/agent/0.1.30/restore-intent-20261013/browser-timeout-diagnostic.log)은 **1 PASS**지만 목표 assertion에 진단이 붙지 않아 경계 데이터를 수집하지 못했다. 정확한 timeout assertion에 진단을 연결한 [Browser 그룹 실행](../../dist/verification/agent/0.1.30/restore-intent-20261013/browser-group-diagnostic.log)은 **19 PASS / 1 FAIL**, UNKNOWN의 code **EXECUTION_UNKNOWN**을 확인했다. 이어 [close 경계 진단](../../dist/verification/agent/0.1.30/restore-intent-20261013/browser-close-boundaries.log)은 **18 PASS / 2 FAIL**(concurrent close, cookies/form cleanup)이며 worker 종료와 kill 요청 뒤 **parent exit signal=false / Job tree empty=true**인 상태로 5초 deadline에 도달했다. profile 삭제 단계까지 도달하기 전의 종료 증명 실패라는 근거를 얻었으나 아직 원인을 수정하지 않았다. 임시 test/production 진단 코드는 원본 bytes로 복구했고 Browser 소스·시험의 최종 diff는 0이다. deadline을 늘리거나 exit code/빈 Job만으로 성공 판정을 대체하지 않았다. 다음 AS07 조사는 부모 handle signal·Job membership/termination·pending IO 경계다.

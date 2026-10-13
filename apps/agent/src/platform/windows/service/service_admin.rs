@@ -151,6 +151,9 @@ pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
     if action == "restore_service" {
         return super::service_restore::execute(&root, &input);
     }
+    if ["inspect_restore_intent", "abort_uncreated_restore"].contains(&action) {
+        return super::service_restore::manage_intent(&root, &input);
+    }
     let store = StartStore::new(racp_core::machine_service::pin_private(&root)?)?;
     let _administration = store.admin_guard()?;
     let service = owned(&root)?;

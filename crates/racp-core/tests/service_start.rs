@@ -26,6 +26,64 @@ fn command() -> StartCommand {
 }
 
 #[test]
+fn uncreated_restore_abort_requires_prepared_restore_and_exact_cas() {
+    use racp_contract::service_start::MaintenancePurpose;
+    let root = tempfile::tempdir().unwrap();
+    let store = store(&root.path().join("private"));
+    let restore = || StartCommand::Maintenance {
+        purpose: MaintenancePurpose::Restore,
+        request_id: racp_contract::new_id("maintenance"),
+    };
+    let prepared = store.prepare(restore()).unwrap();
+    assert!(store
+        .abort_prepared_restore(&prepared.intent.request_id, &"0".repeat(64))
+        .is_err());
+    assert!(store.allow_run().is_err());
+    let aborted = store
+        .abort_prepared_restore(&prepared.intent.request_id, &prepared.sha256)
+        .unwrap();
+    assert!(matches!(aborted.intent.phase, StartPhase::Aborted {}));
+    assert!(store
+        .execute_once(&prepared.intent.request_id, |_| panic!(
+            "must never run aborted restore"
+        ))
+        .is_err());
+    let next = store.prepare(restore()).unwrap();
+    assert_ne!(next.intent.request_id, prepared.intent.request_id);
+    store
+        .execute_once(&next.intent.request_id, |_| Ok(b"{}".to_vec()))
+        .unwrap();
+    let completed = store.snapshot().unwrap().unwrap();
+    assert!(store
+        .abort_prepared_restore(&next.intent.request_id, &completed.sha256)
+        .is_err());
+    assert!(store.allow_run().is_err());
+}
+
+#[test]
+fn uncreated_restore_abort_cannot_clear_a_different_prepared_command() {
+    use racp_contract::service_start::MaintenancePurpose;
+    let root = tempfile::tempdir().unwrap();
+    let store = store(&root.path().join("private"));
+    for command in [
+        command(),
+        StartCommand::Maintenance {
+            purpose: MaintenancePurpose::Remove,
+            request_id: racp_contract::new_id("maintenance"),
+        },
+    ] {
+        let prepared = store.prepare(command).unwrap();
+        assert!(store
+            .abort_prepared_restore(&prepared.intent.request_id, &prepared.sha256)
+            .is_err());
+        assert_eq!(store.snapshot().unwrap().unwrap().sha256, prepared.sha256);
+        store
+            .abort_prepared(&prepared.intent.request_id, &prepared.sha256)
+            .unwrap();
+    }
+}
+
+#[test]
 fn pending_and_claimed_admin_starts_block_normal_run_and_replay_after_crash() {
     let root = tempfile::tempdir().unwrap();
     let root = root.path().join("private");

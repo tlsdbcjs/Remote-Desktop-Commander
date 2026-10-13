@@ -212,6 +212,30 @@ impl StartStore {
         record.intent.phase = StartPhase::Aborted {};
         self.write(record.intent, true)
     }
+
+    /// Caller holds ADMIN/EXECUTION and proves the fixed SCM namespace is absent.
+    /// No claimed effect, completed receipt, or different command may be cleared.
+    pub fn abort_prepared_restore(
+        &self,
+        request: &str,
+        expected: &str,
+    ) -> Result<StartSnapshot, RacpError> {
+        let _lock = self.lock()?;
+        let mut record = self.cas(request, expected)?;
+        if !matches!(record.intent.phase, StartPhase::Prepared {})
+            || !matches!(
+                record.intent.command,
+                StartCommand::Maintenance {
+                    purpose: MaintenancePurpose::Restore,
+                    ..
+                }
+            )
+        {
+            return Err(RacpError::new("SERVICE_START_INTENT_CONFLICT"));
+        }
+        record.intent.phase = StartPhase::Aborted {};
+        self.write(record.intent, true)
+    }
 }
 fn receipt_hash(raw: &[u8]) -> Result<String, RacpError> {
     if raw.len() > MAX_RECEIPT_BYTES

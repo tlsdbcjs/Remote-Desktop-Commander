@@ -17,6 +17,49 @@ pub fn hash(value: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// SYSTEM requests against a sealed restore root. Namespace evidence is never input.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum RestoreIntentRequest {
+    InspectRestoreIntent {
+        expected_config_sha256: String,
+    },
+    AbortUncreatedRestore {
+        expected_config_sha256: String,
+        request_id: String,
+        expected_sha256: String,
+    },
+}
+impl RestoreIntentRequest {
+    pub fn config_hash(&self) -> &str {
+        match self {
+            Self::InspectRestoreIntent {
+                expected_config_sha256,
+            }
+            | Self::AbortUncreatedRestore {
+                expected_config_sha256,
+                ..
+            } => expected_config_sha256,
+        }
+    }
+    pub fn validate(&self) -> Result<(), RacpError> {
+        let valid = hash(self.config_hash())
+            && match self {
+                Self::InspectRestoreIntent { .. } => true,
+                Self::AbortUncreatedRestore {
+                    request_id,
+                    expected_sha256,
+                    ..
+                } => id(request_id, "service_start_") && hash(expected_sha256),
+            };
+        if valid {
+            Ok(())
+        } else {
+            Err(RacpError::new("REQUEST_INVALID"))
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MaintenancePurpose {

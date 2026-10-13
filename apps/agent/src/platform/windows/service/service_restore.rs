@@ -22,6 +22,178 @@ impl Drop for Service {
 fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(Some(0)).collect()
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum NamespaceState {
+    Absent,
+    Present,
+}
+fn classify_namespace(opened: bool, error: u32) -> Result<NamespaceState, RacpError> {
+    if opened {
+        Ok(NamespaceState::Present)
+    } else if error == ERROR_SERVICE_DOES_NOT_EXIST {
+        Ok(NamespaceState::Absent)
+    } else {
+        Err(RacpError::new("SERVICE_RESTORE_NAMESPACE_UNCONFIRMED"))
+    }
+}
+fn namespace() -> Result<NamespaceState, RacpError> {
+    let manager = unsafe { OpenSCManagerW(std::ptr::null(), std::ptr::null(), SC_MANAGER_CONNECT) };
+    if manager.is_null() {
+        return Err(RacpError::new("PERMISSION_DENIED"));
+    }
+    let manager = Service(manager);
+    let service =
+        unsafe { OpenServiceW(manager.0, wide(SERVICE_NAME).as_ptr(), SERVICE_QUERY_STATUS) };
+    if service.is_null() {
+        // Capture before any CloseServiceHandle/drop can overwrite the SDK error.
+        let error = unsafe { GetLastError() };
+        classify_namespace(false, error)
+    } else {
+        drop(Service(service));
+        classify_namespace(true, ERROR_SUCCESS)
+    }
+}
+
+fn abort_after_namespace_check(
+    store: &StartStore,
+    request: &str,
+    expected: &str,
+    observed: Result<NamespaceState, RacpError>,
+) -> Result<racp_core::service_start::StartSnapshot, RacpError> {
+    if observed? != NamespaceState::Absent {
+        return Err(RacpError::new("SERVICE_RESTORE_ALREADY_CONFIGURED"));
+    }
+    store.abort_prepared_restore(request, expected)
+}
+
+/// Read/abort a sealed root without resolving an installed virtual account.
+/// All SCM operations here are fixed-name queries; no service or credential mutation.
+pub(super) fn manage_intent(root: &Path, input: &Value) -> Result<Value, RacpError> {
+    use racp_contract::service_start::RestoreIntentRequest;
+    machine::require_system()?;
+    let request: RestoreIntentRequest =
+        serde_json::from_value(input.clone()).map_err(|_| RacpError::new("REQUEST_INVALID"))?;
+    request.validate()?;
+    let expected = request.config_hash();
+    let config = NativeServiceConfig::read_restore(root, expected)?;
+    let store = StartStore::new(machine::pin_private_sid(root, &config.scope.service_sid)?)?;
+    let _administration = store.admin_guard()?;
+    let _execution = store.execution_guard()?;
+    let _config = racp_core::InstanceLock::acquire(&root.join(CONFIG_LOCK))?;
+    let _agent = racp_core::InstanceLock::acquire(&root.join("native-agent.lock"))?;
+    if digest(racp_core::read_bounded(
+        &root.join(CONFIG_FILE),
+        16384,
+        false,
+    )?) != expected
+        || root.join(CONFIG_PENDING).try_exists()?
+    {
+        return Err(RacpError::new("STATE_REVISION_CONFLICT"));
+    }
+    let observed = namespace();
+    match &request {
+        RestoreIntentRequest::InspectRestoreIntent { .. } => {
+            let (state, error) = match observed {
+                Ok(NamespaceState::Absent) => ("absent", None),
+                Ok(NamespaceState::Present) => ("present", None),
+                Err(error) => ("unconfirmed", Some(error.code.0)),
+            };
+            Ok(
+                json!({"namespace":state,"namespace_error":error,"config_sha256":expected,
+                "start_intent":store.snapshot()?,"intent_modified":false}),
+            )
+        }
+        RestoreIntentRequest::AbortUncreatedRestore {
+            request_id,
+            expected_sha256,
+            ..
+        } => {
+            let aborted =
+                abort_after_namespace_check(&store, request_id, expected_sha256, observed)?;
+            Ok(
+                json!({"namespace":"absent","aborted":true,"start_intent":aborted,
+                "state_preserved":true,"credential_accessed":false,"requires_explicit_restore":true}),
+            )
+        }
+    }
+}
+
+#[cfg(test)]
+mod namespace_tests {
+    use super::*;
+    #[test]
+    fn uncreated_abort_preserves_intent_when_namespace_is_present_or_unconfirmed() {
+        let root = std::env::temp_dir().join(new_id("racp_restore_gate_test"));
+        racp_core::create_private_native_directory(&root).unwrap();
+        let store = StartStore::new(
+            racp_core::Workspaces::new(&root, &[])
+                .unwrap()
+                .directory("default", &root)
+                .unwrap(),
+        )
+        .unwrap();
+        let _admin = store.admin_guard().unwrap();
+        let _execution = store.execution_guard().unwrap();
+        let record = store
+            .prepare(StartCommand::Maintenance {
+                purpose: MaintenancePurpose::Restore,
+                request_id: new_id("maintenance"),
+            })
+            .unwrap();
+        assert!(abort_after_namespace_check(
+            &store,
+            &record.intent.request_id,
+            &record.sha256,
+            Ok(NamespaceState::Present)
+        )
+        .is_err());
+        assert!(abort_after_namespace_check(
+            &store,
+            &record.intent.request_id,
+            &record.sha256,
+            Err(RacpError::new("PERMISSION_DENIED"))
+        )
+        .is_err());
+        assert_eq!(store.snapshot().unwrap().unwrap().sha256, record.sha256);
+        let aborted = abort_after_namespace_check(
+            &store,
+            &record.intent.request_id,
+            &record.sha256,
+            Ok(NamespaceState::Absent),
+        )
+        .unwrap();
+        assert!(matches!(aborted.intent.phase, StartPhase::Aborted {}));
+        assert!(store
+            .execute_once(&record.intent.request_id, |_| panic!(
+                "delayed restore start must be rejected"
+            ))
+            .is_err());
+        drop(_execution);
+        drop(_admin);
+        drop(store);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn namespace_absence_requires_the_exact_scm_not_exists_result() {
+        assert!(matches!(
+            classify_namespace(false, ERROR_SERVICE_DOES_NOT_EXIST).unwrap(),
+            NamespaceState::Absent
+        ));
+        assert!(matches!(
+            classify_namespace(true, ERROR_SERVICE_DOES_NOT_EXIST).unwrap(),
+            NamespaceState::Present
+        ));
+        for error in [
+            ERROR_ACCESS_DENIED,
+            ERROR_SERVICE_MARKED_FOR_DELETE,
+            ERROR_INVALID_HANDLE,
+            ERROR_SUCCESS,
+        ] {
+            assert!(classify_namespace(false, error).is_err());
+        }
+    }
+}
 fn hash(value: &Value) -> Option<&str> {
     value.as_str().filter(|value| {
         value.len() == 64
