@@ -48,7 +48,7 @@ docs/
 ├── adr/                           # Architecture Decision Records
 │   ├── README.md                  # ADR Index & Decision Registry
 │   ├── ADR-0001-bootstrap-and-verification.md
-│   └── ... (ADR-0001 through ADR-0029)
+│   └── ... (ADR-0001 through ADR-0022, ADR-0032)
 └── protocol/                      # Protocol Contracts & JSON Schemas
     ├── README.md                  # Protocol Schema & OpenAPI Overview
     ├── agent-protocol-v1.schema.json
@@ -61,7 +61,7 @@ docs/
 ## 3. File Naming Conventions
 
 - **General Documents & Guides**: Lowercase `kebab-case.md` (e.g., `desktop-client-guide.md`, `windows-engineering-plan.md`).
-- **Architecture Decision Records**: Uppercase prefix with 4-digit sequence: `ADR-XXXX-topic-name.md` (e.g., `ADR-0028-connection-file-onboarding.md`).
+- **Architecture Decision Records**: Uppercase prefix with 4-digit sequence: `ADR-XXXX-topic-name.md` (e.g., `ADR-0032-native-client.md`).
 - **Directory Index Files**: `README.md` inside each subfolder.
 - **Protocol Schemas**: `*-v{N}.schema.json` or `*-v{N}.json`.
 

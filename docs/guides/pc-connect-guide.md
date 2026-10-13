@@ -136,4 +136,4 @@ $State = 'C:\RACP\agent-state'
 - [백그라운드 에이전트 가이드](background-agent-guide.md)
 - [원격 MCP OAuth 설정 가이드](remote-mcp-oauth-setup.md)
 - [아키텍처 결정 레코드: ADR-0019 (한 명령 PC 등록)](../adr/ADR-0019-protected-one-command-pc-enrollment.md)
-- [아키텍처 결정 레코드: ADR-0027 (최초 등록 및 진단)](../adr/ADR-0027-one-time-setup-and-safe-diagnostics.md)
+- [아키텍처 결정 레코드: ADR-0032 (Native Client 등록·설정)](../adr/ADR-0032-native-client.md)

@@ -96,4 +96,4 @@ cargo run --locked -p xtask -- verify-agent --build-id <unique-build-id>
 - [Desktop Client Guide](desktop-client-guide.md)
 - [전체 Rust 전환 계획](../spec/rust-client-migration-plan.md)
 - [구현 현황](../quality/implementation-status.md)
-- [Native Client ADR](../adr/ADR-0031-native-rust-client-and-isolated-state.md)
+- [Native Client ADR](../adr/ADR-0032-native-client.md)
