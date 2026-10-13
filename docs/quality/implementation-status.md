@@ -2758,3 +2758,5 @@ PATCH **0.1.28→0.1.29 한 번**과 Python/Rust/optional analysis-host lock의 
 
 > [!IMPORTANT]
 > AS09는 **일회성 관리 작업의 durable 실행 경계 source·개발 검증**까지 진행했다. claimed/failed의 수동 outcome recovery, namespace 없는 prepared restore 관리(AS08), queued restart 중지·bounded restart 활성화·boot admission, 실제 SCM/SYSTEM/virtual account/설치 인수는 미완료다. AS16–AS18 USB/장치 계약·backend·수집·물리 인수도 남아 있다. 실제 설치·서비스 등록/시작·driver/device IO·기존 profile 변경은 하지 않았다. GUI source와 사용자 미추적 파일 3개를 보존한다.
+
+구현 commit **`bd332e5`**를 로컬 `main`에 fast-forward 반영했다. [main 전체 직렬 회귀](../../dist/verification/agent/0.1.29/start-intent-main/rust-workspace-serial.log)는 **116 PASS / 0 FAIL / 4 ignored**, main의 Python **11 PASS**, Ruff/mypy **98 files PASS**, version **0.1.29**다. 위 staging bytes와 생성된 출력 디렉터리의 private DACL 및 비밀 없는 logs/최종 results만 main 출력 위치로 보존했고 [main payload verify](../../dist/verification/agent/0.1.29/start-intent-main/verify-stage.log)도 PASS다. EXE SHA는 위 E2E와 동일하다. 시험 credential/등록 state는 복사하지 않았으며 기존 profile/service를 변경하지 않았다. 새 문서 상대 링크를 확인했고 사용자 미추적 GUI/계획 파일 3개는 유지한다. push 없이 다음 roadmap 작업을 계속하며 managed worktree는 보존한다.
