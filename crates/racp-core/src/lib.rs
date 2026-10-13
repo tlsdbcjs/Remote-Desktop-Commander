@@ -15,6 +15,7 @@ pub mod native_service;
 pub mod service_config;
 #[cfg(windows)]
 pub mod service_directory;
+pub mod service_provision;
 pub mod service_start;
 pub use native_directory::{
     create as create_private_native_directory, verify as verify_private_native_directory,

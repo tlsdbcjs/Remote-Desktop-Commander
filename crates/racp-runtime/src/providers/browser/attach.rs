@@ -153,7 +153,7 @@ impl Browser {
                 pages: Default::default(),
                 expires: Instant::now() + Duration::from_secs(3600),
             }),
-            process: Mutex::new(None),
+            process: Arc::new(Mutex::new(None)),
             protected: Mutex::new(None),
             proxy,
             profile,

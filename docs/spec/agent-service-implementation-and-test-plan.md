@@ -1,7 +1,7 @@
 # Rust Agent 서비스 구현 및 검증 작업 계획
 
 > **Document ID**: `DOC-PLAN-AGENT-SERVICE`\
-> **Status**: Active · **Target Version**: v0.1.35 source / Agent 서비스 릴리스 인수 미완료\
+> **Status**: Active · **Target Version**: v0.1.36 source / Agent 서비스 릴리스 인수 미완료\
 > **Last Updated**: 2026-10-13 · **Classification**: Service Implementation & Test Plan
 
 ## 개요
@@ -195,7 +195,7 @@ P0는 Agent 서비스의 독립 실행·원격 제어·권한/정리 경계, P1�
 | AS05 / P0 | **구현됨·서비스 조건 검증 필요: 원격 핵심 작업** | 실제 MCP/API→Gateway→service Agent의 파일/전송·명령 stdout/stderr/exit·process·ConPTY 작업을 검사. service account의 workspace/executable 권한과 실제 부작용·최종 결과 일치. 다른 Device·폴더·process를 실행 대상으로 채택하지 않음 |
 | AS06 / P0 | **구현됨·검증 필요: journal/멱등성/재연결** | ACK·결과 유실, Agent/Gateway 재시작, 중복·충돌·정책 변경·취소 경합 검사. 동일 변경 중복 실행 없음, 완료 결과 불변, 불확실한 부작용은 UNKNOWN 보존. 재연결 자체를 작업 성공으로 보지 않음 |
 | AS07 / P0 | **구현됨·검증 필요: drain/자원 정리** | STOP/취소/revoke/lease 만료/단절 때 소유 child tree·ConPTY·stream·Broker/Guardian·입력 lease를 추적. 종료 예산과 정리 불확실성의 durable 기록을 확인. 소유하지 않은 process/session에 영향 없음 |
-| AS08 / P1 | **부분 구현: 미생성 restore intent 검사·CAS 취소 / partial provision 인수 미완료** | helper/state/SCM 생성/ACL/bootstrap/config 변경 단계별 실패를 재현하고 pending/실제 상태/CAS를 대조. 안전한 중단·명시 복구·재시도 가능한 상태와 현지 확인이 필요한 상태를 구분. 기존 service/root를 자동 채택하지 않음 |
+| AS08 / P1 | **부분 구현: 미생성 restore intent 검사·CAS 취소 및 typed provision receipt 검사 / partial provision 인수 미완료** | helper/state/SCM 생성/ACL/bootstrap/config 변경 단계별 실패를 재현하고 pending/실제 상태/CAS를 대조. 안전한 중단·명시 복구·재시도 가능한 상태와 현지 확인이 필요한 상태를 구분. 기존 service/root를 자동 채택하지 않음 |
 | AS09 / P1 | **부분 구현: NONE recovery readback·durable 일회성 intent·완료 maintenance CAS 재개 / 자동 활성화 보류** | 현재 demand-start와 배포 시 auto-start의 선택, SCM failure actions, crash 재시작·backoff·영구 auth 실패·사용자 stop 후 재시작 여부를 확정. 무한 재시작/중복 Agent/재등록 반복 없음. 실제 부팅/SCM 시험은 설치 금지 해제 후 수행 |
 | AS10 / P1 | **보완: 서비스 health/진단·audit** | service/local READY/Gateway 상태, boot ID·최종 오류·작업/queue/spool·cleanup 상태를 bounded status/log로 제공. RPC 거부/승인/취소/복구 원인을 추적하되 credential/token·원문 민감 출력은 노출하지 않음. 이미 연결된 diagnostics API를 재작성하지 않음 |
 | AS11 / P1 | **보완·검증 필요: Session 0과 desktop backend** | 사용자 세션 Broker 등록/launch 주체·identity·session 변경·Guardian 정리를 확정. GUI app 없이 세션 backend를 연결/시험. 세션 없는 경우 정직한 unavailable 결과, 잠금/UAC/session mismatch에서 입력 금지, 사용자의 입력 개입 시 원격 입력 해제 |
@@ -331,3 +331,6 @@ AST24–AST26의 실제 장치 접근·분리/재연결·수집은 수행하지 
 - [Windows 세부 시험/두 PC 계획](windows-engineering-plan.md)
 - [저장소 실행·빌드 규칙](../../AGENTS.md)
 - [명세서 목록](README.md)
+
+
+AS08 fresh provision progress uses a typed, bounded receipt with pinned-directory identity, nonce, payload/bootstrap hashes and exact predecessor CAS. The SYSTEM administrative `inspect_provision_receipt` request requires the expected receipt SHA-256 and works before service config exists. Inspection reports recorded progress only: service and registration state are explicitly unobserved. Reserved does not prove SCM creation never happened; prepared does not prove enrollment/readiness. Corrupt, foreign, skipped or stale progress cannot overwrite a receipt. Automatic retry, adoption, resume/rollback and actual SCM failure injection remain incomplete; installation restrictions stay in force.

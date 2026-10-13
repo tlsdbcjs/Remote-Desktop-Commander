@@ -305,7 +305,10 @@ async fn cookies_form_refs_native_input_png_and_navigation_invalidation() {
 
 #[tokio::test]
 async fn frame_scope_cross_site_input_key_focus_and_detachment() {
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+    // Different host names preserve cross-site coverage on the same loopback
+    // listener; this fixture must not expose a changing test EXE to the LAN.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    assert!(listener.local_addr().unwrap().ip().is_loopback());
     let port = listener.local_addr().unwrap().port();
     let url = format!("http://127.0.0.1:{port}/root");
     let server = tokio::spawn(async move {

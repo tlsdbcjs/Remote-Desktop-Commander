@@ -18,12 +18,14 @@ use tokio_util::sync::CancellationToken;
 async fn remove_profile_after_cleanup(
     profile: &std::path::Path,
     ready: &std::sync::atomic::AtomicBool,
-    cleanup: impl FnOnce() -> Result<(), RacpError>,
+    cleanup: impl FnOnce() -> Result<(), RacpError> + Send + 'static,
 ) -> Result<(), RacpError> {
     // Dropping the process requests termination but cannot report its outcome.
     // Keep ownership evidence until the parent handle and entire tree confirm exit.
     let result = async {
-        cleanup()?;
+        tokio::task::spawn_blocking(cleanup)
+            .await
+            .map_err(|_| RacpError::new("CLEANUP_FAILED"))??;
         racp_core::validate_local_path(profile)?;
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
@@ -165,7 +167,7 @@ pub(super) struct Session {
     pub cdp: Cdp,
     pub context: String,
     pub state: Mutex<State>,
-    pub process: Mutex<Option<OwnedProcess>>,
+    pub process: Arc<Mutex<Option<OwnedProcess>>>,
     pub protected: Mutex<Option<crate::identity::ProtectedProcess>>,
     pub proxy: super::PolicyProxy,
     pub profile: PathBuf,
@@ -253,7 +255,7 @@ impl Browser {
                         .state
                         .lock()
                         .is_ok_and(|s| s.expires <= Instant::now());
-                    if let Ok(mut owned) = session.process.lock() {
+                    if let Ok(mut owned) = session.process.try_lock() {
                         if let Some(owned) = owned.as_mut() {
                             let mut data = [0; 8192];
                             for pipe in [&mut owned.stdout, &mut owned.stderr] {
@@ -386,8 +388,10 @@ impl Browser {
         if let Err(error) =
             super::recovery::persist_process(&profile, &self.device, &self.boot, &process)
         {
-            remove_profile_after_cleanup(&profile, &self.ready, || terminate_owned(&mut process))
-                .await?;
+            remove_profile_after_cleanup(&profile, &self.ready, move || {
+                terminate_owned(&mut process)
+            })
+            .await?;
             return Err(error);
         }
         let connection = async {
@@ -425,7 +429,7 @@ impl Browser {
         let cdp = match connection {
             Ok(cdp) => cdp,
             Err(e) => {
-                remove_profile_after_cleanup(&profile, &self.ready, || {
+                remove_profile_after_cleanup(&profile, &self.ready, move || {
                     terminate_owned(&mut process)
                 })
                 .await?;
@@ -441,7 +445,7 @@ impl Browser {
             }
             Err(error) => {
                 cdp.close().await;
-                remove_profile_after_cleanup(&profile, &self.ready, || {
+                remove_profile_after_cleanup(&profile, &self.ready, move || {
                     terminate_owned(&mut process)
                 })
                 .await?;
@@ -452,7 +456,7 @@ impl Browser {
             Ok(proxy) => proxy,
             Err(error) => {
                 cdp.close().await;
-                remove_profile_after_cleanup(&profile, &self.ready, || {
+                remove_profile_after_cleanup(&profile, &self.ready, move || {
                     terminate_owned(&mut process)
                 })
                 .await?;
@@ -471,7 +475,7 @@ impl Browser {
             Ok(value) => value["browserContextId"].as_str().unwrap_or("").to_owned(),
             Err(e) => {
                 cdp.close().await;
-                remove_profile_after_cleanup(&profile, &self.ready, || terminate_owned(&mut process)).await?;
+                remove_profile_after_cleanup(&profile, &self.ready, move || terminate_owned(&mut process)).await?;
                 return Err(e);
             }
         };
@@ -499,7 +503,7 @@ impl Browser {
                 pages: BTreeMap::new(),
                 expires: Instant::now() + Duration::from_secs(3600),
             }),
-            process: Mutex::new(Some(process)),
+            process: Arc::new(Mutex::new(Some(process))),
             protected: Mutex::new(Some(protected)),
             proxy,
             profile,
@@ -737,20 +741,25 @@ impl Session {
         }
         self.proxy.close().await;
         self.cdp.close().await;
-        {
-            let mut owned = self
-                .process
+        // A blocking wait must not stall the CDP/proxy/fixture IO executor.
+        // Keep the process slot and its pinned handle until exit is confirmed.
+        let process = self.process.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut owned = process
                 .lock()
                 .map_err(|_| RacpError::new("CLEANUP_FAILED"))?;
             if let Some(process) = owned.as_mut() {
                 terminate_owned(process)?;
                 owned.take();
-                self.protected
-                    .lock()
-                    .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
-                    .take();
             }
-        }
+            Ok::<_, RacpError>(())
+        })
+        .await
+        .map_err(|_| RacpError::new("CLEANUP_FAILED"))??;
+        self.protected
+            .lock()
+            .map_err(|_| RacpError::new("CLEANUP_FAILED"))?
+            .take();
         // Only our uniquely created profile is removed, after the owned process tree exits.
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
@@ -1643,6 +1652,25 @@ mod frame_race_tests {
     #[tokio::test]
     async fn queued_browser_attach_rechecks_cleanup_readiness_after_lock() {
         queued_start_is_rejected_after_cleanup_failure(true).await;
+    }
+    #[tokio::test]
+    async fn startup_native_wait_does_not_run_on_the_async_executor_thread() {
+        let root = tempfile::tempdir().unwrap();
+        let profile = root.path().join("owned-profile");
+        std::fs::create_dir(&profile).unwrap();
+        let ready = std::sync::atomic::AtomicBool::new(true);
+        let executor_thread = std::thread::current().id();
+        remove_profile_after_cleanup(&profile, &ready, move || {
+            assert_ne!(
+                std::thread::current().id(),
+                executor_thread,
+                "native termination waits must leave the async executor free"
+            );
+            Ok(())
+        })
+        .await
+        .unwrap();
+        assert!(!profile.exists());
     }
     #[tokio::test]
     async fn startup_cleanup_failure_preserves_profile_and_recovery_record() {

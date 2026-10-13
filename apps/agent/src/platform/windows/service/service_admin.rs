@@ -148,6 +148,9 @@ pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
     let action = input["type"]
         .as_str()
         .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
+    if action == "inspect_provision_receipt" {
+        return super::service_provision::inspect(&root, &input);
+    }
     if action == "restore_service" {
         return super::service_restore::execute(&root, &input);
     }

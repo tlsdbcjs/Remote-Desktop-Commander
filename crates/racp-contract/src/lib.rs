@@ -1,11 +1,12 @@
 //! Existing RACP schemas are the authority at every untrusted JSON boundary.
 pub mod distribution;
-pub mod hardware;
 mod error;
+pub mod hardware;
 pub mod local_ipc;
 mod operations;
 pub mod runtime_manifest;
 mod schema;
+pub mod service_provision;
 pub mod service_recovery;
 pub mod service_scope;
 pub mod service_start;

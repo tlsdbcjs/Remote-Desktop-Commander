@@ -88,21 +88,27 @@ fn quote(path: &Path) -> Result<String, RacpError> {
     }
     Ok(format!("\"{text}\""))
 }
-fn progress(
-    parent: &Path,
-    nonce: &str,
-    phase: &str,
-    payload_hash: &str,
-    bootstrap_hash: &str,
-) -> Result<(), RacpError> {
-    racp_core::atomic_write(
-        &parent.join("native-service-provision.json"),
-        &serde_json::to_vec(&json!({"format_version":1,"nonce":nonce,"phase":phase,
-            "service_name":SERVICE_NAME,"payload_manifest_sha256":payload_hash,
-            "bootstrap_sha256":bootstrap_hash,"registered":false,"ready":false}))?,
-        true,
-    )
-    .map_err(|_| RacpError::new("SERVICE_PROVISION_OUTCOME_UNKNOWN"))
+/// Administrative evidence inspection only; it does not adopt or start a service.
+pub fn inspect(root: &Path, input: &Value) -> Result<Value, RacpError> {
+    machine::require_system()?;
+    let request: racp_contract::service_provision::ProvisionRequest =
+        serde_json::from_value(input.clone()).map_err(|_| RacpError::new("REQUEST_INVALID"))?;
+    let expected = request.expected_hash()?;
+    let parent = machine::data_parent()?;
+    if racp_core::validate_local_path(root)? != parent.join("state") {
+        return Err(RacpError::new("SERVICE_PROVISION_CONFLICT"));
+    }
+    let store =
+        racp_core::service_provision::ProvisionStore::new(machine::pin_secure_parent(&parent)?)?;
+    let snapshot = store
+        .snapshot()?
+        .ok_or_else(|| RacpError::new("SERVICE_PROVISION_RECEIPT_MISSING"))?;
+    if snapshot.sha256 != expected {
+        return Err(RacpError::new("STATE_REVISION_CONFLICT"));
+    }
+    Ok(json!({"provision":snapshot,"service_state_observed":false,
+        "registration_state_observed":false,"automatic_adoption":false,
+        "recovery":"local_inspection_required_no_automatic_retry"}))
 }
 pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
     machine::require_system()?;
@@ -226,9 +232,18 @@ pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
         return Err(RacpError::new("SERVICE_OWNERSHIP_CONFLICT"));
     }
     let _privilege = machine::RestorePrivilege::enable()?;
-    let _parent = machine::create_system_parent(&parent)?;
+    let provision =
+        racp_core::service_provision::ProvisionStore::new(machine::create_system_parent(&parent)?)?;
     let nonce = racp_contract::new_id("provision");
-    progress(&parent, &nonce, "reserved", &payload_hash, &bootstrap_hash)?;
+    let mut progress = provision
+        .begin(
+            racp_contract::service_provision::ProvisionReceipt::reserved(
+                nonce.clone(),
+                payload_hash.clone(),
+                bootstrap_hash.clone(),
+            )?,
+        )
+        .map_err(|_| RacpError::new("SERVICE_PROVISION_OUTCOME_UNKNOWN"))?;
     let service = unsafe {
         CreateServiceW(
             manager.0,
@@ -250,13 +265,12 @@ pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
         return Err(RacpError::new("SERVICE_PROVISION_OUTCOME_UNKNOWN"));
     }
     let service = Handle(service);
-    progress(
-        &parent,
-        &nonce,
-        "service_created_disabled",
-        &payload_hash,
-        &bootstrap_hash,
-    )?;
+    progress = provision
+        .advance(
+            &progress,
+            racp_contract::service_provision::ProvisionPhase::ServiceCreatedDisabled,
+        )
+        .map_err(|_| RacpError::new("SERVICE_PROVISION_OUTCOME_UNKNOWN"))?;
     let sid = SERVICE_SID_INFO {
         dwServiceSidType: SERVICE_SID_TYPE_UNRESTRICTED,
     };
@@ -295,21 +309,19 @@ pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
         }
     }
     machine::grant_parent_read(&parent, &scope)?;
-    progress(
-        &parent,
-        &nonce,
-        "inputs_committed",
-        &payload_hash,
-        &bootstrap_hash,
-    )?;
+    progress = provision
+        .advance(
+            &progress,
+            racp_contract::service_provision::ProvisionPhase::InputsCommitted,
+        )
+        .map_err(|_| RacpError::new("SERVICE_PROVISION_OUTCOME_UNKNOWN"))?;
     super::recovery::configure(service.0)?;
-    progress(
-        &parent,
-        &nonce,
-        "recovery_committed",
-        &payload_hash,
-        &bootstrap_hash,
-    )?;
+    progress = provision
+        .advance(
+            &progress,
+            racp_contract::service_provision::ProvisionPhase::RecoveryCommitted,
+        )
+        .map_err(|_| RacpError::new("SERVICE_PROVISION_OUTCOME_UNKNOWN"))?;
     if unsafe {
         ChangeServiceConfigW(
             service.0,
@@ -329,16 +341,15 @@ pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
         return Err(RacpError::new("SERVICE_PROVISION_OUTCOME_UNKNOWN"));
     }
     verify_created(&service, &command)?;
-    progress(
-        &parent,
-        &nonce,
-        "prepared_demand_start",
-        &payload_hash,
-        &bootstrap_hash,
-    )?;
+    progress = provision
+        .advance(
+            &progress,
+            racp_contract::service_provision::ProvisionPhase::PreparedDemandStart,
+        )
+        .map_err(|_| RacpError::new("SERVICE_PROVISION_OUTCOME_UNKNOWN"))?;
     Ok(
         json!({"prepared":true,"started":false,"registered":false,"ready":false,"service_name":SERVICE_NAME,
-        "state_dir":state,"control_dir":control,"bootstrap_sha256":bootstrap_hash,"nonce":nonce,
+        "state_dir":state,"control_dir":control,"bootstrap_sha256":bootstrap_hash,"nonce":nonce,"provision_receipt_sha256":progress.sha256,
         "recovery":"inspect_existing_disabled_or_demand_service_and_provision_receipt_no_automatic_adoption",
         "startup_policy":"demand", "crash_recovery":racp_contract::service_recovery::ServiceRecoveryPolicy::default()}),
     )
