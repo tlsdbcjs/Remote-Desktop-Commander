@@ -1,14 +1,14 @@
 # RACP 아키텍처 결정 레코드 (ADR Index)
 
 > **Document ID**: `DOC-ADR-INDEX`\
-> **Status**: Active · **Target Version**: v0.1.23\
-> **Last Updated**: 2026-10-11 · **Classification**: Architecture Decision Records
+> **Status**: Active · **Target Version**: v0.1.29\
+> **Last Updated**: 2026-10-13 · **Classification**: Architecture Decision Records
 
 ---
 
 ## 1. 개요 (Overview)
 
-본 디렉터리는 **RACP (Remote Access and Control Protocol)** 설계 및 개발 과정에서 도출된 핵심 아키텍처 결정(Architecture Decision Records, ADR) 총 29건을 수록합니다.  
+본 디렉터리는 **RACP (Remote Access and Control Protocol)** 설계 및 개발 과정에서 도출된 핵심 아키텍처 결정(Architecture Decision Records, ADR) 총 23건을 수록합니다.  
 모든 ADR은 **컨텍스트(Context)**, **결정 사항(Decision)**, **결과 및 영향(Consequences)**, **공식 기술 근거(References)**를 일관된 형식으로 명시합니다.
 
 ---
@@ -56,16 +56,7 @@
 ### 2.5 데스크톱 클라이언트 & 패키징 (Desktop Client & Onboarding)
 | 번호 | 제목 | 상태 | 핵심 결정 요약 |
 | :--- | :--- | :---: | :--- |
-| [ADR-0023](ADR-0023-cross-platform-desktop-client.md) | 공통 데스크톱 클라이언트와 OS별 Agent 패키지 | **Superseded** | ADR-0030으로 대체된 Electron/Python 배포 결정 |
-| [ADR-0024](ADR-0024-windows-user-logon-client.md) | 사용자가 선택한 Windows 로그인 후 Agent 연결 | **Accepted** | HKCU 시작프로그램 등록, 사용자 로그인 시 무인 백그라운드 재접속 |
-| [ADR-0025](ADR-0025-agent-dashboard-and-tray.md) | Agent 현황·최근 활동과 트레이 수명 | **Accepted** | 시스템 트레이 최소화, 최근 40개 활동 감사 스트림, 안전한 완전 종료 |
-| [ADR-0026](ADR-0026-windows-installer-maintenance.md) | Windows 설치·제거의 Agent 정리와 상태 백업 | **Accepted** | NSIS 설치 프로그램, 버전 업그레이드 전 프로세스 정리, SHA-256 상태 백업 |
-| [ADR-0027](ADR-0027-one-time-setup-and-safe-diagnostics.md) | 최초 등록과 저장된 설정의 안전한 진단 | **Accepted** | 온보딩 오류 코드별 안내, 설정 손상 시 재등록 폼 방지 및 안전 진단 |
-| [ADR-0028](ADR-0028-connection-file-onboarding.md) | Gateway 연결 파일로 최초 PC 등록 | **Accepted** | 단일 `.racp` 연결 파일 드롭만으로 주소, 1회용 토큰, 사설 CA를 일괄 적용 |
-| [ADR-0029](ADR-0029-local-settings-repair.md) | 보호된 PC 등록의 설정 수정과 복구 | **Accepted** | 등록된 Gateway 주소, 폴더 목록, 프로필 직접 수정 및 무결성 검증 복구 |
-
-| [ADR-0030](ADR-0030-rust-tauri-client-and-native-agent.md) | Rust Agent와 Tauri 클라이언트 | **Superseded for new source** | v0.1.21 이력 보존; 새 Client source 결정은 ADR-0031로 대체 |
-| [ADR-0031](ADR-0031-native-rust-client-and-isolated-state.md) | Rust native Client와 독립 상태·선택 runtime | **Accepted for implementation** | Iced/Rust·새 상태·인증 IPC·선택 runtime·xtask; 핵심 제어 우선, 실기/배포 gate 보류 |
+| [ADR-0032](ADR-0032-native-client.md) | Native Client 구조와 Slint GUI | **Accepted** | Rust 단일 프로세스 Client, Slint GUI(소프트웨어 렌더러 기본), .racp 등록·설정 복구·트레이·자동 시작·설치 수명. 이전 ADR-0023~0031을 현재 기준으로 통합 |
 
 ---
 

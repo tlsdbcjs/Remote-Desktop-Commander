@@ -1611,7 +1611,7 @@ Client와 내장 Agent의 전체 전환 구현을 반영했다. React 화면은 
 
 `apps/agent` Python 코드, `apps/client` Electron 호스트와 Python 설치 도우미, Python client build/staging/portable helper, 이 코드에 직접 의존하던 구 테스트를 제거했다. Gateway·CLI·공통 서버 Python 패키지는 유지한다. 서버/CLI의 frozen lock은 66개 패키지로 정리했다. 구 Python in-process Agent fixture는 명시적 보류로 바꾸었으며, 이 skip을 회귀 통과로 계산하지 않는다. 자동 테스트 재개와 새로운 native acceptance 작성·실행은 이번 범위에서 보류한다.
 
-기존 프로필 탐색과 모호한 상태 거절, DPAPI와 소유권 확인, native 연결 파일 선택, 시작 등록, installer maintenance/backup, 포터블 프로필 격리 및 고정 WebView2를 구현했다. [ADR-0030](../adr/ADR-0030-rust-tauri-client-and-native-agent.md)이 구 Electron/Python 배포 결정을 대체한다. 실행·서비스 등록과 빌드는 [Rust Agent 가이드](../guides/rust-agent-guide.md)를 따른다.
+기존 프로필 탐색과 모호한 상태 거절, DPAPI와 소유권 확인, native 연결 파일 선택, 시작 등록, installer maintenance/backup, 포터블 프로필 격리 및 고정 WebView2를 구현했다. ADR-0030(삭제, [ADR-0032](../adr/ADR-0032-native-client.md)로 통합)이 구 Electron/Python 배포 결정을 대체한다. 실행·서비스 등록과 빌드는 [Rust Agent 가이드](../guides/rust-agent-guide.md)를 따른다.
 
 ### 독립 리뷰와 수정
 
@@ -1691,7 +1691,7 @@ Client와 내장 Agent의 전체 전환 구현을 반영했다. React 화면은 
 | GUI 제어 | loopback TCP·3초 조회 | R03 OS peer 인증 IPC·snapshot/event/gap resync |
 | 빌드/runtime | Node/pnpm Client 빌드와 기본 Chromium/WebView2 번들 | R-PKG Rust xtask·기본/선택 runtime 분리 |
 
-[기존 Tauri 설계](../spec/client-rust-migration.md)와 [10-task 구현 계획](../spec/client-rust-implementation-plan.md)은 향후 작업 기준으로는 Superseded로 표시하고 이력을 보존했다. [ADR-0030](../adr/ADR-0030-rust-tauri-client-and-native-agent.md)은 현행 v0.1.21 결정 기록으로 Accepted를 유지하며 향후 계획과 범위를 구분했다. 과거 승인·빌드·완료 기록을 이번 Iced 구현 승인·완료로 옮기지 않는다.
+[기존 Tauri 설계](../spec/client-rust-migration.md)와 [10-task 구현 계획](../spec/client-rust-implementation-plan.md)은 향후 작업 기준으로는 Superseded로 표시하고 이력을 보존했다. ADR-0030(삭제, [ADR-0032](../adr/ADR-0032-native-client.md)로 통합)은 현행 v0.1.21 결정 기록으로 Accepted를 유지하며 향후 계획과 범위를 구분했다. 과거 승인·빌드·완료 기록을 이번 Iced 구현 승인·완료로 옮기지 않는다.
 
 > [!IMPORTANT]
 > 자동 테스트 실행·추가, GUI/native acceptance, 설치/업데이트/제거, macOS/Linux native 빌드는 계속 보류한다. 이번에 작성한 인수 사례는 미래 검증 명세다. GUI 적합성 보류 중에는 골격/공통 모델·독립 Agent 구현과 패키징 정의까지만 진행하도록 의존성을 명시했다. 전체 화면·최종 패키지·Tauri 제거는 해당 선행 조건을 충족한 뒤 진행한다. 기능 동등성·성능·전체 Rust 전환은 미완료다.
@@ -2020,7 +2020,7 @@ tracked legacy Client source 35개를 `.tools/retired-client-source-0123-2026101
 | 로컬 owner 제어 | [cancellation](../../crates/racp-runtime/src/local_ipc/cancellation.rs), [ControlPlane](../../crates/racp-runtime/src/local_ipc/policy.rs) | 기존 같은 user/session·peer PID birth 인증 IPC만 사용. 현재 Agent device/boot/Journal request를 다시 비교하고 active Execution에만 신호. remote principal의 `jobs.cancel` API와 별도 로컬 소유자 제어; 다른 Agent/재시작 전 요청/임의 PID 취소 경로 없음. 16-worker bound·policy/stop serialization, 대기 중 serialization 해제로 Stop을 관찰 시간 동안 막지 않음 |
 | 결과 관찰 | 위 cancellation/[dispatch](../../crates/racp-runtime/src/dispatch.rs) | durable cancel intent 후 cancellation token 신호, 최대 15초 동안 Journal terminal과 execution release를 확인. 정상 결과가 먼저 끝나면 그 상태 보존. timeout/unknown/미보고 정리를 성공으로 바꾸지 않으며 아직 execution이 남아 있으면 cleanup은 pending. payload/argv/result/credential 원문은 receipt/event에 없음 |
 | 이력·GUI | [Journal](../../crates/racp-core/src/journal.rs), [native startup](../../crates/racp-runtime/src/native_client.rs), [Iced app](../../apps/client-native/src/app.rs) | device별 최근 32개 메타데이터만 SQL 조회해 시작 snapshot에 복원. 중단한 이전 실행은 기존 recover 규칙대로 UNKNOWN이며 자동 재실행 안 함. 현재 진행 작업에 취소 버튼; stale snapshot/연결 중단/종료 중에는 비활성. 접수·관찰 상태·terminal·정리를 각각 표시. control receipt 자체는 crash-durable 완료 기록이 아니며 실제 operation Journal과 취소 intent만 durable |
-| 새 결정 기록 | [ADR-0031](../adr/ADR-0031-native-rust-client-and-isolated-state.md) | native GUI·분리 상태·선택 host·Rust build 결정 및 핵심 제어 우선 의도 기록. ADR-0030의 새 source 결정만 대체하고 기존 제품 이력/설치는 보존. shell/interpreter 내부 명령이 개별 OS 객체 권한으로 제한된다고 주장하지 않음 |
+| 새 결정 기록 | ADR-0031(삭제, [ADR-0032](../adr/ADR-0032-native-client.md)로 통합) | native GUI·분리 상태·선택 host·Rust build 결정 및 핵심 제어 우선 의도 기록. ADR-0030의 새 source 결정만 대체하고 기존 제품 이력/설치는 보존. shell/interpreter 내부 명령이 개별 OS 객체 권한으로 제한된다고 주장하지 않음 |
 
 production·정적 증거:
 
@@ -2760,3 +2760,21 @@ PATCH **0.1.28→0.1.29 한 번**과 Python/Rust/optional analysis-host lock의 
 > AS09는 **일회성 관리 작업의 durable 실행 경계 source·개발 검증**까지 진행했다. claimed/failed의 수동 outcome recovery, namespace 없는 prepared restore 관리(AS08), queued restart 중지·bounded restart 활성화·boot admission, 실제 SCM/SYSTEM/virtual account/설치 인수는 미완료다. AS16–AS18 USB/장치 계약·backend·수집·물리 인수도 남아 있다. 실제 설치·서비스 등록/시작·driver/device IO·기존 profile 변경은 하지 않았다. GUI source와 사용자 미추적 파일 3개를 보존한다.
 
 구현 commit **`bd332e5`**를 로컬 `main`에 fast-forward 반영했다. [main 전체 직렬 회귀](../../dist/verification/agent/0.1.29/start-intent-main/rust-workspace-serial.log)는 **116 PASS / 0 FAIL / 4 ignored**, main의 Python **11 PASS**, Ruff/mypy **98 files PASS**, version **0.1.29**다. 위 staging bytes와 생성된 출력 디렉터리의 private DACL 및 비밀 없는 logs/최종 results만 main 출력 위치로 보존했고 [main payload verify](../../dist/verification/agent/0.1.29/start-intent-main/verify-stage.log)도 PASS다. EXE SHA는 위 E2E와 동일하다. 시험 credential/등록 state는 복사하지 않았으며 기존 profile/service를 변경하지 않았다. 새 문서 상대 링크를 확인했고 사용자 미추적 GUI/계획 파일 3개는 유지한다. push 없이 다음 roadmap 작업을 계속하며 managed worktree는 보존한다.
+
+### 2026-10-13 Client ADR 통합과 Slint GUI 결정 — 문서 변경만
+
+Client ADR-0023~0031(Electron·Python·Tauri·Iced 시절 결정과 이력)을 삭제하고, 현재도 유효한 결정만 현재 코드 기준으로 [ADR-0032](../adr/ADR-0032-native-client.md)에 통합했다. 통합 범위는 Rust 단일 프로세스 Client 구조, 독립 상태, `.racp` 연결 파일 등록, 설정 수정·복구, 트레이·단일 인스턴스, HKCU 로그인 자동 시작, 사용자 NSIS 설치·제거다. ADR-0022(Agent 백그라운드 수명)는 Agent 결정이므로 유지했다. ADR 색인, 문서 포털, README, 가이드, documentation-standards skill, AGENTS.md의 링크와 표기를 갱신했다. 이력 문단의 삭제된 ADR 링크는 "삭제, ADR-0032로 통합" 텍스트로 바꿨다.
+
+GUI 툴킷은 Iced에서 **Slint 1.16.x(소프트웨어 렌더러 기본)**로 결정했다. 근거는 Slint PoC(미병합 브랜치 `claude/affectionate-moore-a7bb28`, 커밋 `31c055b`, `apps/client-slint-poc`)를 OpenGL이 없는 Windows VMware VM에서 측정한 결과다. 증거는 `dist/verification/client/0.1.26/slint-poc-20261013-01/`에 있다.
+
+| 항목 | 결과 |
+|---|---|
+| 디자인 기준과 일치 | 근접. 펼친 카테고리 화살표 방향 등 작은 차이 |
+| 소프트웨어 렌더러 | 일반 다시 그리기 0.5~8.9ms(100%/150% DPI), 최악의 전체 다시 그리기 평균 12ms·순간 30~68ms, 실제 창 약 60fps |
+| 메모리 | 유휴 시 43.8MB working set, 사용 중 44~49MB |
+| 한글 IME | 확정·조합 중 글자 표시 PASS |
+| 접근성 | 접근성 트리에서 이름·선택 상태 확인. Narrator 실행 미실시, 카테고리 머리글 Tab 이동 불가 |
+| 미실시 | GPU 렌더러 비교(OpenGL 없음), RDP 실측 |
+
+> [!IMPORTANT]
+> 문서 결정만 바뀌었다. `apps/client-native`와 배포 빌드는 여전히 Iced 0.13.1/tiny-skia다. 코드 변경, 빌드, 버전 bump, GUI 실행은 이 배치에서 하지 않았다. 이전 순서와 단계별 완료 조건은 ADR-0032 5절을 따른다.

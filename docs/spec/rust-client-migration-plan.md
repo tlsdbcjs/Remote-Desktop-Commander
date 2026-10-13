@@ -26,7 +26,7 @@
 |---|---|
 | 이 계획 | 향후 전체 Rust 전환의 요구사항·작업·완료 기준 |
 | [기존 Tauri 설계](client-rust-migration.md), [기존 10-task 계획](client-rust-implementation-plan.md) | v0.1.21 이식 이력으로 보존; 향후 실행 계획은 이 문서로 대체 |
-| [ADR-0030](../adr/ADR-0030-rust-tauri-client-and-native-agent.md), [ADR-0031](../adr/ADR-0031-native-rust-client-and-isolated-state.md) | ADR-0030은 v0.1.21 Tauri/React 이력으로 보존. 새 native Client source 결정은 ADR-0031이 대체하며 실기/배포 gate는 보류 |
+| ADR-0030(삭제, [ADR-0032](../adr/ADR-0032-native-client.md)로 통합), ADR-0031(삭제, [ADR-0032](../adr/ADR-0032-native-client.md)로 통합) | ADR-0030은 v0.1.21 Tauri/React 이력으로 보존. 새 native Client source 결정은 ADR-0031이 대체하며 실기/배포 gate는 보류 |
 | [desktop-build skill](../../.agents/skills/desktop-build/SKILL.md), [Desktop Client Guide](../guides/desktop-client-guide.md) | v0.1.23 native 개발 staging/운영 명령으로 갱신. 제품 패키징·설치·업데이트 인수 완료를 뜻하지 않음 |
 
 > [!IMPORTANT]

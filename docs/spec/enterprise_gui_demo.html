@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RACP Enterprise Endpoint Commander - Modern GUI Prototype v4</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+    body {
+      font-family: 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(51, 65, 85, 0.8);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(71, 85, 105, 1);
+    }
+    .rotate-180-anim {
+      transform: rotate(180deg);
+    }
+  </style>
+</head>
+<body class="bg-[#0b0f19] text-slate-100 antialiased h-screen flex flex-col overflow-hidden select-none">
+
+  <!-- Top Enterprise Navigation / Titlebar (Language toggle removed, purely system controls) -->
+  <header class="h-14 border-b border-slate-800/80 bg-[#0f172a]/95 backdrop-blur px-4 flex items-center justify-between shrink-0 z-20">
+    <div class="flex items-center gap-3">
+      <!-- Production Vector Logo -->
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 text-white">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-sm tracking-tight text-white" data-i18n="app_title">RACP Native Client</span>
+          <span class="px-1.5 py-0.5 text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 rounded" data-i18n="app_badge">Enterprise Agent</span>
+          <span class="text-xs text-slate-400 font-mono">v0.1.26</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center System Status Capsule -->
+    <div class="hidden md:flex items-center gap-3 bg-slate-900/80 border border-slate-800 rounded-full px-3.5 py-1 text-xs">
+      <div class="flex items-center gap-1.5" id="header-status-indicator">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span class="font-medium text-emerald-400" id="header-status-text" data-i18n="status_online">Agent Online</span>
+      </div>
+      <div class="h-3 w-px bg-slate-700"></div>
+      <div class="flex items-center gap-1 text-slate-300">
+        <span class="text-slate-400">Path:</span>
+        <span class="font-mono text-slate-300 truncate max-w-[200px]" title="%LOCALAPPDATA%\RACP\native-client">RACP/native-client</span>
+      </div>
+      <div class="h-3 w-px bg-slate-700"></div>
+      <div class="flex items-center gap-1 text-slate-300">
+        <span class="text-slate-400" data-i18n="role_label">Role:</span>
+        <span class="text-indigo-400 font-medium" data-i18n="role_controller">Controller</span>
+      </div>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="flex items-center gap-2">
+      <!-- Simulation State Switcher (To test Unregistered vs Registered vs Running views) -->
+      <div class="flex items-center bg-slate-900 border border-slate-700/80 rounded-lg p-0.5 text-xs">
+        <span class="px-2 text-[11px] text-slate-400 font-medium">데모 상태:</span>
+        <select onchange="changeSimulatedState(this.value)" class="bg-transparent text-slate-200 text-xs font-medium focus:outline-none pr-2 cursor-pointer">
+          <option value="unregistered">1. 초기 등록 화면 (Unregistered)</option>
+          <option value="registered">2. 등록 완료/대기 (Agent Stopped)</option>
+          <option value="running" selected>3. 에이전트 실행 중 (Online Running)</option>
+        </select>
+      </div>
+
+      <div class="h-4 w-px bg-slate-800 mx-1"></div>
+
+      <!-- Emergency Stop Button -->
+      <button onclick="triggerEmergencyStop()" class="px-2.5 py-1 text-xs font-medium rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 transition flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <span data-i18n="btn_emergency_stop">긴급 정지</span>
+      </button>
+
+      <button title="트레이로 최소화" class="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Body Layout: Sidebar + Content -->
+  <div class="flex-1 flex overflow-hidden">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="w-56 bg-[#0c1222] border-r border-slate-800/80 flex flex-col justify-between shrink-0 p-3">
+      <nav class="space-y-1">
+        <!-- Tab 1: Status / Dashboard -->
+        <button onclick="switchTab('status')" id="nav-status" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition bg-indigo-600/10 text-indigo-400 border border-indigo-500/20">
+          <div class="flex items-center gap-2.5">
+            <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+            </svg>
+            <span data-i18n="nav_status">상태 (Status)</span>
+          </div>
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400" id="sidebar-status-dot"></span>
+        </button>
+
+        <!-- Tab 2: Permissions (Category Tree) -->
+        <button onclick="switchTab('permissions')" id="nav-permissions" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+          <div class="flex items-center gap-2.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+            </svg>
+            <span data-i18n="nav_permissions">권한 (Permissions)</span>
+          </div>
+          <span class="px-1.5 py-0.5 text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 rounded font-mono">Tree</span>
+        </button>
+
+        <!-- Tab 3: Approvals -->
+        <button onclick="switchTab('approvals')" id="nav-approvals" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+          <div class="flex items-center gap-2.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+            </svg>
+            <span data-i18n="nav_approvals">승인 (Approvals)</span>
+          </div>
+          <span id="badge-approvals" class="px-1.5 py-0.2 text-[11px] font-bold rounded-full bg-rose-500 text-white animate-pulse">2</span>
+        </button>
+
+        <!-- Tab 4: Runtimes -->
+        <button onclick="switchTab('runtimes')" id="nav-runtimes" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+          <div class="flex items-center gap-2.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+            </svg>
+            <span data-i18n="nav_runtimes">선택 런타임</span>
+          </div>
+          <span class="text-[11px] text-slate-400 font-mono">3 OK</span>
+        </button>
+
+        <!-- Tab 5: Settings -->
+        <button onclick="switchTab('settings')" id="nav-settings" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+          <div class="flex items-center gap-2.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            <span data-i18n="nav_settings">설정 (Settings)</span>
+          </div>
+        </button>
+      </nav>
+
+      <!-- Sidebar Footer: Host Identity Badge -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 text-xs space-y-1.5">
+        <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider" data-i18n="device_identity">Device Identity</div>
+        <div class="font-mono text-[11px] text-slate-300 truncate" id="sidebar-device-id" title="dev_502b02d0ca8249c89c3627b5f79f3871">
+          dev_502b02d0ca82...
+        </div>
+        <div class="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/80">
+          <span>DPAPI Vault</span>
+          <span class="text-emerald-400 font-medium flex items-center gap-1">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+            Enforced
+          </span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 bg-[#0b0f19] overflow-y-auto p-6">
+
+      <!-- ========================================================================= -->
+      <!-- TAB 1: STATUS (미등록 폼 / 등록 대기 / 온라인 실행 중 상태 통합 지원) -->
+      <!-- ========================================================================= -->
+      <section id="tab-status" class="space-y-6">
+
+        <!-- SUB-VIEW A: 미등록 상태 (INITIAL ENROLLMENT FORM) -->
+        <div id="status-view-unregistered" class="space-y-6 hidden">
+          <!-- Banner -->
+          <div class="bg-[#111827] border border-amber-500/40 rounded-xl p-5 shadow-sm space-y-2">
+            <div class="flex items-center gap-2.5 text-amber-400">
+              <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+              </svg>
+              <h2 class="text-base font-bold text-white" data-i18n="enroll_banner_title">Agent 연결 대기 — 새 등록 또는 Agent 시작이 필요합니다</h2>
+            </div>
+            <p class="text-xs text-slate-400" data-i18n="enroll_banner_desc">
+              기존 Client 설정과 credential을 자동으로 가져오지 않습니다. 배포된 연결 파일(.racp)을 검증한 후 안전하게 엔드포인트를 등록하세요.
+            </p>
+            <div class="text-xs font-mono text-slate-400 pt-1 flex items-center justify-between">
+              <span>새 상태 경로: <span class="text-slate-200">C:\Users\GhostShell\AppData\Local\RACP/native-client</span></span>
+              <button onclick="showToast('로컬 상태를 새로 확인했습니다.')" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition" data-i18n="btn_refresh_local">
+                로컬 상태 새로 확인
+              </button>
+            </div>
+          </div>
+
+          <!-- Enrollment Form Card -->
+          <div class="bg-[#111827] border border-slate-800 rounded-xl p-6 shadow-sm space-y-5">
+            <div class="border-b border-slate-800 pb-3">
+              <h3 class="text-sm font-bold text-white tracking-tight" data-i18n="enroll_form_title">새로운 Agent 엔드포인트 온보딩 등록 (.racp)</h3>
+              <p class="text-xs text-slate-400 mt-0.5" data-i18n="enroll_form_desc">연결 파일을 확인한 후 서명 및 CA 해시를 검토하고 새 등록을 제출합니다.</p>
+            </div>
+
+            <div class="space-y-4 text-xs">
+              <!-- Field 1: Connection File Path -->
+              <div>
+                <label class="block text-slate-400 font-medium mb-1.5" data-i18n="lbl_conn_path">새 연결 파일 경로 (.racp)</label>
+                <div class="flex gap-2">
+                  <input type="text" id="input-conn-path" value="C:\Users\GhostShell\Downloads\host-connection.racp" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono focus:border-indigo-500 focus:outline-none">
+                  <button onclick="simulateInspectConnection()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition shadow-md shadow-indigo-600/30 shrink-0 flex items-center gap-1.5" data-i18n="btn_inspect_conn">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>연결 파일 확인</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Connection Inspection Result Preview -->
+              <div id="conn-preview-box" class="bg-slate-900/90 border border-slate-800 rounded-lg p-3.5 space-y-2 font-mono text-xs">
+                <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider text-indigo-400">검증된 연결 정보 (Verified Connection Info)</div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-slate-300">
+                  <div><span class="text-slate-400">Gateway:</span> <span class="text-white font-medium">https://gateway.corp.internal:443</span></div>
+                  <div><span class="text-slate-400">만료일:</span> <span class="text-white">2026-12-31 23:59:59</span></div>
+                  <div><span class="text-slate-400">CA Hash:</span> <span class="text-emerald-400">e3b0c44298fc1c...</span></div>
+                </div>
+              </div>
+
+              <!-- Field 2: Verified SHA-256 -->
+              <div>
+                <label class="block text-slate-400 font-medium mb-1.5" data-i18n="lbl_conn_hash">확인한 연결 파일 SHA-256 해시</label>
+                <input type="text" readonly value="8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4" class="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2 text-slate-400 font-mono text-xs">
+              </div>
+
+              <!-- Field 3: Default Workspace Draft -->
+              <div>
+                <label class="block text-slate-400 font-medium mb-1.5" data-i18n="lbl_workspace_draft">새 기본 작업 폴더의 절대 경로</label>
+                <input type="text" value="E:\Project\30_VS_Project\Remote-Desktop-Commander" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono focus:border-indigo-500 focus:outline-none">
+              </div>
+
+              <!-- Field 4: Execution Profile -->
+              <div>
+                <label class="block text-slate-400 font-medium mb-1.5" data-i18n="lbl_profile">실행 프로필 (Execution Profile)</label>
+                <select class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono focus:border-indigo-500 focus:outline-none cursor-pointer">
+                  <option value="read_only" selected>read_only (기본 안전 모드)</option>
+                  <option value="strict-sandbox">strict-sandbox (격리 샌드박스)</option>
+                  <option value="development">development (개발자 모드)</option>
+                </select>
+              </div>
+
+              <div class="text-slate-400 text-[11px] pt-1" data-i18n="enroll_notice">
+                등록에는 권한 탭의 현재 선택을 사용합니다. 초기 선택은 모두 거부(Default Deny)입니다.
+              </div>
+
+              <!-- Submit Button -->
+              <div class="pt-2">
+                <button onclick="simulateEnrollment()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2" data-i18n="btn_submit_enroll">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                  <span>확인한 연결 파일로 새 등록 (Enroll Agent)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUB-VIEW B: 등록 완료 후 시작 대기 (REGISTERED, AGENT STOPPED) -->
+        <div id="status-view-registered" class="space-y-6 hidden">
+          <div class="bg-[#111827] border border-slate-800 rounded-xl p-6 shadow-sm space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h2 class="text-base font-bold text-white" data-i18n="registered_card_title">Agent 등록 정보 (보안 키 바인딩 완료)</h2>
+                <p class="text-xs text-slate-400 mt-0.5">DPAPI를 통해 보호되는 등록 정보입니다. Agent를 시작하여 Gateway에 연결합니다.</p>
+              </div>
+              <span class="px-2 py-0.5 text-xs font-semibold rounded bg-slate-800 text-slate-300 border border-slate-700">Agent Stopped</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono bg-slate-900/80 p-4 rounded-lg border border-slate-800">
+              <div><span class="text-slate-400">Device ID:</span> <span class="text-white">dev_502b02d0ca8249c89c3627b5f79f3871</span></div>
+              <div><span class="text-slate-400">Gateway:</span> <span class="text-white">https://gateway.corp.internal:443</span></div>
+              <div><span class="text-slate-400">Workspace:</span> <span class="text-indigo-300">E:\Project\30_VS_Project\Remote-Desktop-Commander</span></div>
+              <div><span class="text-slate-400">Profile:</span> <span class="text-emerald-400">read_only</span></div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+              <button onclick="showToast('로컬 상태를 새로고침했습니다.')" class="px-4 py-2 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition" data-i18n="btn_refresh_local">
+                로컬 상태 새로 확인
+              </button>
+              <button onclick="changeSimulatedState('running')" class="px-6 py-2.5 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition flex items-center gap-2" data-i18n="btn_start_agent">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span>Agent 시작 (Start Agent)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUB-VIEW C: 에이전트 온라인 실행 중 (ONLINE RUNNING) -->
+        <div id="status-view-running" class="space-y-6">
+          <!-- 4 Core Metric Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-[#111827] border border-slate-800 rounded-xl p-4 shadow-sm relative overflow-hidden">
+              <div class="absolute top-0 left-0 h-1 w-full bg-emerald-500"></div>
+              <div class="flex justify-between items-start">
+                <span class="text-xs font-medium text-slate-400" data-i18n="metric_agent_process">Agent 프로세스</span>
+                <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-i18n="metric_status_ok">정상 가동</span>
+              </div>
+              <div class="mt-2 flex items-baseline gap-2">
+                <span class="text-2xl font-bold text-white font-mono">PID 5376</span>
+              </div>
+              <div class="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                <span>Uptime:</span>
+                <span class="text-slate-300 font-mono">04h 12m 45s</span>
+                <span class="mx-1">·</span>
+                <span class="text-emerald-400">Pipe OK</span>
+              </div>
+            </div>
+
+            <div class="bg-[#111827] border border-slate-800 rounded-xl p-4 shadow-sm relative overflow-hidden">
+              <div class="absolute top-0 left-0 h-1 w-full bg-indigo-500"></div>
+              <div class="flex justify-between items-start">
+                <span class="text-xs font-medium text-slate-400" data-i18n="metric_active_tasks">활성 제어 작업</span>
+                <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">1 RUNNING</span>
+              </div>
+              <div class="mt-2 flex items-baseline gap-2">
+                <span class="text-2xl font-bold text-white font-mono">1 / 32</span>
+                <span class="text-xs text-slate-400">Slots</span>
+              </div>
+              <div class="text-[11px] text-slate-400 mt-1" data-i18n="metric_cancel_ready">안전 취소 핸들러 무장됨</div>
+            </div>
+
+            <div class="bg-[#111827] border border-slate-800 rounded-xl p-4 shadow-sm relative overflow-hidden">
+              <div class="absolute top-0 left-0 h-1 w-full bg-rose-500"></div>
+              <div class="flex justify-between items-start">
+                <span class="text-xs font-medium text-slate-400" data-i18n="metric_pending_approvals">대기 중 승인 요청</span>
+                <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">2 Pending</span>
+              </div>
+              <div class="mt-2 flex items-baseline gap-2">
+                <span class="text-2xl font-bold text-rose-400 font-mono">2 건</span>
+              </div>
+              <div class="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                <span>Zero-Trust Prompt</span>
+                <a href="javascript:void(0)" onclick="switchTab('approvals')" class="text-indigo-400 hover:underline">&rarr;</a>
+              </div>
+            </div>
+
+            <div class="bg-[#111827] border border-slate-800 rounded-xl p-4 shadow-sm relative overflow-hidden">
+              <div class="absolute top-0 left-0 h-1 w-full bg-amber-500"></div>
+              <div class="flex justify-between items-start">
+                <span class="text-xs font-medium text-slate-400" data-i18n="metric_guardian">화면/입력 가디언</span>
+                <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">Standby</span>
+              </div>
+              <div class="mt-2 flex items-baseline gap-2">
+                <span class="text-xl font-bold text-slate-200">Guardian Ready</span>
+              </div>
+              <div class="text-[11px] text-slate-400 mt-1" data-i18n="metric_guardian_desc">물리 입력 감지 시 원격 차단</div>
+            </div>
+          </div>
+
+          <!-- In-flight Active Operations Row -->
+          <div class="bg-[#111827] border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-white tracking-tight" data-i18n="inflight_title">진행 중인 원격 작업 (In-Flight Operations)</h3>
+                <p class="text-xs text-slate-400 mt-0.5">Gateway 및 AI 호출자를 통해 엔드포인트에서 실행 중인 명령입니다.</p>
+              </div>
+              <span class="text-xs text-slate-400 font-mono">Boot ID: b_49f81a · Seq #1042</span>
+            </div>
+
+            <div class="p-3.5 bg-slate-900/80 border border-slate-800 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 text-xs font-mono font-semibold rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">filesystem.read</span>
+                  <span class="font-mono text-xs text-slate-300">op_08407d3a45dc4e58b3c1a1</span>
+                  <span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">RUNNING</span>
+                </div>
+                <div class="text-xs text-slate-400 flex items-center gap-2 font-mono">
+                  <span>Req: req_f481c9a1</span>
+                  <span>·</span>
+                  <span>Target: dist/acceptance/fixture.bin</span>
+                </div>
+              </div>
+              <button onclick="showToast('작업 취소 신호가 전송되었습니다.')" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition shrink-0 flex items-center gap-1.5" data-i18n="btn_safe_cancel">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                <span>작업 즉시 안전 취소</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- ESSENTIAL UI: Status Log Stream & Control Results -->
+          <div class="bg-[#111827] border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></div>
+                <h3 class="text-sm font-bold text-white tracking-tight" data-i18n="status_log_title">실시간 Status 로그 & 제어 영수증 (Audit Log Stream)</h3>
+              </div>
+              <div class="flex items-center gap-2">
+                <button onclick="clearStatusLog()" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition" data-i18n="btn_clear_log">로그 지우기</button>
+                <button onclick="copyStatusLog()" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition" data-i18n="btn_copy_log">로그 복사</button>
+              </div>
+            </div>
+
+            <!-- Terminal-style Log Box -->
+            <div id="status-log-terminal" class="bg-black/80 border border-slate-800/90 rounded-lg p-3 font-mono text-xs text-slate-300 h-64 overflow-y-auto space-y-1.5 select-text">
+              <div class="text-slate-400">[2026-10-12 23:10:01.102] [INFO] [racp_agent::bootstrap] Starting RACP Native Agent v0.1.26 (PID: 5376)</div>
+              <div class="text-emerald-400">[2026-10-12 23:10:01.140] [INFO] [racp_agent::ipc] Authenticated Named Pipe listener bound: \\.\pipe\racp-native-control-5376</div>
+              <div class="text-slate-400">[2026-10-12 23:10:01.215] [INFO] [racp_core::journal] SQLite write-ahead journal opened at %LOCALAPPDATA%\RACP\native-client\journal.db</div>
+              <div class="text-slate-400">[2026-10-12 23:10:01.320] [INFO] [racp_agent::policy] Active policy loaded: Revision #14 (Hash: 9f86d081884c7d65)</div>
+              <div class="text-sky-400">[2026-10-12 23:10:02.050] [INFO] [racp_agent::wss] Outbound WSS handshake initiated to gateway.corp.internal:443 (mTLS)</div>
+              <div class="text-emerald-400">[2026-10-12 23:10:02.180] [INFO] [racp_agent::wss] WSS connection established. Epoch: 1, Keepalive interval: 15s</div>
+              <div class="text-amber-400">[2026-10-12 23:10:14.412] [WARN] [racp_agent::guardian] Desktop Guardian standby: Windows raw input hook attached (Session ID: 1)</div>
+              <div class="text-slate-400">[2026-10-12 23:11:05.890] [INFO] [racp_agent::control] Receipt rcpt_pol_14 committed: Revision 14, Resources reconciled</div>
+              <div class="text-slate-400">[2026-10-12 23:11:22.012] [INFO] [racp_agent::control] Operation op_08407d3a dispatched (filesystem.read, caller: codex-mcp)</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================= -->
+      <!-- TAB 2: PERMISSIONS (CATEGORY TREE WITH SVG ICONS) -->
+      <!-- ========================================================================= -->
+      <section id="tab-permissions" class="space-y-6 hidden">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#111827] border border-slate-800 p-4 rounded-xl shadow-sm">
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-xl font-bold text-white tracking-tight" data-i18n="permissions_title">기능 카테고리 트리 & 보안 정책 매트릭스</h2>
+              <span class="px-2 py-0.5 text-xs font-semibold rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Zero-Trust Matrix</span>
+            </div>
+            <p class="text-xs text-slate-400 mt-1" data-i18n="permissions_desc">카테고리 단위로 트리를 펼쳐 세부 조정하거나, 상단 일괄 버튼을 통해 손쉽게 권한을 일괄/선택 조정합니다.</p>
+          </div>
+          <div class="flex items-center gap-3 shrink-0">
+            <div id="dirty-policy-badge" class="hidden flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-medium">
+              <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              <span data-i18n="uncommitted_changes">미저장 변경사항 있음</span>
+            </div>
+            <button onclick="savePolicyCAS()" id="save-policy-btn" class="px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+              </svg>
+              <span data-i18n="btn_commit_cas">정책 Revision 커밋 (CAS)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Global Preset Toolbar -->
+        <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 px-4 py-2.5 rounded-lg text-xs">
+          <div class="flex items-center gap-2 text-slate-300 font-medium">
+            <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+            </svg>
+            <span data-i18n="global_presets_label">전체 정책 빠른 프리셋 일괄 적용:</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="applyGlobalPreset('deny')" class="px-3 py-1 rounded bg-slate-800 hover:bg-rose-950/40 text-rose-400 border border-slate-700 hover:border-rose-500/40 transition" data-i18n="preset_all_deny">
+              전체 일괄 거부 (Default Deny)
+            </button>
+            <button onclick="applyGlobalPreset('prompt')" class="px-3 py-1 rounded bg-slate-800 hover:bg-amber-950/40 text-amber-400 border border-slate-700 hover:border-amber-500/40 transition" data-i18n="preset_all_prompt">
+              전체 일괄 승인 필요 (Zero-Trust)
+            </button>
+            <button onclick="applyGlobalPreset('allow')" class="px-3 py-1 rounded bg-slate-800 hover:bg-emerald-950/40 text-emerald-400 border border-slate-700 hover:border-emerald-500/40 transition" data-i18n="preset_all_allow">
+              전체 일괄 허용 (Developer Opt-in)
+            </button>
+          </div>
+        </div>
+
+        <!-- Category Tree Nodes -->
+        <div class="space-y-3" id="category-tree-container">
+
+          <!-- CATEGORY 1: SYSTEM -->
+          <div class="bg-[#111827] border border-slate-800 rounded-xl overflow-hidden shadow-sm" id="cat-system">
+            <div class="p-3.5 bg-slate-900/90 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div class="flex items-center gap-3 cursor-pointer select-none" onclick="toggleCategoryAccordion('system')">
+                <button class="p-1 text-slate-400 hover:text-white transition transform" id="arrow-system">
+                  <svg class="w-4 h-4 rotate-180-anim" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-sm text-white" data-i18n="cat_system_title">장비 · OS · 사용자 상태</span>
+                    <span class="text-xs text-slate-400 font-mono">(system)</span>
+                    <span id="badge-cat-system" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" data-i18n="badge_mixed">혼합 (Mixed)</span>
+                  </div>
+                  <div class="text-[11px] text-slate-400 mt-0.5" data-i18n="cat_system_desc">호스트네임, 리소스(CPU/RAM), 사용자 세션 및 환경 변수 조회</div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 self-end md:self-auto">
+                <span class="text-[11px] text-slate-400 mr-1 hidden sm:inline" data-i18n="batch_label">카테고리 일괄:</span>
+                <div class="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs font-medium">
+                  <button onclick="batchSetCategory('system', 'deny')" title="카테고리 일괄 거부 (Batch Deny)" class="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                    <span class="hidden sm:inline text-[11px]" data-i18n="btn_batch_deny">일괄 거부</span>
+                  </button>
+                  <button onclick="batchSetCategory('system', 'prompt')" title="카테고리 일괄 승인필요 (Batch Require Approval)" class="p-1.5 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-900 transition flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="12 8 12 12 14 14"/></svg>
+                    <span class="hidden sm:inline text-[11px]" data-i18n="btn_batch_prompt">일괄 승인</span>
+                  </button>
+                  <button onclick="batchSetCategory('system', 'allow')" title="카테고리 일괄 허용 (Batch Allow)" class="p-1.5 rounded text-slate-400 hover:text-emerald-400 hover:bg-slate-900 transition flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                    <span class="hidden sm:inline text-[11px]" data-i18n="btn_batch_allow">일괄 허용</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Leaf items with 3-Way SVG Icon Control -->
+            <div id="content-system" class="divide-y divide-slate-800/60 bg-slate-900/30">
+              <div class="px-4 py-3 flex items-center justify-between hover:bg-slate-800/20 transition">
+                <div class="pl-8 flex items-center gap-2.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                  <div>
+                    <div class="text-xs font-semibold text-slate-200 font-mono">system.identity.read</div>
+                    <div class="text-[11px] text-slate-400" data-i18n="leaf_sys_identity_desc">hostname · OS · 아키텍처 · Agent 버전 조회</div>
+                  </div>
+                </div>
+                <!-- 3-Way Icon Segment -->
+                <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800" data-leaf="system.identity.read">
+                  <button onclick="setLeafGrant('system.identity.read', 'deny')" title="거부 (Deny)" class="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition" data-val="deny">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                  </button>
+                  <button onclick="setLeafGrant('system.identity.read', 'prompt')" title="승인 필요 (Require Approval)" class="p-1.5 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-900 transition" data-val="prompt">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="12 8 12 12 14 14"/></svg>
+                  </button>
+                  <button onclick="setLeafGrant('system.identity.read', 'allow')" title="허용 (Allow)" class="p-1.5 rounded bg-emerald-600 text-white font-medium shadow-md shadow-emerald-600/30 transition" data-val="allow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="px-4 py-3 flex items-center justify-between hover:bg-slate-800/20 transition">
+                <div class="pl-8 flex items-center gap-2.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                  <div>
+                    <div class="text-xs font-semibold text-slate-200 font-mono">system.resources.read</div>
+                    <div class="text-[11px] text-slate-400" data-i18n="leaf_sys_resources_desc">CPU · 메모리 · Uptime · 시스템 부하 메트릭</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800" data-leaf="system.resources.read">
+                  <button onclick="setLeafGrant('system.resources.read', 'deny')" title="거부 (Deny)" class="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition" data-val="deny">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                  </button>
+                  <button onclick="setLeafGrant('system.resources.read', 'prompt')" title="승인 필요 (Require Approval)" class="p-1.5 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-900 transition" data-val="prompt">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="12 8 12 12 14 14"/></svg>
+                  </button>
+                  <button onclick="setLeafGrant('system.resources.read', 'allow')" title="허용 (Allow)" class="p-1.5 rounded bg-emerald-600 text-white font-medium shadow-md shadow-emerald-600/30 transition" data-val="allow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="px-4 py-3 flex items-center justify-between hover:bg-slate-800/20 transition">
+                <div class="pl-8 flex items-center gap-2.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                  <div>
+                    <div class="text-xs font-semibold text-slate-200 font-mono">system.sessions.read</div>
+                    <div class="text-[11px] text-slate-400" data-i18n="leaf_sys_sessions_desc">현재 로그인 사용자 목록 · RDP Session ID · 화면 잠금 상태</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800" data-leaf="system.sessions.read">
+                  <button onclick="setLeafGrant('system.sessions.read', 'deny')" title="거부 (Deny)" class="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition" data-val="deny">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                  </button>
+                  <button onclick="setLeafGrant('system.sessions.read', 'prompt')" title="승인 필요 (Require Approval)" class="p-1.5 rounded bg-amber-600 text-white font-medium shadow-md shadow-amber-600/30 transition" data-val="prompt">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="12 8 12 12 14 14"/></svg>
+                  </button>
+                  <button onclick="setLeafGrant('system.sessions.read', 'allow')" title="허용 (Allow)" class="p-1.5 rounded text-slate-400 hover:text-emerald-400 hover:bg-slate-900 transition" data-val="allow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CATEGORY 2: FILES_READ -->
+          <div class="bg-[#111827] border border-slate-800 rounded-xl overflow-hidden shadow-sm" id="cat-files_read">
+            <div class="p-3.5 bg-slate-900/90 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div class="flex items-center gap-3 cursor-pointer select-none" onclick="toggleCategoryAccordion('files_read')">
+                <button class="p-1 text-slate-400 hover:text-white transition transform" id="arrow-files_read">
+                  <svg class="w-4 h-4 rotate-180-anim" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-sm text-white" data-i18n="cat_files_read_title">파일 보기 & 탐색</span>
+                    <span class="text-xs text-slate-400 font-mono">(files_read)</span>
+                    <span id="badge-cat-files_read" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-i18n="badge_all_allowed">모두 허용</span>
+                  </div>
+                  <div class="text-[11px] text-slate-400 mt-0.5" data-i18n="cat_files_read_desc">지정된 네임드 작업 폴더 내 디렉터리 목록, 이름 검색, 파일 읽기</div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 self-end md:self-auto">
+                <span class="text-[11px] text-slate-400 mr-1 hidden sm:inline" data-i18n="batch_label">카테고리 일괄:</span>
+                <div class="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs font-medium">
+                  <button onclick="batchSetCategory('files_read', 'deny')" title="카테고리 일괄 거부" class="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                    <span class="hidden sm:inline text-[11px]" data-i18n="btn_batch_deny">일괄 거부</span>
+                  </button>
+                  <button onclick="batchSetCategory('files_read', 'prompt')" title="카테고리 일괄 승인" class="p-1.5 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-900 transition flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="12 8 12 12 14 14"/></svg>
+                    <span class="hidden sm:inline text-[11px]" data-i18n="btn_batch_prompt">일괄 승인</span>
+                  </button>
+                  <button onclick="batchSetCategory('files_read', 'allow')" title="카테고리 일괄 허용" class="p-1.5 rounded text-slate-400 hover:text-emerald-400 hover:bg-slate-900 transition flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                    <span class="hidden sm:inline text-[11px]" data-i18n="btn_batch_allow">일괄 허용</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div id="content-files_read" class="divide-y divide-slate-800/60 bg-slate-900/30">
+              <div class="px-4 py-3 flex items-center justify-between hover:bg-slate-800/20 transition">
+                <div class="pl-8 flex items-center gap-2.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <div>
+                    <div class="text-xs font-semibold text-slate-200 font-mono">files.list</div>
+                    <div class="text-[11px] text-slate-400" data-i18n="leaf_files_list_desc">인가된 폴더 트리 탐색 및 파일 목록 조회</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800" data-leaf="files.list">
+                  <button onclick="setLeafGrant('files.list', 'deny')" title="거부 (Deny)" class="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition" data-val="deny">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                  </button>
+                  <button onclick="setLeafGrant('files.list', 'prompt')" title="승인 필요 (Require Approval)" class="p-1.5 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-900 transition" data-val="prompt">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="12 8 12 12 14 14"/></svg>
+                  </button>
+                  <button onclick="setLeafGrant('files.list', 'allow')" title="허용 (Allow)" class="p-1.5 rounded bg-emerald-600 text-white font-medium shadow-md shadow-emerald-600/30 transition" data-val="allow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CATEGORY 3: FILES_WRITE -->
+          <div class="bg-[#111827] border border-slate-800 rounded-xl overflow-hidden shadow-sm" id="cat-files_write">
+            <div class="p-3.5 bg-slate-900/90 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div class="flex items-center gap-3 cursor-pointer select-none" onclick="toggleCategoryAccordion('files_write')">
+                <button class="p-1 text-slate-400 hover:text-white transition transform" id="arrow-files_write">
+                  <svg class="w-4 h-4 rotate-180-anim" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <div class="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-sm text-white" data-i18n="cat_files_write_title">파일 쓰기 & 수정</span>
+                    <span class="text-xs text-slate-400 font-mono">(files_write)</span>
+                    <span id="badge-cat-files_write" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20" data-i18n="badge_all_prompt">모두 승인필요</span>
+                  </div>
+                  <div class="text-[11px] text-slate-400 mt-0.5" data-i18n="cat_files_write_desc">신규 파일 생성, 덮어쓰기, 아토믹 파일 쓰기, 삭제 (고위험 제어)</div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 self-end md:self-auto">
+                <span class="text-[11px] text-slate-400 mr-1 hidden sm:inline" data-i18n="batch_label">카테고리 일괄:</span>
+                <div class="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs font-medium">
+                  <button onclick="batchSetCategory('files_write', 'deny')" title="카테고리 일괄 거부" class="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                    <span class="hidden sm:inline text-[11px]" data-i18n="btn_batch_deny">일괄 거부</span>
+                  </button>
+                  <button onclick="batchSetCategory('files_write', 'prompt')" title="카테고리 일괄 승인" class="p-1.5 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-900 transition flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="12 8 12 12 14 14"/></svg>
+                    <span class="hidden sm:inline text-[11px]" data-i18n="btn_batch_prompt">일괄 승인</span>
+                  </button>
+                  <button onclick="batchSetCategory('files_write', 'allow')" title="카테고리 일괄 허용" class="p-1.5 rounded text-slate-400 hover:text-emerald-400 hover:bg-slate-900 transition flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                    <span class="hidden sm:inline text-[11px]" data-i18n="btn_batch_allow">일괄 허용</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div id="content-files_write" class="divide-y divide-slate-800/60 bg-slate-900/30">
+              <div class="px-4 py-3 flex items-center justify-between hover:bg-slate-800/20 transition">
+                <div class="pl-8 flex items-center gap-2.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                  <div>
+                    <div class="text-xs font-semibold text-slate-200 font-mono">files.write.atomic</div>
+                    <div class="text-[11px] text-slate-400" data-i18n="leaf_files_write_desc">새 파일 생성 및 아토믹 덮어쓰기</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800" data-leaf="files.write.atomic">
+                  <button onclick="setLeafGrant('files.write.atomic', 'deny')" title="거부 (Deny)" class="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition" data-val="deny">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                  </button>
+                  <button onclick="setLeafGrant('files.write.atomic', 'prompt')" title="승인 필요 (Require Approval)" class="p-1.5 rounded bg-amber-600 text-white font-medium shadow-md shadow-amber-600/30 transition" data-val="prompt">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="12 8 12 12 14 14"/></svg>
+                  </button>
+                  <button onclick="setLeafGrant('files.write.atomic', 'allow')" title="허용 (Allow)" class="p-1.5 rounded text-slate-400 hover:text-emerald-400 hover:bg-slate-900 transition" data-val="allow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================= -->
+      <!-- TAB 3: APPROVALS (ZERO-TRUST APPROVAL QUEUE) -->
+      <!-- ========================================================================= -->
+      <section id="tab-approvals" class="space-y-6 hidden">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold text-white tracking-tight" data-i18n="approvals_title">보안 승인 센터 (Zero-Trust Approvals)</h2>
+            <p class="text-xs text-slate-400 mt-1" data-i18n="approvals_desc">사전 인가되지 않은 민감 작업에 대한 사용자 실시간 승인/거부 큐입니다.</p>
+          </div>
+        </div>
+
+        <div id="approvals-container" class="space-y-4">
+          <div id="approval-card-1" class="bg-[#111827] border-2 border-rose-500/40 rounded-xl p-5 shadow-lg shadow-rose-950/20 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div class="flex items-center gap-2.5">
+                <span class="px-2 py-0.5 text-xs font-bold rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 uppercase tracking-wide">High Risk</span>
+                <span class="font-bold text-sm text-white font-mono">files.write.atomic</span>
+              </div>
+              <span class="font-mono text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">42s TTL</span>
+            </div>
+            <div class="bg-slate-900/80 p-3 rounded-lg text-xs font-mono">
+              <div class="text-slate-400">Target Path: <span class="text-slate-200">E:\Project\workspace\config.prod.json</span></div>
+            </div>
+            <div class="flex justify-end gap-3">
+              <button onclick="decideApproval('1', false)" class="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition" data-i18n="btn_deny_request">요청 거절 (Deny)</button>
+              <button onclick="decideApproval('1', true)" class="px-5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg transition" data-i18n="btn_approve_once">이번 요청 승인</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================================= -->
+      <!-- TAB 4: RUNTIMES -->
+      <!-- ========================================================================= -->
+      <section id="tab-runtimes" class="space-y-6 hidden">
+        <div>
+          <h2 class="text-xl font-bold text-white tracking-tight" data-i18n="runtimes_title">격리 선택 런타임 관리</h2>
+          <p class="text-xs text-slate-400 mt-1" data-i18n="runtimes_desc">외부 동적 런타임 매니페스트 관리 (Chromium, CDB, GDB, Ghidra)</p>
+        </div>
+        <div class="p-6 bg-[#111827] border border-slate-800 rounded-xl text-xs text-slate-400">
+          Chromium, CDB, GDB, Native Analysis Host 상태 점검 완료 (3 Admitted)
+        </div>
+      </section>
+
+      <!-- ========================================================================= -->
+      <!-- TAB 5: SETTINGS (언어 팩 드롭다운 설정 및 워크스페이스/로그인 연동 복원) -->
+      <!-- ========================================================================= -->
+      <section id="tab-settings" class="space-y-6 hidden">
+        <div>
+          <h2 class="text-xl font-bold text-white tracking-tight" data-i18n="settings_title">환경설정 및 시스템 진단</h2>
+          <p class="text-xs text-slate-400 mt-1" data-i18n="settings_desc">언어 팩 선택, 네임드 워크스페이스 및 Windows 서비스 연동 관리</p>
+        </div>
+
+        <!-- 1. ESSENTIAL UI: Language Pack Configuration (In Settings!) -->
+        <div class="bg-[#111827] border border-slate-800 rounded-xl p-5 shadow-sm space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+            <div>
+              <h3 class="text-sm font-bold text-white tracking-tight" data-i18n="setting_lang_title">언어 설정 (Language Pack)</h3>
+              <p class="text-xs text-slate-400 mt-0.5" data-i18n="setting_lang_desc">UI 표시 언어 팩을 선택합니다. 선택된 언어 코드는 환경설정에 영속 저장됩니다.</p>
+            </div>
+            <span class="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">i18n Independent</span>
+          </div>
+
+          <div class="flex items-center gap-3 pt-1 text-xs">
+            <label class="text-slate-300 font-medium w-36 shrink-0" data-i18n="lbl_select_lang">인터페이스 언어:</label>
+            <select id="setting-language-select" onchange="setLanguageFromSettings(this.value)" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-medium focus:border-indigo-500 focus:outline-none cursor-pointer w-64">
+              <option value="ko" selected>한국어 (Korean, ko-KR) - 기본값</option>
+              <option value="en">English (영어, en-US)</option>
+            </select>
+          </div>
+          <div class="text-[11px] text-slate-400">
+            코드 상에서 <span class="font-mono text-slate-300">src/i18n/ko.rs</span> 및 <span class="font-mono text-slate-300">src/i18n/en.rs</span> 언어 팩 모듈이 완전히 독립적으로 분리되어 동작합니다.
+          </div>
+        </div>
+
+        <!-- 2. Workspaces Configuration Card -->
+        <div class="bg-[#111827] border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+          <div class="border-b border-slate-800 pb-2.5">
+            <h3 class="text-sm font-bold text-white tracking-tight" data-i18n="setting_ws_title">Agent 종료 후 적용하는 설정</h3>
+            <p class="text-xs text-slate-400 mt-0.5" data-i18n="setting_ws_desc">저장 후 Agent를 다시 시작하세요. 권한 변경은 권한 탭에서 별도로 저장합니다.</p>
+          </div>
+
+          <div class="space-y-3 text-xs">
+            <div>
+              <label class="block text-slate-400 font-medium mb-1" data-i18n="lbl_def_workspace">기본 작업 폴더 (절대 경로)</label>
+              <input type="text" value="E:\Project\30_VS_Project\Remote-Desktop-Commander" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-slate-200 font-mono">
+            </div>
+
+            <div>
+              <label class="block text-slate-400 font-medium mb-1" data-i18n="lbl_exec_profile">실행 프로필</label>
+              <select class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-200 font-mono">
+                <option value="read_only" selected>read_only</option>
+                <option value="dev">development</option>
+                <option value="sandbox">strict-sandbox</option>
+              </select>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="text-slate-400 font-medium" data-i18n="lbl_named_workspaces">추가 작업 폴더: 이름과 절대 경로 (최대 15개)</label>
+                <button onclick="showToast('작업 폴더 행이 추가되었습니다.')" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-indigo-400 font-medium border border-slate-700 transition" data-i18n="btn_add_workspace">
+                  + 작업 폴더 추가
+                </button>
+              </div>
+
+              <!-- Workspace item row -->
+              <div class="p-2.5 bg-slate-900/80 border border-slate-800 rounded-lg flex items-center justify-between gap-2 font-mono">
+                <input type="text" value="ws_acceptance" class="w-36 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs">
+                <input type="text" value="dist/acceptance/native-gui-e" class="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 text-xs">
+                <button class="px-2 py-1 text-xs text-rose-400 hover:bg-rose-950/40 rounded transition">제거</button>
+              </div>
+            </div>
+
+            <div class="pt-2 flex items-center gap-3">
+              <button onclick="showToast('저장된 설정을 다시 불러왔습니다.')" class="px-4 py-2 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition" data-i18n="btn_reload_settings">
+                현재 저장된 설정 다시 불러오기
+              </button>
+              <button onclick="showToast('설정이 성공적으로 저장되었습니다.')" class="px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition shadow" data-i18n="btn_save_settings">
+                설정 저장
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Windows Startup & Service Integration Card -->
+        <div class="bg-[#111827] border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+          <div class="border-b border-slate-800 pb-2.5">
+            <h3 class="text-sm font-bold text-white tracking-tight" data-i18n="setting_login_title">현재 사용자 로그인 시작 (Windows Startup)</h3>
+            <p class="text-xs text-slate-400 mt-0.5">설치/포터블 payload의 고정 Client만 등록합니다. 다른 로그인 항목을 덮어쓰지 않습니다.</p>
+          </div>
+
+          <div class="space-y-3 text-xs">
+            <div class="p-3 bg-slate-900/80 border border-slate-800 rounded-lg font-mono text-slate-300 space-y-1">
+              <div>등록값 존재: <span class="text-emerald-400 font-bold">true</span> · 소유 확인: <span class="text-emerald-400 font-bold">true</span> · 미확정 변경: <span class="text-slate-400">false</span></div>
+              <div class="text-[11px] text-slate-400">명령: %LOCALAPPDATA%\Programs\RACP-Native\0.1.26\payload\racp-client.exe</div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button onclick="showToast('미확정 등록 결과를 확인했습니다.')" class="px-3 py-1.5 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition" data-i18n="btn_reconcile_login">
+                미확정 등록 결과 다시 확인
+              </button>
+              <button onclick="showToast('로그인 시작 등록이 갱신되었습니다.')" class="px-3 py-1.5 text-xs rounded bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition" data-i18n="btn_update_login">
+                현재 Client로 로그인 등록 갱신
+              </button>
+              <button onclick="showToast('로그인 시작이 해제되었습니다.')" class="px-3 py-1.5 text-xs rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition" data-i18n="btn_disable_login">
+                로그인 시작 해제
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Notification Toast -->
+  <div id="toast" class="fixed bottom-6 right-6 px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 text-xs shadow-2xl transition-all transform translate-y-12 opacity-0 pointer-events-none z-50 flex items-center gap-2">
+    <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+    </svg>
+    <span id="toast-msg">작업이 완료되었습니다.</span>
+  </div>
+
+  <script>
+    // Independent i18n Dictionaries (Structured like ko.rs / en.rs)
+    const translations = {
+      ko: {
+        app_title: "RACP Native Client",
+        app_badge: "Enterprise Agent",
+        status_online: "Agent Online",
+        role_label: "역할:",
+        role_controller: "Controller",
+        btn_emergency_stop: "긴급 정지",
+        nav_status: "상태 (Status)",
+        nav_permissions: "권한 (Permissions)",
+        nav_approvals: "승인 (Approvals)",
+        nav_runtimes: "선택 런타임",
+        nav_settings: "설정 (Settings)",
+        device_identity: "Device Identity",
+        enroll_banner_title: "Agent 연결 대기 — 새 등록 또는 Agent 시작이 필요합니다",
+        enroll_banner_desc: "기존 Client 설정과 credential을 자동으로 가져오지 않습니다. 배포된 연결 파일(.racp)을 검증한 후 안전하게 엔드포인트를 등록하세요.",
+        btn_refresh_local: "로컬 상태 새로 확인",
+        enroll_form_title: "새로운 Agent 엔드포인트 온보딩 등록 (.racp)",
+        enroll_form_desc: "연결 파일을 확인한 후 서명 및 CA 해시를 검토하고 새 등록을 제출합니다.",
+        lbl_conn_path: "새 연결 파일 경로 (.racp)",
+        btn_inspect_conn: "연결 파일 확인",
+        lbl_conn_hash: "확인한 연결 파일 SHA-256 해시",
+        lbl_workspace_draft: "새 기본 작업 폴더의 절대 경로",
+        lbl_profile: "실행 프로필 (Execution Profile)",
+        enroll_notice: "등록에는 권한 탭의 현재 선택을 사용합니다. 초기 선택은 모두 거부(Default Deny)입니다.",
+        btn_submit_enroll: "확인한 연결 파일로 새 등록 (Enroll Agent)",
+        registered_card_title: "Agent 등록 정보 (보안 키 바인딩 완료)",
+        btn_start_agent: "Agent 시작 (Start Agent)",
+        metric_agent_process: "Agent 프로세스",
+        metric_status_ok: "정상 가동",
+        metric_active_tasks: "활성 제어 작업",
+        metric_cancel_ready: "안전 취소 핸들러 무장됨",
+        metric_pending_approvals: "대기 중 승인 요청",
+        metric_guardian: "화면/입력 가디언",
+        metric_guardian_desc: "물리 입력 감지 시 원격 차단",
+        inflight_title: "진행 중인 원격 작업 (In-Flight Operations)",
+        btn_safe_cancel: "작업 즉시 안전 취소",
+        status_log_title: "실시간 Status 로그 & 제어 영수증 (Audit Log Stream)",
+        btn_clear_log: "로그 지우기",
+        btn_copy_log: "로그 복사",
+        permissions_title: "기능 카테고리 트리 & 보안 정책 매트릭스",
+        permissions_desc: "카테고리 단위로 트리를 펼쳐 세부 조정하거나, 상단 일괄 버튼을 통해 손쉽게 권한을 일괄/선택 조정합니다.",
+        uncommitted_changes: "미저장 변경사항 있음",
+        btn_commit_cas: "정책 Revision 커밋 (CAS)",
+        global_presets_label: "전체 정책 빠른 프리셋 일괄 적용:",
+        preset_all_deny: "전체 일괄 거부 (Default Deny)",
+        preset_all_prompt: "전체 일괄 승인 필요 (Zero-Trust)",
+        preset_all_allow: "전체 일괄 허용 (Developer Opt-in)",
+        batch_label: "카테고리 일괄:",
+        btn_batch_deny: "일괄 거부",
+        btn_batch_prompt: "일괄 승인필요",
+        btn_batch_allow: "일괄 허용",
+        btn_deny: "거부",
+        btn_prompt: "승인 필요",
+        btn_allow: "허용",
+        badge_mixed: "혼합 (Mixed)",
+        cat_system_title: "장비 · OS · 사용자 상태",
+        cat_system_desc: "호스트네임, 리소스(CPU/RAM), 사용자 세션 및 환경 변수 조회",
+        leaf_sys_identity_desc: "hostname · OS · 아키텍처 · Agent 버전 조회",
+        approvals_title: "보안 승인 센터 (Zero-Trust Approvals)",
+        approvals_desc: "사전 인가되지 않은 민감 작업에 대한 사용자 실시간 승인/거부 큐입니다.",
+        btn_deny_request: "요청 거절 (Deny)",
+        btn_approve_once: "이번 요청 승인",
+        runtimes_title: "격리 선택 런타임 관리",
+        runtimes_desc: "외부 동적 런타임 매니페스트 관리 (Chromium, CDB, GDB, Ghidra)",
+        settings_title: "환경설정 및 시스템 진단",
+        settings_desc: "언어 팩 선택, 네임드 워크스페이스 및 Windows 서비스 연동 관리",
+        setting_lang_title: "언어 설정 (Language Pack)",
+        setting_lang_desc: "UI 표시 언어 팩을 선택합니다. 선택된 언어 코드는 환경설정에 영속 저장됩니다.",
+        lbl_select_lang: "인터페이스 언어:",
+        setting_ws_title: "Agent 종료 후 적용하는 설정",
+        setting_ws_desc: "저장 후 Agent를 다시 시작하세요. 권한 변경은 권한 탭에서 별도로 저장합니다.",
+        lbl_def_workspace: "기본 작업 폴더 (절대 경로)",
+        lbl_exec_profile: "실행 프로필",
+        lbl_named_workspaces: "추가 작업 폴더: 이름과 절대 경로 (최대 15개)",
+        btn_add_workspace: "+ 작업 폴더 추가",
+        btn_reload_settings: "현재 저장된 설정 다시 불러오기",
+        btn_save_settings: "설정 저장",
+        setting_login_title: "현재 사용자 로그인 시작 (Windows Startup)",
+        btn_reconcile_login: "미확정 등록 결과 다시 확인",
+        btn_update_login: "현재 Client로 로그인 등록 갱신",
+        btn_disable_login: "로그인 시작 해제"
+      },
+      en: {
+        app_title: "RACP Native Client",
+        app_badge: "Enterprise Agent",
+        status_online: "Agent Online",
+        role_label: "Role:",
+        role_controller: "Controller",
+        btn_emergency_stop: "Emergency Stop",
+        nav_status: "Status",
+        nav_permissions: "Permissions",
+        nav_approvals: "Approvals",
+        nav_runtimes: "Runtimes",
+        nav_settings: "Settings",
+        device_identity: "Device Identity",
+        enroll_banner_title: "Agent Connection Pending — New Enrollment or Agent Start Required",
+        enroll_banner_desc: "Prior client configs and credentials are not automatically imported. Verify deployed .racp file and enroll endpoint safely.",
+        btn_refresh_local: "Refresh Local Status",
+        enroll_form_title: "New Agent Endpoint Onboarding (.racp)",
+        enroll_form_desc: "Inspect connection file signature and CA hash before submitting enrollment.",
+        lbl_conn_path: "New Connection File Path (.racp)",
+        btn_inspect_conn: "Inspect Connection File",
+        lbl_conn_hash: "Verified File SHA-256 Hash",
+        lbl_workspace_draft: "Default Workspace Absolute Path",
+        lbl_profile: "Execution Profile",
+        enroll_notice: "Enrollment uses current choices in Permissions tab. Default is Deny All.",
+        btn_submit_enroll: "Enroll Agent with Verified File",
+        registered_card_title: "Agent Enrollment State (Protected by DPAPI)",
+        btn_start_agent: "Start Agent",
+        metric_agent_process: "Agent Process",
+        metric_status_ok: "Healthy Running",
+        metric_active_tasks: "Active Operations",
+        metric_cancel_ready: "Safe cancellation handler armed",
+        metric_pending_approvals: "Pending Approvals",
+        metric_guardian: "Desktop Guardian",
+        metric_guardian_desc: "Physical input interrupts remote access",
+        inflight_title: "In-Flight Operations",
+        btn_safe_cancel: "Safe Cancel",
+        status_log_title: "Real-time Status & Audit Log Stream",
+        btn_clear_log: "Clear Log",
+        btn_copy_log: "Copy Log",
+        permissions_title: "Category Tree & Policy Matrix",
+        permissions_desc: "Expand categories to fine-tune leaves, or use batch actions to manage access policies seamlessly.",
+        uncommitted_changes: "Unsaved Changes",
+        btn_commit_cas: "Commit Policy CAS Revision",
+        global_presets_label: "Global Preset Batch Application:",
+        preset_all_deny: "Batch Deny All (Default Deny)",
+        preset_all_prompt: "Batch Prompt All (Zero-Trust)",
+        preset_all_allow: "Batch Allow All (Developer Opt-in)",
+        batch_label: "Category Batch:",
+        btn_batch_deny: "Batch Deny",
+        btn_batch_prompt: "Batch Prompt",
+        btn_batch_allow: "Batch Allow",
+        btn_deny: "Deny",
+        btn_prompt: "Prompt",
+        btn_allow: "Allow",
+        badge_mixed: "Mixed Grants",
+        cat_system_title: "Device, OS & User State",
+        cat_system_desc: "Hostname, CPU/RAM metrics, active user sessions and environment variables",
+        leaf_sys_identity_desc: "Query hostname, OS, CPU arch & Agent version",
+        approvals_title: "Zero-Trust Approval Center",
+        approvals_desc: "Real-time queue for user authorization of non-preapproved sensitive actions.",
+        btn_deny_request: "Deny Request",
+        btn_approve_once: "Approve Once",
+        runtimes_title: "Isolated Runtimes & Engine Hub",
+        runtimes_desc: "Manage external dynamic engine manifests (Chromium, CDB, GDB, Ghidra)",
+        settings_title: "Settings & System Diagnostics",
+        settings_desc: "Language pack selection, named workspaces and Windows service integration",
+        setting_lang_title: "Language Pack Configuration",
+        setting_lang_desc: "Select UI language. Chosen language code is persisted in configuration.",
+        lbl_select_lang: "Interface Language:",
+        setting_ws_title: "Settings Applied After Agent Stop",
+        setting_ws_desc: "Save settings and restart Agent. Policy changes are saved separately in Permissions tab.",
+        lbl_def_workspace: "Default Workspace (Absolute Path)",
+        lbl_exec_profile: "Execution Profile",
+        lbl_named_workspaces: "Additional Workspaces (Max 15)",
+        btn_add_workspace: "+ Add Workspace",
+        btn_reload_settings: "Reload Current Saved Settings",
+        btn_save_settings: "Save Settings",
+        setting_login_title: "Current User Windows Startup",
+        btn_reconcile_login: "Reconcile Login State",
+        btn_update_login: "Update Startup with Current Client",
+        btn_disable_login: "Disable Startup"
+      }
+    };
+
+    let currentLang = 'ko';
+
+    function setLanguageFromSettings(lang) {
+      currentLang = lang;
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (translations[lang] && translations[lang][key]) {
+          el.textContent = translations[lang][key];
+        }
+      });
+      showToast(lang === 'ko' ? '언어가 [한국어(ko-KR)]로 변경되었습니다.' : 'Language switched to [English(en-US)].');
+    }
+
+    function switchTab(tabId) {
+      const tabs = ['status', 'permissions', 'approvals', 'runtimes', 'settings'];
+      tabs.forEach(t => {
+        const content = document.getElementById('tab-' + t);
+        const nav = document.getElementById('nav-' + t);
+        if (t === tabId) {
+          content.classList.remove('hidden');
+          nav.classList.add('bg-indigo-600/10', 'text-indigo-400', 'border', 'border-indigo-500/20');
+          nav.classList.remove('text-slate-400', 'hover:bg-slate-800/60');
+        } else {
+          content.classList.add('hidden');
+          nav.classList.remove('bg-indigo-600/10', 'text-indigo-400', 'border', 'border-indigo-500/20');
+          nav.classList.add('text-slate-400', 'hover:bg-slate-800/60');
+        }
+      });
+    }
+
+    // Switch between Simulated Lifecycle States
+    function changeSimulatedState(state) {
+      const viewUnreg = document.getElementById('status-view-unregistered');
+      const viewReg = document.getElementById('status-view-registered');
+      const viewRun = document.getElementById('status-view-running');
+      const headerText = document.getElementById('header-status-text');
+      const sidebarDot = document.getElementById('sidebar-status-dot');
+
+      viewUnreg.classList.add('hidden');
+      viewReg.classList.add('hidden');
+      viewRun.classList.add('hidden');
+
+      if (state === 'unregistered') {
+        viewUnreg.classList.remove('hidden');
+        headerText.textContent = 'Agent 연결 대기 (미등록)';
+        headerText.className = 'font-medium text-amber-400';
+        sidebarDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400';
+        switchTab('status');
+        showToast('초기 Agent 등록 대기 화면으로 전환되었습니다.');
+      } else if (state === 'registered') {
+        viewReg.classList.remove('hidden');
+        headerText.textContent = 'Agent Stopped (등록 완료)';
+        headerText.className = 'font-medium text-slate-400';
+        sidebarDot.className = 'w-1.5 h-1.5 rounded-full bg-slate-400';
+        switchTab('status');
+        showToast('등록 완료 / 시작 대기 화면으로 전환되었습니다.');
+      } else {
+        viewRun.classList.remove('hidden');
+        headerText.textContent = 'Agent Online (PID 5376)';
+        headerText.className = 'font-medium text-emerald-400';
+        sidebarDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400';
+        switchTab('status');
+        showToast('에이전트 실행 중(Online) 화면으로 전환되었습니다.');
+      }
+    }
+
+    function simulateInspectConnection() {
+      const box = document.getElementById('conn-preview-box');
+      box.classList.remove('hidden');
+      showToast('연결 파일 검증 완료: Gateway 원본 및 CA 해시가 확인되었습니다.');
+    }
+
+    function simulateEnrollment() {
+      showToast('새로운 등록 요청이 DPAPI로 안전하게 처리되었습니다.');
+      setTimeout(() => {
+        changeSimulatedState('registered');
+      }, 800);
+    }
+
+    function clearStatusLog() {
+      const term = document.getElementById('status-log-terminal');
+      term.innerHTML = '<div class="text-slate-400">[' + new Date().toISOString() + '] [INFO] [gui] Status log cleared by user</div>';
+      showToast('로그 창을 비웠습니다.');
+    }
+
+    function copyStatusLog() {
+      const term = document.getElementById('status-log-terminal');
+      navigator.clipboard.writeText(term.innerText);
+      showToast('Status 로그 전체가 클립보드에 복사되었습니다.');
+    }
+
+    // Toggle Category Accordion
+    function toggleCategoryAccordion(catId) {
+      const content = document.getElementById('content-' + catId);
+      const arrow = document.getElementById('arrow-' + catId).querySelector('svg');
+      if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        arrow.classList.add('rotate-180-anim');
+      } else {
+        content.classList.add('hidden');
+        arrow.classList.remove('rotate-180-anim');
+      }
+    }
+
+    function setLeafGrant(leafId, grantValue) {
+      const container = document.querySelector(`[data-leaf="${leafId}"]`);
+      if (!container) return;
+      const buttons = container.querySelectorAll('button');
+      buttons.forEach(btn => {
+        const val = btn.getAttribute('data-val');
+        if (val === grantValue) {
+          if (val === 'deny') btn.className = 'p-1.5 rounded bg-rose-600 text-white font-medium shadow-md shadow-rose-600/30 transition';
+          else if (val === 'prompt') btn.className = 'p-1.5 rounded bg-amber-600 text-white font-medium shadow-md shadow-amber-600/30 transition';
+          else btn.className = 'p-1.5 rounded bg-emerald-600 text-white font-medium shadow-md shadow-emerald-600/30 transition';
+        } else {
+          btn.className = 'p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-900 transition';
+        }
+      });
+      showToast(`${leafId} &rarr; [${grantValue.toUpperCase()}]`);
+    }
+
+    function batchSetCategory(catId, grantValue) {
+      const content = document.getElementById('content-' + catId);
+      if (!content) return;
+      if (content.classList.contains('hidden')) {
+        toggleCategoryAccordion(catId);
+      }
+      const leafWrappers = content.querySelectorAll('[data-leaf]');
+      leafWrappers.forEach(wrapper => {
+        const buttons = wrapper.querySelectorAll('button');
+        buttons.forEach(btn => {
+          const val = btn.getAttribute('data-val');
+          if (val === grantValue) {
+            if (val === 'deny') btn.className = 'p-1.5 rounded bg-rose-600 text-white font-medium shadow-md shadow-rose-600/30 transition';
+            else if (val === 'prompt') btn.className = 'p-1.5 rounded bg-amber-600 text-white font-medium shadow-md shadow-amber-600/30 transition';
+            else btn.className = 'p-1.5 rounded bg-emerald-600 text-white font-medium shadow-md shadow-emerald-600/30 transition';
+          } else {
+            btn.className = 'p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-900 transition';
+          }
+        });
+      });
+      showToast(`[${catId}] Batch &rarr; [${grantValue.toUpperCase()}]`);
+    }
+
+    function applyGlobalPreset(grantValue) {
+      ['system', 'files_read', 'files_write'].forEach(cat => batchSetCategory(cat, grantValue));
+      showToast(`전체 카테고리 &rarr; [${grantValue.toUpperCase()}] 적용 완료`);
+    }
+
+    function savePolicyCAS() {
+      showToast(currentLang === 'ko' ? '정책 Revision 15가 CAS 원자적으로 커밋되었습니다.' : 'Policy Revision 15 committed via CAS.');
+    }
+
+    function triggerEmergencyStop() {
+      if (confirm('경고: 즉시 로컬 Agent 프로세스를 안전 종료하시겠습니까?')) {
+        showToast('에이전트 긴급 정지 신호가 전송되었습니다.');
+      }
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toast-msg');
+      toastMsg.innerHTML = msg;
+      toast.classList.remove('translate-y-12', 'opacity-0', 'pointer-events-none');
+      setTimeout(() => {
+        toast.classList.add('translate-y-12', 'opacity-0', 'pointer-events-none');
+      }, 2500);
+    }
+  </script>
+</body>
+</html>

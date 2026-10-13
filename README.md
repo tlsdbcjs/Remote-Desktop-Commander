@@ -245,7 +245,7 @@ RACP는 시스템 손상 및 비인가 접근을 차단하기 위해 3단계 실
 - **2-PC 실증 가이드**: [물리 2-PC 테스트 랩 구축 매뉴얼](docs/guides/two-pc-lab-guide.md)
 - **구현 현황 (SSOT)**: [단계별 개발 현황 및 테스트 검증 매트릭스](docs/quality/implementation-status.md)
 - **품질 및 호환성**: [OS 및 플랫폼 호환성 보고서](docs/quality/compatibility.md) · [Windows 릴리스 인수 게이트](docs/quality/windows-release-gates.md)
-- **아키텍처 결정 레코드**: [ADR 총람 (ADR-0001 ~ ADR-0029)](docs/adr/README.md)
+- **아키텍처 결정 레코드**: [ADR 총람 (ADR-0001 ~ ADR-0022, ADR-0032)](docs/adr/README.md)
 
 
 ---

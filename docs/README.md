@@ -54,7 +54,7 @@ graph TD
     Quality --> Q2["런타임 호환성 매트릭스"]
     Quality --> Q3["Windows 릴리스 인수 게이트"]
 
-    ADR --> A1["ADR-0001 ~ ADR-0029 (29건)"]
+    ADR --> A1["ADR-0001 ~ ADR-0022, ADR-0032 (23건)"]
     Protocol --> P1["JSON Schemas & OpenAPI Spec"]
 ```
 
@@ -91,8 +91,8 @@ RACP 플랫폼의 핵심 설계 원칙, 프로토콜 계약, 상태 머신, 권�
 - [Windows 배포 릴리스 게이트](quality/windows-release-gates.md) (`DOC-QA-GATES`): 릴리스 필수 충족 게이트(AUTH, RPC, LIFE, DESK 등)
 
 ### 2.4 [아키텍처 결정 레코드 (docs/adr/)](adr/README.md)
-RACP 개발 과정에서 합의된 기술적 의사결정 기록(총 29건)을 일관된 포맷으로 보존합니다.
-- [ADR-0001: 부트스트랩 및 검증 기준](adr/ADR-0001-bootstrap-and-verification.md)부터 [ADR-0029: 로컬 설정 복구](adr/ADR-0029-local-settings-repair.md)까지 전수 수록
+RACP 개발 과정에서 합의된 기술적 의사결정 기록(총 23건)을 일관된 포맷으로 보존합니다.
+- [ADR-0001: 부트스트랩 및 검증 기준](adr/ADR-0001-bootstrap-and-verification.md)부터 [ADR-0022](adr/ADR-0022-user-background-agent-control.md)까지, Client 결정은 [ADR-0032: Native Client 구조와 Slint GUI](adr/ADR-0032-native-client.md)로 통합
 
 ### 2.5 [프로토콜 계약 및 스키마 (docs/protocol/)](protocol/README.md)
 엄격한 discriminated schema 및 OpenAPI 명세입니다.

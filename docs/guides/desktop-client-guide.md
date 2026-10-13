@@ -290,6 +290,4 @@ Journal format 1은 현재 전체 SQL schema/constraint/index 정의가 일치�
 - [PC 등록 및 온보딩 가이드](pc-connect-guide.md)
 - [다중 작업 폴더 격리 가이드](named-workspaces-guide.md)
 - [2-PC 실증 랩 가이드](two-pc-lab-guide.md)
-- [아키텍처 결정 레코드: ADR-0023 (크로스플랫폼 클라이언트)](../adr/ADR-0023-cross-platform-desktop-client.md)
-- [아키텍처 결정 레코드: ADR-0028 (연결 파일 온보딩)](../adr/ADR-0028-connection-file-onboarding.md)
-- [아키텍처 결정 레코드: ADR-0029 (로컬 설정 복구)](../adr/ADR-0029-local-settings-repair.md)
+- [아키텍처 결정 레코드: ADR-0032 (Native Client 구조와 Slint GUI)](../adr/ADR-0032-native-client.md)

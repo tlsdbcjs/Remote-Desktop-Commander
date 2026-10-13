@@ -25,7 +25,7 @@ This document defines repository instructions, operational principles, and seman
 - **Name**: Remote-Desktop-Commander (RACP - Remote Access and Control Protocol)
 - **Architecture**:
   - Python workspace (`uv` workspace): `apps/cli`, `apps/gateway`, `packages/domain`, `packages/protocol`, `packages/policy`, `packages/observability`, `packages/sdk`
-  - Rust workspace: `apps/agent`, `apps/client-native` (Iced, including its local `src/ui_model.rs`), `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`, `xtask`; opt-in independent `apps/analysis-host`
+  - Rust workspace: `apps/agent`, `apps/client-native` (currently Iced; GUI moves to Slint 1.16.x with a software renderer default per [ADR-0032](docs/adr/ADR-0032-native-client.md); includes its local `src/ui_model.rs`), `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`, `xtask`; opt-in independent `apps/analysis-host`
   - Node / Web workspace (`pnpm` workspace): `apps/console` (React + Vite) only
 - **Current Baseline Version**: Read `packages/domain/src/racp_domain/version.py` (SSOT).
 
@@ -202,7 +202,7 @@ Use [`.agents/skills/desktop-build/SKILL.md`](.agents/skills/desktop-build/SKILL
 - Packaging SSOT: `xtask/src/package.rs`, `xtask/native-installer.nsi`, `crates/racp-contract/src/distribution.rs`. Product artifact generation is separate from development staging and requires its explicit request.
 - Client staging: `dist/client/<version>/<target>/<build-id>/staging/`; product output: the same batch's `packages/`. Standalone Agent: `dist/agent/<version>/win-x64/<build-id>/build/`, using `xtask stage-agent` and `xtask verify-agent`.
 - Bump PATCH once per build/change batch with `scripts/version.py`, refresh `uv.lock`, and reuse that version for retries and all platform artifacts. Never bump once per output format.
-- Bundle native Iced Client, Rust Agent and required static assets/license/SBOM only. Do not bundle CPython, Node, Electron, React or WebView2. Optional runtimes and analysis host are separate. Never package enrollment tokens, credentials, gateway-specific settings or local device state.
+- Bundle the native Client (Iced until the ADR-0032 Slint migration completes), Rust Agent and required static assets/license/SBOM only. Do not bundle CPython, Node, Electron, React or WebView2. Optional runtimes and analysis host are separate. Never package enrollment tokens, credentials, gateway-specific settings or local device state.
 - Preserve existing outputs by default. An explicit user request to reset `dist/` authorizes removing its old outputs, including legacy backups and test evidence; it does not authorize deleting source or registered state. Validate the exact workspace path, ensure output processes have stopped, and unlink reparse points without following their external targets before recursive deletion. On ordinary build failure, inspect and quarantine only the failed phase before retrying under a new build ID.
 - Verify production Rust/TypeScript builds and packaging manifest integrity. The Windows installer request authorizes setup artifact creation. The user's latest instruction, **do not actually install**, prohibits any further installer execution or install/uninstall tests on this machine. Earlier isolated tests completed before that instruction are historical evidence only; do not rerun them without a new explicit request. Preserve existing registered profiles and services. Machine service installation, signing, clean-machine acceptance and macOS/Linux native builds remain deferred. Record checksums, passed checks and limitations in [Implementation Status](docs/quality/implementation-status.md).
 
@@ -222,7 +222,7 @@ The user installer bundles Client and Agent in one setup EXE. Its default path i
 | Agent | `dist/agent/<version>/win-x64/<build-id>/build/` | Rust Agent EXE, LICENSE, Agent-only SBOM and hash manifest; `cargo run --locked -p xtask -- stage-agent --build-id <id>` |
 | Agent service staging | `dist/agent/<version>/win-x64/<build-id>/staging/` | GUI-free `payload/` with explicit `native-agent-service` manifest; `xtask stage-agent-service` / `verify-agent-service`. No installation/SCM changes |
 | Agent service setup | `dist/agent/<version>/win-x64/<build-id>/packages/` | Explicitly requested `xtask package-agent-service`; unsigned setup definition, no installer execution |
-| Client | `dist/client/<version>/win-x64/<build-id>/staging/` | Iced Client, required companion Agent, LICENSE/SBOM/manifest and native launcher; `xtask stage` / `verify-staging` |
+| Client | `dist/client/<version>/win-x64/<build-id>/staging/` | Native Client, required companion Agent, LICENSE/SBOM/manifest and native launcher; `xtask stage` / `verify-staging` |
 | Client product artifacts | `dist/client/<version>/<target>/<build-id>/packages/` | Explicitly requested setup/portable/ZIP; `xtask package` |
 | Console | `dist/console/<version>/web/<build-id>/build/` | `web/` static frontend and build manifest; `uv run --frozen python scripts/console_build.py --node <node.exe> --build-id <id>` |
 | Verification | `dist/verification/<component>/<version>/<run-id>/` | Test reports, logs and isolated fixtures. Pass explicit output paths to Agent/GUI probes; never package these files. Known-source RE fixtures use `dist/verification/fixtures/<version>/re-fixture/`. |
