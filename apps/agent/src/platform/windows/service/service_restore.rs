@@ -137,7 +137,7 @@ pub fn execute(root: &Path, input: &Value) -> Result<Value, RacpError> {
         return Err(RacpError::new("REQUEST_INVALID"));
     }
     let expected = input["expected_config_sha256"].as_str().unwrap();
-    let _payload = racp_core::distribution::pin_current_payload(true)?;
+    let _payload = racp_core::distribution::pin_current_agent_service_payload()?;
     let exe = racp_core::validate_local_path(&std::env::current_exe()?)?;
     let image_root = exe
         .parent()

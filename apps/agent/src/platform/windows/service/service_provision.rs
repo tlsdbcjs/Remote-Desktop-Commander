@@ -106,7 +106,7 @@ fn progress(
 }
 pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
     machine::require_system()?;
-    let _payload = racp_core::distribution::pin_current_payload(true)?;
+    let _payload = racp_core::distribution::pin_current_agent_service_payload()?;
     let exe = racp_core::validate_local_path(&std::env::current_exe()?)?;
     if exe.file_name().is_none_or(|name| name != "racp-agent.exe") {
         return Err(RacpError::new("PACKAGE_INVALID"));

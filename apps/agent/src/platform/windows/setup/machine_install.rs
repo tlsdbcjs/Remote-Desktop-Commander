@@ -109,7 +109,7 @@ pub fn prepare() -> Result<Value, RacpError> {
             .ok_or_else(|| RacpError::new("MACHINE_INSTALL_PATH_INVALID"))?,
     )?;
     let payload = root.join("payload");
-    let _payload = racp_core::distribution::pin_payload(&payload)?;
+    let _payload = racp_core::distribution::pin_agent_service_payload(&payload)?;
     let guards = Workspaces::new(&root, &[])?;
     let version = guards.directory("default", &root)?;
     if version
@@ -145,7 +145,7 @@ pub fn prepare() -> Result<Value, RacpError> {
     }
     protect(&root.join("uninstall.exe"), false)?;
     let _image = machine::pin_image_directory(&payload)?;
-    let value = json!({"format_version":1,"version":VERSION,"scope":"machine_service","uninstaller_sha256":uninstaller_hash,
+    let value = json!({"format_version":1,"version":VERSION,"scope":"machine_service","payload_kind":"native-agent-service","uninstaller_sha256":uninstaller_hash,
         "payload_manifest_sha256":digest(racp_core::read_bounded(&payload.join(racp_contract::distribution::MANIFEST_FILE),1048576,false)?),
         "service_started":false,"registered":false});
     racp_core::atomic_write(&root.join(RECEIPT), &serde_json::to_vec(&value)?, false)?;
@@ -158,13 +158,14 @@ pub fn uninstall_preflight() -> Result<Value, RacpError> {
     let root = root()?;
     let _root = machine::pin_secure_parent(&root)?;
     let payload = root.join("payload");
-    let _payload = racp_core::distribution::pin_payload(&payload)?;
+    let _payload = racp_core::distribution::pin_agent_service_payload(&payload)?;
     let _image = machine::pin_image_directory(&payload)?;
     let raw = racp_core::read_bounded(&root.join(RECEIPT), 4096, false)?;
     reject_duplicate_keys(&raw)?;
     let value: Value = serde_json::from_slice(&raw)?;
     if value["format_version"] != 1
         || value["scope"] != "machine_service"
+        || value["payload_kind"] != "native-agent-service"
         || value["version"] != VERSION
         || value["payload_manifest_sha256"]
             != digest(racp_core::read_bounded(
@@ -211,6 +212,6 @@ pub fn uninstall_preflight() -> Result<Value, RacpError> {
     }
     Ok(
         json!({"preflight_complete":true,"scope":"machine_service","state_preserved":true,
-        "service_configured":false,"gui_must_be_closed":true,"payload_manifest_sha256":value["payload_manifest_sha256"]}),
+        "service_configured":false,"payload_kind":"native-agent-service","payload_manifest_sha256":value["payload_manifest_sha256"]}),
     )
 }

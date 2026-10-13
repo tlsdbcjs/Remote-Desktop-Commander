@@ -1,8 +1,8 @@
 # RACP 구현 작업 및 검증 현황 (Implementation Status)
 
 > **Document ID**: `DOC-QA-STATUS`\
-> **Status**: Active · **Target Version**: v0.1.26\
-> **Last Updated**: 2026-10-12 · **Classification**: Quality Assurance & Implementation Status (SSOT)
+> **Status**: Active · **Target Version**: v0.1.27\
+> **Last Updated**: 2026-10-13 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
 
@@ -2645,3 +2645,64 @@ USB 동글의 용도는 사용자가 **원격 PC에 연결된 외장 장치/동�
      | **배포 패키지 ZIP** | [`dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64.zip`](../../dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64.zip) | 38,013,970 bytes<br>`4eb980872a041cef0b5884235cb86c2825a3996da69ac5903cde37975a91365d` |
      | **Standalone Agent** | [`dist/agent/0.1.26/win-x64/gui-20261013-f/build/racp-agent.exe`](../../dist/agent/0.1.26/win-x64/gui-20261013-f/build/racp-agent.exe) | 21,947,392 bytes |
 
+
+
+### 2026-10-13 Agent 서비스 독립 기반 구현 — v0.1.27 (`codex/agent-service-foundation`)
+
+사용자가 Agent 서비스 계획에 따라 미구현 기능 진행을 요청해 첫 묶음 AS15/AS01/AS02와 AS12의 배포 정의를 구현했다. 계획서의 과거 “문서 작성만” 기록과 현재 구현 요청을 구분했다. 별도 managed worktree/브랜치에서 작업했으며 `apps/client-native` 제품 source·실제 설치·SCM·기존 등록/state·USB/driver·macOS/Linux는 변경하거나 실행하지 않았다. PATCH는 **0.1.26→0.1.27 한 번**만 증가하고 `uv.lock`, root Cargo.lock, 독립 analysis-host Cargo.lock의 로컬 package version을 동기화했다. 분석 host는 metadata만 갱신했으며 엔진/build를 실행하지 않았다.
+
+| 작업 | 이번 source 범위 |
+|---|---|
+| AS15 | Agent 앱 경로/Windows service·setup 분리 및 실행 참조 갱신. 공유 backend의 추가 재배치는 점진 작업으로 유지 |
+| AS01 | 명시 Agent 서비스 역할/3-file allowlist·hash·PE·file pin·hard-link 거부 및 machine receipt 역할 연결 |
+| AS02 | GUI 없는 native-control/native-service-control의 기존 인증 IPC·CAS·승인·cancel/stop/event 소비 경로 |
+| AS12 | 독립 staging/verify/setup command·Agent-only recipe/CI 정의. setup 생성/실행 인수는 이번 배치에서 미수행 |
+
+- [Agent source](../../apps/agent/src/main.rs)는 역할 경로 `apps/agent`를 사용한다. Windows service/setup 모듈은 `platform/windows/service`와 `platform/windows/setup`으로 이동했다. Cargo·uv exclude·source digest·migration inventory의 current_source_path·CI·AGENTS·활성 source 링크를 갱신하고 과거 source_path/검증 기록은 보존했다. macOS/Linux service/device adapter는 미구현이다.
+- [Payload 계약](../../crates/racp-contract/src/distribution.rs)과 [admission](../../crates/racp-core/src/distribution.rs)은 명시 `native-agent-service` 역할에 Agent·LICENSE·SBOM만 허용한다. Client의 role 생략/4-file 계약은 유지하고 Client/portable caller는 service 역할을 거부한다. Agent 공통 worker/user run은 검증된 두 역할을 소비하지만 service host·provision·관리·restore·설치 보호는 service 역할만 받는다. hash/PE/파일 집합/duplicate-key/크기 검사를 유지하며 manifest/모든 파일의 hard-link도 거부한다.
+- [Headless CLI](../../apps/agent/src/cli/control.rs)는 기존 ControlRequest/ControlReply와 실제 SID/session·server PID/birth 검증을 재사용한다. snapshot·최대 5초/256개 subscribe event·policy CAS·승인 nonce·정확한 operation/request/boot cancel·stop을 제공한다. service-control은 공유 endpoint만 읽고 별도 TCP/무인 승인 우회를 만들지 않았다. 정상 거부 reply는 `result.type=error`와 exit 0, 입력/transport 실패는 stderr/exit 4라는 계약을 가이드에 명시했다. 실제 service observer/controller 실행은 아래 user-mode 결과와 구분한다.
+- `xtask stage-agent-service` / `verify-agent-service`와 `package-agent-service`를 연결했다. [Agent-only NSIS recipe](../../xtask/native-machine-installer.nsi)는 Client EXE/shortcut이 없고 files/protection receipt 단계와 서비스 등록/입력을 분리한다. Client package의 machine/both 혼합 역할은 거부하고 독립 Agent command를 사용한다. CI는 Windows만 stage/verify하며 setup 생성은 별도 명시 workflow-dispatch input이다. **이번에 setup EXE를 생성/실행하거나 CI를 dispatch하지 않았다.** compiler cache는 일반 절대 디렉터리만 재사용하도록 기존 path/reparse 검사를 유지했다.
+
+최종 개발 산출물은 [service staging manifest](../../dist/agent/0.1.27/win-x64/foundation-20261013-c/staging/build-manifest.json)와 [payload](../../dist/agent/0.1.27/win-x64/foundation-20261013-c/staging/payload/payload-manifest.json)이다. Agent EXE는 **22,186,496 bytes**, SHA-256 `ddd4899d1d2cf0c7321448183005f8c8d9592de94749782d022c915268db0cb7`; payload manifest SHA-256 `8bd7a40a42100e619497413bc4ed4364dd31c6494514a7d95b7b5fef55c5156b`; input digest `5b639eb10376c8d97de3e60c5ce14919ab1ee212b44e3804365697751d290e97`; Cargo.lock SHA-256 `c1513ab3d914d615ce1c897f7236c96e5b7b5cabbd3fca7d513a84a9e2750264`다. Agent-only dependency graph의 SBOM에서 Iced/Client/Electron/Node/CPython component가 없는 것을 확인했다. unsigned/non-published이며 `tests=not_run_by_xtask`; 별도 시험 근거는 다음과 같다.
+
+| 검사 | 실제 결과/범위 |
+|---|---|
+| Windows production build/정적 admission | Rust/Cargo 1.90.0, static CRT/x64 release 및 `verify-agent-service` PASS. Agent·LICENSE·SBOM 3개, file/hash/PE/import/manifest 검사. 실제 SCM/설치 아님 |
+| 설치 없는 실제 HTTPS/WSS + headless IPC | [최종 results](../../dist/verification/agent/0.1.27/foundation-e2e-final/results.json) **21 PASS / 0 FAIL**, 위 최종 EXE hash 일치. 새 Gateway/Device/state/workspace만 사용; 같은 PC/user-mode. UTF-8 파일·default deny/경로 탈출·stdout/stderr/exit·멱등 실행·ConPTY·정책 CAS/stale revision·승인/nonce replay·명시 거부/승인자 부재·stale-boot 및 실제 cancel·소유 child 종료·stop/drain·재시작/재연결 보존. 기존 profile 미사용, 시험 Agent/Gateway 정상 종료 |
+| Rust contract/core/xtask | [로그](../../dist/verification/agent/0.1.27/foundation-20261013/foundation-tests-final.log) **32 PASS**, role/client 호환·불법 파일/target/hash·duplicate/hard-link·write pin·SID/session model·package definition 포함 |
+| Agent dispatch 모델 | [최종 workspace 로그의 lib 절](../../dist/verification/agent/0.1.27/foundation-20261013/rust-workspace-f.log) **8 PASS**. 구 v1/permissions 없는 fixture를 v2+명시 exec.argv 권한·같은 boot/epoch/READY peer로 정비. 실제 Provider 효과 count·중복/충돌·로컬 deny/lease expiry·deadline cleanup 기준은 유지 |
+| Python 계약/버전 | [로그](../../dist/verification/agent/0.1.27/foundation-20261013/python-contracts.log) **14 PASS** (버전 6 포함), Ruff PASS, mypy **98 source files PASS** |
+| Source/format/검토 | inventory-check **114 operations / 143 permissions / 18 categories**, frozen baseline 100 유지. Agent/core/runtime/contract/xtask Rust format·git diff check PASS. 별도 읽기 전용 focused review에서 actionable finding 없음; reviewer가 tests를 독립 재실행한 것은 아님 |
+
+**전체 workspace suite는 PASS가 아니다.** 최종 `cargo test --workspace --locked`는 Browser군 **7 PASS / 13 FAIL**에서 중단됐다. 기존 Browser fixture가 v1/permissions 없는 AgentSettings로 `Browser::new`에 들어가 `PERMISSIONS_INVALID`로 실패한다. 선택 runtime/Browser fixture 정비는 이번 첫 묶음의 완료 증거로 바꾸지 않으며 이후 test군도 해당 full run에서 미실행이다. 실패 이름은 다음과 같다.
+
+- `browser_cancel_cleanup_includes_startup_before_cdp_is_ready`
+- `browser_process_is_protected_from_generic_termination`
+- `concurrent_close_and_agent_cleanup_finish_owned_profile_once`
+- `cookies_form_refs_native_input_png_and_navigation_invalidation`
+- `external_cdp_opt_in_context_and_target_ownership`
+- `failed_evaluation_records_started_effect_and_retains_no_child_after_timeout`
+- `foreign_recovery_authority_is_retained_and_cannot_report_complete_cleanup`
+- `frame_scope_cross_site_input_key_focus_and_detachment`
+- `isolated_contexts_owner_boot_snapshot_and_complete_cleanup`
+- `origin_fence_prevents_subresource_and_websocket_network_effects`
+- `recovery_never_deletes_a_live_owned_process_profile`
+- `restart_recovers_only_persisted_authorized_external_targets`
+- `restart_removes_profile_only_after_owned_process_tree_has_exited`
+
+전체 `cargo fmt --all`도 기준 GUI source의 기존 trailing-whitespace/format 문제로 실패했고 Agent 범위만 최종 통과했다. 자동 formatting이 만든 GUI 변경은 모두 되돌려 GUI source 차이는 0이다. 기존 recipes Windows callback 이름 warning 3개 및 core test unused-import warning은 유지된다.
+
+재시도 기록: 이전 turn 중단으로 생긴 PDB/LLVM incremental 손상 및 실행 중 xtask.exe를 재빌드한 file-lock 경합을 확인했다. 캐시 정리 명령은 정책 차단돼 삭제하지 않고 별도/기존 정상 cache로 재검증했다. 최초 service batch a는 compiler cache junction을 secure source read가 거부해 해당 staging만 quarantine에 보존했고 path 검사를 약화하지 않았다. 일반 디렉터리 cache에서 b와 최종 c를 같은 버전으로 생성했다. inventory의 permissions.rs raw hash 불일치는 managed checkout CRLF/LF 차이였으며 frozen baseline과 같은 LF bytes로 복구해 계약 변화/delta 없이 통과했다. 최초 headless red는 이전 EXE의 명령 부재, 추가 승인 거부 시험의 최초 실패는 내부 APPROVAL_REJECTED와 공개 publication guard의 APPROVAL_REQUIRED를 혼동한 harness assertion이었다. 제품 승인 검사는 변경하지 않고 reply·승인 종료 event·결과/data 부재를 함께 검사해 최종 후보를 다시 통과시켰다. b와 c EXE hash는 달라 b의 인수를 최종 c로 이관하지 않고 **최종 c를 21-case 재실행**했다.
+
+> [!IMPORTANT]
+> 이번 완료 범위는 **Agent 서비스용 source/Windows 개발 payload·headless user-mode 검증**이다. 실제 service account/SYSTEM/SCM lifecycle·ACL/DPAPI 인수(AST12–AST18), 설치/제거/clean-machine·서명·실제 두 PC/MCP 인수는 완료로 선언하지 않는다. AS03–AS11의 실제 서비스 조건/운영·AS13 복구·AS16–AS18 USB/외장 장치 enumeration/opaque session/수집/IO 정리와 AST24–AST26 실제 장치 인수는 남아 있다. 현재 설치 금지와 장치/driver 변경 금지를 유지한다.
+
+#### main 통합 전 전체 회귀 — 2026-10-13
+
+후속 구현/통합 요청에 따라 Browser fixture를 v2 설정과 명시 console/network read 권한으로 정비했다. Filesystem fixture의 workspace가 runtime private parent 내부에 놓여 정상 작업까지 거부되던 배치를 `workspace`, `docs`, `state/data`로 분리했다. 제품의 default deny·state 보호·process 종료 확인·5초 cleanup 예산은 변경하지 않았다.
+
+- [전체 workspace 최종 실행](../../dist/verification/agent/0.1.27/foundation-20261013/rust-workspace-h.log): `cargo test --locked --workspace`, **92 PASS / 0 FAIL / 4 ignored**, exit 0. ignored는 subprocess 전용 `support::fixture_child` 4개이며 부모 시험이 명시 실행한다. 기존 Windows Chromium 1243을 명시한 격리 profile/local fixture 시험이며 native Browser도 **20 PASS**다.
+- [Filesystem/Memory/Process/Shell/Terminal 묶음](../../dist/verification/agent/0.1.27/foundation-20261013/runtime-fixtures.log): **15 PASS / 0 FAIL / 4 ignored**. Ruff PASS, mypy **98 files PASS**, 버전 시험 **6 PASS**, scoped Rust format PASS를 다시 확인했다.
+- Browser 권한 fixture 수정 직후 실행은 **17 PASS / 3 FAIL**였으며 concurrent close, evaluation timeout cleanup, external CDP의 owned browser 종료에서 실패했다. 임시 native cleanup 진단을 추가한 단독 close **1 PASS**와 [전체 Browser 재실행](../../dist/verification/agent/0.1.27/foundation-20261013/browser-group-trace.log) **20 PASS**에서는 재현되지 않아 진단 코드를 제거했다. 위 전체 workspace도 통과했지만 **간헐 cleanup 실패의 원인을 규명하거나 제품 수정으로 해결했다는 증거는 아니다**. AS07의 반복/부하 인수 공백으로 유지한다. 실제 owned process handle signal과 Job tree-empty 증명을 exit code만으로 대체하지 않았다.
+
+앞선 실패 로그와 당시 결과는 이력으로 보존한다. 후속 PASS는 source 회귀 근거이며 SCM/서비스 identity·설치·물리 USB 장치 인수를 대신하지 않는다.

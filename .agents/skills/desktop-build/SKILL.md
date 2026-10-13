@@ -8,8 +8,8 @@ description: >-
 # RACP Desktop Build
 
 > **Document ID**: `DOC-SKILL-DESKTOP-BUILD`\
-> **Status**: Active · **Target Version**: v0.1.26 native development\
-> **Last Updated**: 2026-10-12 · **Classification**: Build Operations
+> **Status**: Active · **Target Version**: v0.1.27 native development\
+> **Last Updated**: 2026-10-13 · **Classification**: Build Operations
 
 ## Platform policy
 
@@ -27,11 +27,13 @@ cargo run --locked -p xtask -- stage --platform win --arch x64 --build-id <uniqu
 cargo run --locked -p xtask -- verify-staging --platform win --arch x64 --build-id <unique-build-id>
 cargo run --locked -p xtask -- stage-agent --platform win --arch x64 --build-id <unique-build-id>
 cargo run --locked -p xtask -- verify-agent --platform win --arch x64 --build-id <unique-build-id>
+cargo run --locked -p xtask -- stage-agent-service --build-id <unique-build-id>
+cargo run --locked -p xtask -- verify-agent-service --build-id <unique-build-id>
 ```
 
-Native staging uses Rust 1.90.0, MSVC/Windows SDK and a separate static CRT target. It admits only native Client/Agent, LICENSE and a Cargo SBOM plus their payload manifest. No Node/Python/Electron/React/WebView2 or implicit Chromium download is part of this path. Runtime admission is separate. Stage creates development files, not installers or installed state. Source inputs, dirty commit, file hashes, target, features and lock digest are recorded. Preserve prior batches and quarantine only the newly failed batch.
+Native staging uses Rust 1.90.0, MSVC/Windows SDK and a separate static CRT target. It admits only native Client/Agent, LICENSE and a Cargo SBOM plus their payload manifest. No Node/Python/Electron/React/WebView2 or implicit Chromium download is part of this path. Runtime admission is separate. Stage creates development files, not installers or installed state. `RACP_NATIVE_TARGET_DIR` may select a reusable compiler cache at an absolute normal directory; existing path/reparse-point validation remains mandatory. Source inputs, dirty commit, file hashes, target, features and lock digest are recorded. Preserve prior batches and quarantine only the newly failed batch.
 
-When the user explicitly requests product artifacts, use `cargo run --locked -p xtask -- package --platform win --arch x64 --build-id <verified-build-id>`. `--install-scope user|machine|both` selects the recipes; user is the default. Build-only `makensis.exe` compiles the maintained [user installer](../../../xtask/native-installer.nsi) or [machine service installer](../../../xtask/native-machine-installer.nsi). The Rust writer creates native portable EXE and ZIP. Earlier limited user-scope acceptance is recorded in Implementation Status; current no-install instructions forbid repeating it. Machine helper protection/detach and recipe installation remain unverified. Updater/native restore and partial provisioning recovery are incomplete. Compilation alone does not establish ZIP/portable execution or clean-machine acceptance.
+When the user explicitly requests product artifacts, use `cargo run --locked -p xtask -- package --platform win --arch x64 --build-id <verified-build-id>`. Client `package` supports `--install-scope user` only. For an explicitly requested Agent-only service setup, use `package-agent-service --build-id <verified-service-build-id>` with a service staging batch; this command never executes the installer or changes SCM. Build-only `makensis.exe` compiles the maintained [user installer](../../../xtask/native-installer.nsi) or [machine service installer](../../../xtask/native-machine-installer.nsi). The Rust writer creates native portable EXE and ZIP. Earlier limited user-scope acceptance is recorded in Implementation Status; current no-install instructions forbid repeating it. Machine helper protection/detach and recipe installation remain unverified. Updater/native restore and partial provisioning recovery are incomplete. Compilation alone does not establish ZIP/portable execution or clean-machine acceptance.
 
 The 2026-10-12 Windows installer request authorizes setup artifact creation. The user's latest instruction **do not actually install** prohibits further installer execution and install/uninstall tests on this machine. Earlier isolated acceptance completed before that instruction is historical evidence, not permission to repeat it. Machine service installation, signing, clean-machine acceptance and macOS/Linux builds remain deferred. Reuse the current version for retries/formats.
 

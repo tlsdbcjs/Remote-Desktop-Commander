@@ -4,7 +4,7 @@ on:
     branches: [master, "codex/**"]
     paths:
       - "apps/client-native/**"
-      - "apps/agent-rust/**"
+      - "apps/agent/**"
       - "crates/**"
       - "xtask/**"
       - "Cargo.*"
@@ -21,7 +21,7 @@ on:
       install_scope:
         description: "Windows setup scope (artifact definitions; no installation)"
         type: choice
-        options: [user, machine, both]
+        options: [user]
         default: user
       include_deferred_platforms:
         description: "Request deferred platforms (native runners/implementation remain unavailable)"

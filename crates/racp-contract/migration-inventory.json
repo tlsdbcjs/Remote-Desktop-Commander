@@ -20039,7 +20039,7 @@
     },
     {
       "source_path": "apps/agent-rust/src/bin/racp-portable.rs",
-      "current_source_path": "apps/agent-rust/src/bin/racp-native-portable.rs",
+      "current_source_path": "apps/agent/src/bin/racp-native-portable.rs",
       "disposition": "retired_from_client_source",
       "owner_task": "R14",
       "kind": "source",

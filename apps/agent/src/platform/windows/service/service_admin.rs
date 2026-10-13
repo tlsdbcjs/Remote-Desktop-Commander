@@ -131,7 +131,7 @@ fn owned_rights(root: &Path, rights: u32) -> Result<Service, RacpError> {
 pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
     racp_core::machine_service::require_system()?;
     let root = racp_core::validate_local_path(root)?;
-    let _payload = racp_core::distribution::pin_current_payload(true)?;
+    let _payload = racp_core::distribution::pin_current_agent_service_payload()?;
     let exe = std::env::current_exe()?;
     let parent = exe
         .parent()

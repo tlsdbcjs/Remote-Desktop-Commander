@@ -17,7 +17,7 @@ pub async fn run(
 ) -> Result<(), RacpError> {
     use racp_contract::local_ipc::*;
     use racp_contract::service_scope::ControllerRole;
-    let _payload = racp_core::distribution::pin_current_payload(true)?;
+    let _payload = racp_core::distribution::pin_current_agent_payload(true)?;
     let endpoint = crate::local_ipc::LocalEndpoint::load_service(control)?;
     let scope = endpoint
         .service_scope

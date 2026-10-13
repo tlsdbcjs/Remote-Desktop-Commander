@@ -1,15 +1,10 @@
+mod cli;
+mod platform;
 #[cfg(windows)]
-mod machine_install;
-#[cfg(windows)]
-mod machine_setup;
-#[cfg(windows)]
-mod native_service;
-#[cfg(windows)]
-mod service_admin;
-#[cfg(windows)]
-mod service_provision;
-#[cfg(windows)]
-mod service_restore;
+use platform::windows::{
+    service::{native_service, service_admin, service_provision},
+    setup::{machine_install, machine_setup},
+};
 use racp_contract::{RacpError, VERSION};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -20,7 +15,7 @@ fn arguments(args: &[String]) -> Result<Option<PathBuf>, RacpError> {
     let flags: &[&str] = match action {
         "collection-worker" | "image-preview-worker" | "diagnostic-worker" | "trash-worker" => &[],
         "broker" | "guardian" => &["--pair-config"],
-        "native-service-session" => &["--service-control"],
+        "native-service-session" | "native-service-control" => &["--service-control"],
         "native-setup-host" => &["--setup-root", "--input-sha256"],
         "native-machine-setup" => &["--state-dir"],
         "native-machine-install-protect" | "native-machine-uninstall-preflight" => &[],
@@ -28,6 +23,7 @@ fn arguments(args: &[String]) -> Result<Option<PathBuf>, RacpError> {
         "plugin-gdb" => &["--manifest", "--gdb", "--gdb-sha256"],
         "native-service" if args.len() == 5 => &["--state-dir", "--bootstrap-sha256"],
         "native-enroll"
+        | "native-control"
         | "native-run"
         | "native-runtime-admit"
         | "native-runtime-configure"
@@ -76,6 +72,8 @@ fn framed(action: &str) -> bool {
             | "native-run"
             | "native-service"
             | "native-service-session"
+            | "native-control"
+            | "native-service-control"
             | "native-setup-host"
     )
 }
@@ -104,6 +102,7 @@ async fn main() {
     if args.is_empty() || matches!(args.as_slice(), [arg] if arg == "--help" || arg == "-h") {
         println!("racp-agent {VERSION}\n\nUsage: racp-agent <command> --state-dir <absolute-path>\n\nNative commands:\n  native-enroll  Explicit new registration; bounded JSON on stdin\n  native-run  User Agent with authenticated Named Pipe control\n  native-settings-configure  Stopped Agent workspace/profile revision CAS\n  native-login-status / native-login-configure  Current user's fixed login entry\n  native-runtime-status / native-runtime-admit / native-runtime-configure  Optional runtime admission/selection\n  native-service  RACPNativeAgent SCM host with separate private native config\n  native-service-admin  SYSTEM-only config handoff/reconcile; bounded JSON on stdin\n\nSecrets are never accepted in command arguments. Native state never imports legacy credentials. Service provisioning and native session Broker remain incomplete. GUI/acceptance gates remain deferred.");
         println!("  native-maintenance-status  Packaged user preflight: confirmed cleanup, storage format, login references; no stop/removal/rollback.");
+        println!("  native-control --state-dir <path> / native-service-control --service-control <path>  Authenticated headless IPC; ControlRequest JSON on stdin, ControlReply/event JSON lines on stdout. Subscribe watches up to 5 seconds/256 events.");
         println!("  native-service-provision  Fresh SYSTEM-only fixed service/data roots from bounded controllers+enrollment JSON; prepares but never starts/enrolls.");
         println!("  native-service-session --service-control <absolute-path>  Controller's interactive desktop bridge; no service credential access. GUI provides explicit connect/disconnect.");
         println!("  native-machine-setup  Elevated administrator to fixed LocalSystem setup runner; fresh provisioning JSON on stdin; no Agent start/enrollment.");
@@ -149,8 +148,31 @@ async fn main() {
             )?;
             return Ok(Value::Null);
         }
-        let _payload =
-            racp_core::distribution::pin_current_payload(action == "native-maintenance-status")?;
+        let _payload = if matches!(
+            action,
+            "native-service"
+                | "native-service-admin"
+                | "native-service-provision"
+                | "native-machine-setup"
+        ) {
+            racp_core::distribution::pin_current_agent_service_payload()?
+        } else {
+            racp_core::distribution::pin_current_agent_payload(
+                action == "native-maintenance-status",
+            )?
+        };
+        if action == "native-control" || action == "native-service-control" {
+            let root = if action == "native-service-control" {
+                PathBuf::from(&args[2])
+            } else {
+                state
+                    .clone()
+                    .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?
+            };
+            racp_core::validate_local_path(&root)?;
+            cli::control::run(&root, action == "native-service-control", &input().await?).await?;
+            return Ok(Value::Null);
+        }
         match action {
             "collection-worker" => {
                 racp_runtime::providers::recipes::run_worker()?;

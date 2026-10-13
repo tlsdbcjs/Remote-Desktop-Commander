@@ -4,6 +4,26 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 pub const MANIFEST_FILE: &str = "payload-manifest.json";
 pub const BASE_FILES: [&str; 4] = ["LICENSE", "racp-agent.exe", "racp-client.exe", "sbom.json"];
+pub const AGENT_SERVICE_FILES: [&str; 3] = ["LICENSE", "racp-agent.exe", "sbom.json"];
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PayloadKind {
+    #[default]
+    #[serde(rename = "native-client")]
+    Client,
+    #[serde(rename = "native-agent-service")]
+    AgentService,
+}
+impl PayloadKind {
+    pub fn files(self) -> &'static [&'static str] {
+        match self {
+            Self::Client => &BASE_FILES,
+            Self::AgentService => &AGENT_SERVICE_FILES,
+        }
+    }
+    fn is_client(&self) -> bool {
+        *self == Self::Client
+    }
+}
 pub const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024 * 1024;
 pub const PORTABLE_MAGIC: &[u8; 16] = b"RACPNATIVE000001";
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -18,6 +38,9 @@ pub struct PayloadFile {
 pub struct NativePayload {
     pub format_version: u32,
     pub product_version: String,
+    /// Absent only for legacy Client manifests. Service packages must declare their role.
+    #[serde(default, skip_serializing_if = "PayloadKind::is_client")]
+    pub kind: PayloadKind,
     pub platform: String,
     pub architecture: String,
     pub files: Vec<PayloadFile>,
@@ -29,14 +52,14 @@ impl NativePayload {
             || self.product_version != crate::VERSION
             || self.platform != "win"
             || self.architecture != "x64"
-            || self.files.len() != BASE_FILES.len()
+            || self.files.len() != self.kind.files().len()
         {
             return Err(invalid());
         }
         let mut names = BTreeSet::new();
         let mut size = 0u64;
         for file in &self.files {
-            if !BASE_FILES.contains(&file.path.as_str())
+            if !self.kind.files().contains(&file.path.as_str())
                 || !names.insert(&file.path)
                 || file.size_bytes == 0
                 || file.size_bytes > MAX_PAYLOAD_BYTES / 2

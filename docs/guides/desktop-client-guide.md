@@ -2,7 +2,7 @@
 
 > **Document ID**: `DOC-GDE-DESKTOP`\
 > **Status**: Active · **Target Version**: v0.1.26 native development\
-> **Last Updated**: 2026-10-12 · **Classification**: User & Operations Guide
+> **Last Updated**: 2026-10-13 · **Classification**: User & Operations Guide
 
 ## 개요
 
@@ -221,15 +221,15 @@ helper는 고정 `RACPNativeAgent`를 준비하거나 stopped-service의 config/
 
 ### 6.11 Windows 공용 서비스 설치·제거 정의 (source, 실행 보류)
 
-`xtask package --platform win --arch x64 --install-scope user|machine|both --dry-run`에서 setup 범위를 확인한다. 기본은 user이며 machine은 별도 NSIS recipe와 `*-machine-setup.exe` 이름을 사용한다. `both`는 같은 verified staging/version에서 두 setup과 portable/ZIP을 정의한다. portable/ZIP의 user scope는 유지한다. 실제 package/installer/CI 실행은 현재 수행하지 않는다.
+Client는 `xtask package --platform win --arch x64 --install-scope user --dry-run`만 지원한다. Agent 서비스는 `stage-agent-service` / `verify-agent-service`로 별도 payload를 만들며, `package-agent-service --dry-run`에서 GUI 없는 machine setup 정의를 확인한다. 서비스 setup 생성은 명시 요청 후에만 같은 검증 batch에서 수행하고 실제 installer 실행·서비스 등록·설치는 금지 유지다. [Agent 가이드](rust-agent-guide.md#5-생산-빌드와-보류된-검증)를 따른다.
 
-machine recipe는 Windows x64와 관리자 권한을 요구하고 고정 ProgramFiles/RACP-Native/version에 새 payload를 배치한다. 기존 version directory는 덮어쓰지 않는다. `native-machine-install-protect`가 manifest 전체 파일을 pin하고 fixed path/content를 확인한 뒤 Administrators owner·Administrators/SYSTEM write·Authenticated Users read/execute로 보호/readback한다. 별도 machine-install receipt에 version/scope/payload manifest 및 uninstaller hash를 기록한다. 공용 Client는 receipt를 확인해 service control 모드를 기본 선택하며 per-user Agent autorun을 만들지 않는다. 사용자별 로그인 시작은 user setup/portable scope를 사용한다.
+machine recipe는 Windows x64와 관리자 권한을 요구하고 고정 ProgramFiles/RACP-Native/version에 새 payload를 배치한다. 기존 version directory는 덮어쓰지 않는다. `native-machine-install-protect`가 manifest 전체 파일을 pin하고 fixed path/content를 확인한 뒤 Administrators owner·Administrators/SYSTEM write·Authenticated Users read/execute로 보호/readback한다. 별도 machine-install receipt에 version/scope/payload manifest 및 uninstaller hash를 기록한다. Agent-only service payload는 명시 `native-agent-service` 역할·3개 파일·machine receipt의 `payload_kind`를 검사한다. Client EXE나 shortcut을 만들지 않으며 관리는 `native-service-control`의 인증 IPC를 사용한다. 사용자별 로그인 시작은 user setup/portable scope를 사용한다.
 
 install recipe는 Gateway 입력·token·등록·서비스 시작을 포함하지 않는다. 관리자 handoff는 §6.10의 별도 bounded 입력으로 수행한다. 설치 직후 서비스가 준비되지 않았으면 GUI는 관리자 등록/시작이 필요하다는 연결 대기 상태를 표시한다.
 
 제거 전에는 controller가 Agent 정리를 요청하고 GUI를 종료한다. `native-machine-setup`의 remove_service 입력은 `expected_config_sha256`와 `expected_device_id`(미등록 준비 상태는 null)를 요구한다. SYSTEM은 같은 fixed SCM image/account/root와 STOPPED/PID=0을 확인한 뒤 virtual-account maintenance를 수행한다. maintenance는 새 nonce/config hash·NativeRun 최종 정리·정책/runtime/Journal 형식·pending/잔여 session을 확인하며 credential을 열지 않는다. 확인 후 SCM 등록만 삭제 요청하고 Device·state/credential·workspace 및 Gateway 등록은 보존한다. 실행 중 서비스의 강제 stop/kill을 제공하지 않는다.
 
-`native-machine-uninstall-preflight`는 두 native SCM 이름의 부재·trusted payload/설치 receipt/uninstaller hash를 확인한다. 성공 후 installer는 payload 전체 rename 뒤 고정 파일만 제거하며 GUI/Agent/helper의 기존 directory/file pin은 rename을 차단한다. unknown removing batch·손상 receipt·외부 변경은 자동 채택/복구하지 않는다. 검사와 rename 사이 외부 관리자/SYSTEM writer까지 포함한 원자적 lease는 보장하지 않는다.
+`native-machine-uninstall-preflight`는 두 native SCM 이름의 부재·trusted payload/설치 receipt/uninstaller hash를 확인한다. 성공 후 installer는 payload 전체 rename 뒤 고정 파일만 제거하며 Agent/관리 클라이언트/helper의 기존 directory/file pin은 rename을 차단한다. unknown removing batch·손상 receipt·외부 변경은 자동 채택/복구하지 않는다. 검사와 rename 사이 외부 관리자/SYSTEM writer까지 포함한 원자적 lease는 보장하지 않는다.
 
 실패한 setup helper는 `native-machine-setup-cleanup`에 정확한 setup_root/input_sha256를 전달해 명시적으로 정리하도록 연결했다. high-integrity administrator·trusted package·private request의 hash/ACL·LocalSystem/own-process/demand-start/exact ImagePath·STOPPED/PID=0을 확인한다. helper SCM/request만 정리하고 비밀 없는 cleanup/result 기록 및 target 서비스/state를 보존한다. running/foreign helper나 바뀐 input을 중지·채택·삭제하지 않는다.
 
