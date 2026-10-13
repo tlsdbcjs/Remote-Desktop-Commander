@@ -1,6 +1,7 @@
 //! Slint frontend (ADR-0032). Step 1: window, tray, Agent state feed and lifecycle.
 //! Step 2: Status view (registration, Agent start/stop, metrics, operations, receipts).
 //! Step 3: Permissions view (category tree, 3-way grants, constraints, revision CAS commit).
+//! Step 4: Approvals, optional runtimes and settings (language, workspaces, login start).
 //! The window is presentation only. All state lives in `Controller` on the UI thread, and
 //! background work reports back through `post`, mirroring the Iced `update` rules.
 slint::include_modules!();
@@ -65,6 +66,11 @@ struct Controller {
     /// Policy revision the constraint draft was loaded from; None until loaded.
     constraints_revision: Option<u64>,
     constraints_dirty: bool,
+    approvals: Rc<VecModel<ApprovalRow>>,
+    workspaces: Rc<VecModel<WorkspaceRow>>,
+    /// Named workspaces edited on the Settings page; also sent with a new registration.
+    named_workspaces: Vec<racp_core::WorkspaceSpec>,
+    a11y_timer: slint::Timer,
     can_hide: bool,
     quitting: bool,
     starting: bool,
@@ -101,10 +107,11 @@ pub fn run(shell: Option<Arc<Shell>>, auto_start: bool) -> Result<(), String> {
         .enable_all()
         .build()
         .map_err(|_| "GUI_RUNTIME_FAILED".to_owned())?;
-    if crate::i18n::detect_os_language() == crate::i18n::Language::Ko {
-        let _ = slint::select_bundled_translation("ko");
-    }
     let window = AppWindow::new().map_err(|_| "GUI_RENDERER_OR_WINDOW_FAILED".to_owned())?;
+    // Bundled translations are selected after the first component is created.
+    let lang = crate::i18n::detect_os_language();
+    let _ = slint::select_bundled_translation(lang.code());
+    window.set_language(lang.code().into());
     window.set_version(racp_contract::VERSION.into());
     let activity = Rc::new(VecModel::default());
     let log_lines = Rc::new(VecModel::default());
@@ -112,6 +119,10 @@ pub fn run(shell: Option<Arc<Shell>>, auto_start: bool) -> Result<(), String> {
     window.set_log_lines(ModelRc::from(log_lines.clone()));
     let categories = Rc::new(VecModel::default());
     window.set_categories(ModelRc::from(categories.clone()));
+    let approvals = Rc::new(VecModel::default());
+    window.set_approvals(ModelRc::from(approvals.clone()));
+    let workspaces = Rc::new(VecModel::default());
+    window.set_workspaces(ModelRc::from(workspaces.clone()));
     wire(&window);
 
     let receiver = shell.as_ref().map(|shell| shell.receiver.clone());
@@ -142,10 +153,14 @@ pub fn run(shell: Option<Arc<Shell>>, auto_start: bool) -> Result<(), String> {
         categories,
         leaves: Vec::new(),
         expanded: BTreeSet::new(),
-        lang: crate::i18n::detect_os_language(),
+        lang,
         policy_dirty: false,
         constraints_revision: None,
         constraints_dirty: false,
+        approvals,
+        workspaces,
+        named_workspaces: Vec::new(),
+        a11y_timer: slint::Timer::default(),
         can_hide,
         quitting: false,
         starting: false,
@@ -259,6 +274,7 @@ fn wire(window: &AppWindow) {
                     c.expanded.insert(category);
                 }
                 c.sync_permissions();
+                c.refresh_accessibility();
             }
         });
     });
@@ -313,6 +329,66 @@ fn wire(window: &AppWindow) {
             c.policy_dirty = true;
             c.render();
         });
+    });
+    window.on_decide(|nonce, allow| {
+        with(|c| c.decide(nonce.to_string(), allow));
+    });
+    window.on_admit_runtime(|| {
+        with(|c| c.admit_runtime());
+    });
+    window.on_configure_runtime(|| {
+        with(|c| c.configure_runtime());
+    });
+    window.on_set_language(|code| {
+        with(|c| c.set_language(&code));
+    });
+    window.on_add_workspace(|| {
+        with(|c| {
+            if c.named_workspaces.len() < 15 {
+                c.named_workspaces.push(racp_core::WorkspaceSpec {
+                    id: String::new(),
+                    path: Default::default(),
+                });
+                c.reload_workspace_rows();
+                c.render();
+            }
+        });
+    });
+    window.on_remove_workspace(|index| {
+        with(|c| {
+            if (index as usize) < c.named_workspaces.len() {
+                c.named_workspaces.remove(index as usize);
+                c.reload_workspace_rows();
+                c.render();
+            }
+        });
+    });
+    // Edits update the Rust list only, so the row being typed in keeps its focus.
+    window.on_workspace_id_edited(|index, value| {
+        with(|c| {
+            if let Some(row) = c.named_workspaces.get_mut(index as usize) {
+                row.id = value.to_string();
+            }
+        });
+    });
+    window.on_workspace_path_edited(|index, value| {
+        with(|c| {
+            if let Some(row) = c.named_workspaces.get_mut(index as usize) {
+                row.path = value.as_str().into();
+            }
+        });
+    });
+    window.on_save_settings(|| {
+        with(|c| c.save_settings());
+    });
+    window.on_configure_login(|enabled| {
+        with(|c| c.configure_login(enabled, false));
+    });
+    window.on_reconcile_login(|| {
+        with(|c| c.configure_login(false, true));
+    });
+    window.on_page_changed(|| {
+        with(|c| c.refresh_accessibility());
     });
     window.window().on_close_requested(|| {
         with(|c| {
@@ -492,6 +568,21 @@ impl Controller {
                         }
                     }
                 }
+                if let Some(state) = &info.state {
+                    self.named_workspaces = state.allowed_workspaces.clone();
+                    self.reload_workspace_rows();
+                }
+                let runtime = &info.runtime;
+                let text = |value: &Option<String>| value.clone().unwrap_or_default();
+                self.window
+                    .set_chromium_hash(text(&runtime.chromium_manifest).into());
+                self.window.set_cdb_hash(text(&runtime.cdb_manifest).into());
+                self.window.set_gdb_hash(text(&runtime.gdb_manifest).into());
+                self.window
+                    .set_analysis_hash(text(&runtime.analysis_manifest).into());
+                self.window
+                    .set_browser_origins(runtime.browser_allow_origins.join("\n").into());
+                self.window.set_external_cdp(runtime.external_cdp);
                 let start = self.auto_start && info.state.is_some() && !info.registration_pending;
                 self.auto_start = false;
                 self.local = Some(info);
@@ -697,7 +788,7 @@ impl Controller {
                 }
             }
         }
-        let named: Vec<racp_core::WorkspaceSpec> = Vec::new();
+        let named = self.named_workspaces.clone();
         let input = serde_json::json!({
             "connection_file": self.window.get_connection_path().as_str(),
             "connection_sha256": self.window.get_connection_hash().as_str(),
@@ -1023,6 +1114,146 @@ impl Controller {
         }
     }
 
+    fn decide(&mut self, nonce: String, allow: bool) {
+        let pending = self
+            .model
+            .snapshot
+            .as_ref()
+            .is_some_and(|s| s.pending_approvals.iter().any(|p| p.nonce == nonce));
+        if !self.can_control() || self.model.needs_resync {
+            self.notice = Some("현재 연결에는 조회 권한만 있습니다.".into());
+        } else if !pending {
+            self.notice = Some("승인 요청이 이미 처리되었거나 만료되었습니다.".into());
+        } else {
+            self.send(ControlCommand::DecideApproval { nonce, allow });
+        }
+        self.render();
+    }
+
+    fn admit_runtime(&mut self) {
+        if self.service() {
+            return;
+        }
+        if !self.model.needs_resync {
+            self.notice = Some("Agent를 완전히 종료한 뒤 런타임을 승인하세요.".into());
+            self.render();
+            return;
+        }
+        let input = serde_json::json!({
+            "manifest_file": self.window.get_runtime_manifest().as_str(),
+            "manifest_sha256": self.window.get_runtime_hash().as_str(),
+            "source_directory": self.window.get_runtime_source().as_str(),
+        });
+        self.local_action(Action::AdmitRuntime, input);
+    }
+
+    fn configure_runtime(&mut self) {
+        if self.service() {
+            return;
+        }
+        if !self.model.needs_resync {
+            self.notice = Some("Agent를 완전히 종료한 뒤 런타임 설정을 저장하세요.".into());
+            self.render();
+            return;
+        }
+        let Some(info) = &self.local else {
+            return;
+        };
+        let mut config = info.runtime.clone();
+        let Some(revision) = config.revision.checked_add(1) else {
+            return;
+        };
+        config.revision = revision;
+        let selected = |value: slint::SharedString| {
+            let value = value.trim().to_owned();
+            (!value.is_empty()).then_some(value)
+        };
+        config.chromium_manifest = selected(self.window.get_chromium_hash());
+        config.cdb_manifest = selected(self.window.get_cdb_hash());
+        config.gdb_manifest = selected(self.window.get_gdb_hash());
+        config.analysis_manifest = selected(self.window.get_analysis_hash());
+        config.browser_allow_origins = self
+            .window
+            .get_browser_origins()
+            .split([',', '\n'])
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+            .collect();
+        config.external_cdp = self.window.get_external_cdp();
+        let input =
+            serde_json::json!({"expected_revision": info.runtime.revision, "config": config});
+        self.local_action(Action::ConfigureRuntime, input);
+    }
+
+    fn save_settings(&mut self) {
+        if self.service() {
+            return;
+        }
+        if !self.model.needs_resync || self.starting || self.local_cancel.is_some() {
+            self.notice = Some("Agent를 완전히 종료한 뒤 설정을 저장하세요.".into());
+            self.render();
+            return;
+        }
+        let Some(state) = self.local.as_ref().and_then(|info| info.state.as_ref()) else {
+            return;
+        };
+        let input = serde_json::json!({
+            "expected_revision": state.settings_revision,
+            "workspace": self.window.get_workspace_draft().as_str(),
+            "allowed_workspaces": self.named_workspaces,
+            "profile": self.window.get_profile().as_str(),
+        });
+        self.local_action(Action::ConfigureSettings, input);
+    }
+
+    fn configure_login(&mut self, enabled: bool, reconcile: bool) {
+        if self.service() || self.local_cancel.is_some() || self.starting {
+            return;
+        }
+        let Some(login) = self.local.as_ref().and_then(|info| info.login.as_ref()) else {
+            return;
+        };
+        let (Some(revision), Some(hash)) =
+            (login["revision"].as_u64(), login["value_sha256"].as_str())
+        else {
+            return;
+        };
+        let input = serde_json::json!({
+            "expected_revision": revision,
+            "expected_value_sha256": hash,
+            "enabled": enabled,
+            "reconcile": reconcile,
+        });
+        self.local_action(Action::ConfigureLogin, input);
+    }
+
+    fn set_language(&mut self, code: &str) {
+        let Some(lang) = crate::i18n::Language::from_code(code) else {
+            return;
+        };
+        if slint::select_bundled_translation(lang.code()).is_err() {
+            return;
+        }
+        self.lang = lang;
+        self.window.set_language(lang.code().into());
+        // Category titles come from Rust, so rebuild the tree in the new language.
+        self.layout.clear();
+        self.render();
+    }
+
+    fn reload_workspace_rows(&mut self) {
+        let rows: Vec<WorkspaceRow> = self
+            .named_workspaces
+            .iter()
+            .map(|spec| WorkspaceRow {
+                id: spec.id.as_str().into(),
+                path: spec.path.display().to_string().into(),
+            })
+            .collect();
+        self.workspaces.set_vec(rows);
+    }
+
     fn send(&mut self, command: ControlCommand) {
         self.runtime.spawn(async move {
             post(Msg::Reply(crate::ipc::request(command).await));
@@ -1309,9 +1540,82 @@ impl Controller {
             revision: snapshot.map_or(0, |s| s.policy_revision).to_string().into(),
             connected,
         });
-        self.sync_permissions();
+        let prompts: Vec<ApprovalRow> = snapshot
+            .map(|s| {
+                s.pending_approvals
+                    .iter()
+                    .map(|prompt| ApprovalRow {
+                        nonce: prompt.nonce.as_str().into(),
+                        operation: prompt.operation.as_str().into(),
+                        request_id: prompt.request_id.as_str().into(),
+                        target_summary: prompt.target_summary.as_str().into(),
+                        target_digest: prompt.target_digest.as_str().into(),
+                        expires_at: prompt.expires_at.as_str().into(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        // Replace only on change so a focused decision button keeps its focus.
+        if self.approvals.iter().collect::<Vec<_>>() != prompts {
+            self.approvals.set_vec(prompts);
+        }
+
+        let runtime = self.local.as_ref().map(|info| &info.runtime);
+        let manifest =
+            |value: Option<&Option<String>>| value.cloned().flatten().unwrap_or_default().into();
+        self.window.set_runtime(RuntimeModel {
+            loaded: runtime.is_some(),
+            revision: runtime.map_or(0, |r| r.revision).to_string().into(),
+            chromium: manifest(runtime.map(|r| &r.chromium_manifest)),
+            cdb: manifest(runtime.map(|r| &r.cdb_manifest)),
+            gdb: manifest(runtime.map(|r| &r.gdb_manifest)),
+            analysis: manifest(runtime.map(|r| &r.analysis_manifest)),
+            origin_count: runtime.map_or(0, |r| r.browser_allow_origins.len() as i32),
+            external_cdp: runtime.is_some_and(|r| r.external_cdp),
+            agent_stopped: self.model.needs_resync,
+            busy: self.local_cancel.is_some(),
+        });
+
+        let login = self.local.as_ref().and_then(|info| info.login.as_ref());
+        self.window.set_settings(SettingsModel {
+            registered,
+            revision: local_state
+                .map_or(0, |state| state.settings_revision)
+                .to_string()
+                .into(),
+            can_save: registered
+                && self.model.needs_resync
+                && !self.starting
+                && self.local_cancel.is_none(),
+            can_add_workspace: self.named_workspaces.len() < 15,
+            login_known: login.is_some(),
+            login_enabled: login.is_some_and(|l| l["enabled"] == true),
+            login_owned: login.is_some_and(|l| l["owned"] == true),
+            login_pending: login.is_some_and(|l| l["pending"] == true),
+            login_error: login.and_then(|l| l["error"].as_str()).unwrap_or("").into(),
+            can_configure_login: !self.service() && self.local_cancel.is_none() && !self.starting,
+        });
         self.window
             .set_notice(self.notice.clone().unwrap_or_default().into());
         self.window.set_quitting(self.quitting);
+        self.sync_permissions();
+        self.refresh_accessibility();
+    }
+
+    /// Slint 1.16 can leave UI Automation on an old structure when pages or conditional blocks
+    /// are created after the tree was built. Shortly after a change, create or destroy an empty
+    /// element so Slint rebuilds the whole tree. Debounced; the rebuild only runs while an
+    /// accessibility client is attached.
+    fn refresh_accessibility(&mut self) {
+        let window = self.window.as_weak();
+        self.a11y_timer.start(
+            slint::TimerMode::SingleShot,
+            std::time::Duration::from_millis(150),
+            move || {
+                if let Some(window) = window.upgrade() {
+                    window.set_a11y_epoch(!window.get_a11y_epoch());
+                }
+            },
+        );
     }
 }

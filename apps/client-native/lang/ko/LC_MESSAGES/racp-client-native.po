@@ -90,9 +90,6 @@ msgstr "적용됨"
 msgid "Quit without cleanup"
 msgstr "정리 요청 없이 앱만 종료"
 
-msgid "This screen moves to the Slint client in migration step {}. Use the default (Iced) build until then."
-msgstr "이 화면은 이전 {}단계에서 Slint Client로 옮겨집니다. 그 전까지는 기본(Iced) 빌드를 사용하세요."
-
 msgid "A cancel receipt is not task termination. Check the task state and cleanup result separately."
 msgstr "취소 접수와 작업 종료는 별개입니다. 작업 상태와 정리 결과를 각각 확인하세요."
 
@@ -335,3 +332,177 @@ msgstr "펼침"
 
 msgid "Collapsed"
 msgstr "접힘"
+
+msgid "A local hash agreement is not verification by an official signed trust catalog."
+msgstr "로컬 hash 동의는 공식 서명 trust catalog의 검증이 아닙니다."
+
+msgid "Absolute path"
+msgstr "절대 경로"
+
+msgid "Add workspace"
+msgstr "작업 폴더 추가"
+
+msgid "Admit a runtime bundle"
+msgstr "런타임 번들 승인"
+
+msgid "Admit runtime"
+msgstr "런타임 승인"
+
+msgid "Allowed browser origins (one per line)"
+msgstr "허용 브라우저 origin (한 줄에 하나)"
+
+msgid "Analysis host"
+msgstr "분석 host"
+
+msgid "Approve this request once"
+msgstr "이번 요청만 승인"
+
+msgid "Available after this PC is registered."
+msgstr "이 PC를 등록한 뒤 사용할 수 있습니다."
+
+msgid "Browser origins"
+msgstr "브라우저 origin"
+
+msgid "Bundle source folder"
+msgstr "번들 원본 폴더"
+
+msgid "Check and settle startup entry"
+msgstr "시작 항목 확인 및 정리"
+
+msgid "Chromium, CDB, GDB and the analysis host are separate bundles. Each is admitted by manifest hash, size, OS and architecture, and pinned while it runs."
+msgstr "Chromium, CDB, GDB, 분석 host는 별도 번들입니다. 각각 manifest hash·크기·OS·아키텍처로 승인되며 실행 동안 파일이 고정됩니다."
+
+msgid "Deny request"
+msgstr "요청 거절"
+
+msgid "Do not start after sign-in"
+msgstr "로그인 후 시작 안 함"
+
+msgid "Each request waits for a one-time decision on this PC. Approving allows only this request; it does not change the policy."
+msgstr "각 요청은 이 PC에서 한 번의 결정을 기다립니다. 승인은 이번 요청만 허용하며 정책을 바꾸지 않습니다."
+
+msgid "Enter the manifest hash of an admitted bundle. Leave a field empty to use none. Applies from the next Agent start."
+msgstr "승인된 번들의 manifest hash를 입력합니다. 비워 두면 사용하지 않습니다. 다음 Agent 시작부터 적용됩니다."
+
+msgid "Expires at {}"
+msgstr "만료 {}"
+
+msgid "External CDP attach: allowed"
+msgstr "외부 CDP 연결: 허용"
+
+msgid "External CDP attach: not allowed"
+msgstr "외부 CDP 연결: 허용 안 함"
+
+msgid "Interface language"
+msgstr "화면 언어"
+
+msgid "Language for this window, the folders this PC exposes, and starting the Agent after Windows sign-in."
+msgstr "이 창의 언어, 이 PC가 공개하는 폴더, Windows 로그인 후 Agent 시작을 설정합니다."
+
+msgid "Local state is not loaded yet."
+msgstr "로컬 상태를 아직 불러오지 않았습니다."
+
+msgid "Manifest SHA-256"
+msgstr "Manifest SHA-256"
+
+msgid "Manifest file"
+msgstr "Manifest 파일"
+
+msgid "Named workspaces (ID and absolute path)"
+msgstr "이름 있는 작업 폴더 (ID와 절대 경로)"
+
+msgid "No approval requests are waiting."
+msgstr "대기 중인 승인 요청이 없습니다."
+
+msgid "No named workspaces."
+msgstr "이름 있는 작업 폴더가 없습니다."
+
+msgid "Not connected to the Agent. Approval requests appear here once it connects."
+msgstr "Agent에 연결되어 있지 않습니다. 연결되면 승인 요청이 여기에 표시됩니다."
+
+msgid "Register this PC first. The default workspace for a new registration is set on the Status page."
+msgstr "먼저 이 PC를 등록하세요. 새 등록의 기본 작업 폴더는 상태 화면에서 정합니다."
+
+msgid "Registers only this Client path and fixed arguments for the current user. Tokens and Gateway addresses are never written to the startup entry. Off by default."
+msgstr "현재 사용자에 이 Client 경로와 고정 인자만 등록합니다. 토큰과 Gateway 주소는 시작 항목에 기록하지 않습니다. 기본값은 꺼짐입니다."
+
+msgid "Reload saved settings"
+msgstr "저장된 설정 다시 불러오기"
+
+msgid "Remote operations can reach only these folders. Up to 15 named folders besides the default. Changes apply from the next Agent start (settings revision {})."
+msgstr "원격 작업은 이 폴더들에만 접근할 수 있습니다. 기본 폴더 외에 최대 15개입니다. 변경은 다음 Agent 시작부터 적용됩니다 (설정 revision {})."
+
+msgid "Remove workspace {}"
+msgstr "작업 폴더 {} 삭제"
+
+msgid "Runtime selection"
+msgstr "런타임 선택"
+
+msgid "Save runtime selection"
+msgstr "런타임 선택 저장"
+
+msgid "Save settings"
+msgstr "설정 저장"
+
+msgid "Saved selection"
+msgstr "저장된 선택"
+
+msgid "Start after Windows sign-in"
+msgstr "Windows 로그인 후 시작"
+
+msgid "Start after sign-in"
+msgstr "로그인 후 시작"
+
+msgid "Startup entry: not registered"
+msgstr "시작 항목: 등록 안 됨"
+
+msgid "Startup entry: registered"
+msgstr "시작 항목: 등록됨"
+
+msgid "Startup state is not available."
+msgstr "시작 항목 상태를 확인할 수 없습니다."
+
+msgid "Stop the Agent completely before admitting a runtime or saving the selection."
+msgstr "런타임을 승인하거나 선택을 저장하기 전에 Agent를 완전히 종료하세요."
+
+msgid "Stop the Agent completely before saving settings. Running work is not stopped automatically."
+msgstr "설정을 저장하기 전에 Agent를 완전히 종료하세요. 실행 중인 작업은 자동으로 중지되지 않습니다."
+
+msgid "Switches this window immediately. The choice is not saved yet; the next start follows the Windows display language."
+msgstr "이 창의 언어를 바로 바꿉니다. 선택은 아직 저장되지 않으며, 다음 시작 때는 Windows 표시 언어를 따릅니다."
+
+msgid "Target digest"
+msgstr "대상 digest"
+
+msgid "This connection is read-only. Decide on a controller connection."
+msgstr "이 연결은 조회 전용입니다. 제어 권한이 있는 연결에서 결정하세요."
+
+msgid "Update startup entry"
+msgstr "시작 항목 갱신"
+
+msgid "Workspace ID"
+msgstr "작업 폴더 ID"
+
+msgid "Workspaces"
+msgstr "작업 폴더"
+
+msgid "Zero-trust approval queue"
+msgstr "제로 트러스트 승인 대기열"
+
+msgid "allowed"
+msgstr "허용"
+
+msgid "not allowed"
+msgstr "허용 안 함"
+
+msgid "not owned by this Client"
+msgstr "이 Client 소유 아님"
+
+msgid "not selected"
+msgstr "선택 안 함"
+
+msgid "owned by this Client"
+msgstr "이 Client 소유"
+
+msgid "unconfirmed change"
+msgstr "미확정 변경"

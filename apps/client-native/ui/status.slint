@@ -2,6 +2,7 @@
 import { Theme } from "theme.slint";
 import { Icon, Icons } from "icons.slint";
 import { Tag, Card, Button, ScrollBar, TextField } from "widgets.slint";
+import { SectionTitle, FieldLabel, IdentityItem, ChoiceButton, PrimaryButton, DangerButton } from "common.slint";
 import { ShellModel } from "shell.slint";
 
 export struct StatusModel {
@@ -51,25 +52,6 @@ export struct EnrollPreview {
     gateway: string,
     expires: string,
     ca-hash: string,
-}
-
-component SectionTitle inherits VerticalLayout {
-    in property <string> title;
-    in property <string> subtitle;
-    spacing: 2px;
-    Text {
-        text: title;
-        font-size: Theme.fs-sm;
-        font-weight: 700;
-        color: Theme.text-strong;
-        wrap: word-wrap;
-    }
-    if subtitle != "": Text {
-        text: subtitle;
-        font-size: Theme.fs-xs;
-        color: Theme.text-400;
-        wrap: word-wrap;
-    }
 }
 
 component MetricCard inherits Card {
@@ -128,32 +110,6 @@ component MetricCard inherits Card {
     }
 }
 
-component FieldLabel inherits Text {
-    font-size: Theme.fs-xs;
-    font-weight: 500;
-    color: Theme.text-400;
-}
-
-component IdentityItem inherits HorizontalLayout {
-    in property <string> name;
-    in property <string> value;
-    spacing: 4px;
-    Text {
-        text: name;
-        font-size: Theme.fs-11;
-        color: Theme.text-500;
-        horizontal-stretch: 0;
-    }
-    Text {
-        text: value;
-        font-family: Theme.mono;
-        font-size: Theme.fs-11;
-        color: Theme.text-300;
-        overflow: elide;
-        horizontal-stretch: 1;
-    }
-}
-
 component LogTerminal inherits Rectangle {
     in property <[LogLine]> lines;
     height: 220px;
@@ -200,36 +156,6 @@ component LogTerminal inherits Rectangle {
         visible-height: flick.height;
         viewport-y <=> flick.viewport-y;
     }
-}
-
-component ProfileChoice inherits Button {
-    in property <bool> selected;
-    fill: selected ? Theme.indigo-600 : Theme.hover-800;
-    hover-fill: selected ? Theme.indigo-500 : Theme.hover-700;
-    fg: selected ? white : Theme.text-300;
-    pad-x: 12px;
-    pad-y: 6px;
-    accessible-checkable: true;
-    accessible-checked: selected;
-}
-
-component PrimaryButton inherits Button {
-    fill: Theme.indigo-600;
-    hover-fill: Theme.indigo-500;
-    fg: white;
-    pad-x: 14px;
-    pad-y: 7px;
-    radius: Theme.r-lg;
-}
-
-component DangerButton inherits Button {
-    fg: Theme.rose-400;
-    fill: Theme.rose-500.with-alpha(0.1);
-    hover-fill: Theme.rose-500.with-alpha(0.2);
-    outline: Theme.rose-500.with-alpha(0.3);
-    pad-x: 12px;
-    pad-y: 6px;
-    radius: Theme.r-lg;
 }
 
 export component StatusView inherits VerticalLayout {
@@ -494,17 +420,17 @@ export component StatusView inherits VerticalLayout {
             HorizontalLayout {
                 spacing: 6px;
                 alignment: start;
-                ProfileChoice {
+                ChoiceButton {
                     text: "read_only";
                     selected: root.profile == "read_only";
                     clicked => { root.profile = "read_only"; }
                 }
-                ProfileChoice {
+                ChoiceButton {
                     text: "standard";
                     selected: root.profile == "standard";
                     clicked => { root.profile = "standard"; }
                 }
-                ProfileChoice {
+                ChoiceButton {
                     text: "trusted_personal";
                     selected: root.profile == "trusted_personal";
                     clicked => { root.profile = "trusted_personal"; }

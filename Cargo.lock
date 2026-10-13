@@ -4883,7 +4883,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "racp-agent"
-version = "0.1.32"
+version = "0.1.33"
 dependencies = [
  "racp-contract",
  "racp-core",
@@ -4896,7 +4896,7 @@ dependencies = [
 
 [[package]]
 name = "racp-client-native"
-version = "0.1.32"
+version = "0.1.33"
 dependencies = [
  "accesskit 0.25.1",
  "accesskit_windows 0.35.1",
@@ -4918,7 +4918,7 @@ dependencies = [
 
 [[package]]
 name = "racp-contract"
-version = "0.1.32"
+version = "0.1.33"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4932,7 +4932,7 @@ dependencies = [
 
 [[package]]
 name = "racp-core"
-version = "0.1.32"
+version = "0.1.33"
 dependencies = [
  "chrono",
  "fs2",
@@ -4952,7 +4952,7 @@ dependencies = [
 
 [[package]]
 name = "racp-runtime"
-version = "0.1.32"
+version = "0.1.33"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -8131,7 +8131,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.1.32"
+version = "0.1.33"
 dependencies = [
  "crc32fast",
  "racp-contract",

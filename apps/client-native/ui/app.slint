@@ -6,8 +6,12 @@ import { Tag, Divider, Card, Button, NavItem, ScrollBar } from "widgets.slint";
 import { ShellModel } from "shell.slint";
 import { StatusView, StatusModel, ActivityRow, LogLine, EnrollPreview } from "status.slint";
 import { PermissionsView, CategoryRow, LeafRow, PolicyModel } from "permissions.slint";
+import { ApprovalsView, ApprovalRow } from "approvals.slint";
+import { RuntimeView, RuntimeModel } from "runtime.slint";
+import { SettingsView, SettingsModel, WorkspaceRow } from "settings.slint";
 
-export { Theme, ShellModel, StatusModel, ActivityRow, LogLine, EnrollPreview, CategoryRow, LeafRow, PolicyModel }
+export { Theme, ShellModel, StatusModel, ActivityRow, LogLine, EnrollPreview, CategoryRow, LeafRow, PolicyModel,
+    ApprovalRow, RuntimeModel, SettingsModel, WorkspaceRow }
 
 
 // --- Header ---
@@ -387,27 +391,6 @@ component Notice inherits Rectangle {
     }
 }
 
-// Pages that have not moved to Slint yet (ADR-0032 §5) render this card.
-component PendingView inherits Card {
-    in property <string> title;
-    in property <int> step;
-    VerticalLayout {
-        padding: 20px;
-        spacing: 6px;
-        Text {
-            text: root.title;
-            font-size: Theme.fs-base;
-            font-weight: 600;
-            color: Theme.text-100;
-        }
-        Text {
-            text: @tr("This screen moves to the Slint client in migration step {}. Use the default (Iced) build until then.", root.step);
-            font-size: Theme.fs-xs;
-            color: Theme.text-400;
-            wrap: word-wrap;
-        }
-    }
-}
 
 export component AppWindow inherits Window {
     in property <string> version: "0.0.0";
@@ -415,6 +398,10 @@ export component AppWindow inherits Window {
     in property <string> notice;
     in property <bool> quitting;
     in-out property <int> current-page: 0;
+    // Flipped by Rust after structural changes. Creating or destroying this empty element makes
+    // Slint 1.16 rebuild the whole accessibility tree; otherwise pages and rows created later can
+    // stay missing from UI Automation (see slint_ui::Controller::refresh_accessibility).
+    in property <bool> a11y-epoch;
     in property <StatusModel> status;
     in property <[ActivityRow]> activity;
     in property <[LogLine]> log-lines;
@@ -431,6 +418,20 @@ export component AppWindow inherits Window {
     in-out property <string> max-timeout;
     in-out property <string> max-output;
     in-out property <bool> strict-isolation;
+    in property <[ApprovalRow]> approvals;
+    in property <RuntimeModel> runtime;
+    in-out property <string> runtime-manifest;
+    in-out property <string> runtime-hash;
+    in-out property <string> runtime-source;
+    in-out property <string> chromium-hash;
+    in-out property <string> cdb-hash;
+    in-out property <string> gdb-hash;
+    in-out property <string> analysis-hash;
+    in-out property <string> browser-origins;
+    in-out property <bool> external-cdp;
+    in property <SettingsModel> settings;
+    in property <[WorkspaceRow]> workspaces;
+    in property <string> language: "ko";
 
     callback emergency-stop();
     callback hide-to-tray();
@@ -454,6 +455,20 @@ export component AppWindow inherits Window {
     callback commit-policy();
     callback reload-constraints();
     callback constraints-edited();
+    callback decide(string, bool);
+    callback admit-runtime();
+    callback configure-runtime();
+    callback set-language(string);
+    callback add-workspace();
+    callback remove-workspace(int);
+    callback workspace-id-edited(int, string);
+    callback workspace-path-edited(int, string);
+    callback save-settings();
+    callback configure-login(bool);
+    callback reconcile-login();
+    callback page-changed();
+
+    changed current-page => { root.page-changed(); }
 
     title: (shell.service ? @tr("RACP Service Control") : @tr("RACP Native Client")) + " v" + root.version;
     icon: @image-url("../assets/app.png");
@@ -539,17 +554,40 @@ export component AppWindow inherits Window {
                             reload-constraints => { root.reload-constraints(); }
                             constraints-edited => { root.constraints-edited(); }
                         }
-                        if root.current-page == 2: PendingView {
-                            title: @tr("Approvals");
-                            step: 4;
+                        if root.current-page == 2: ApprovalsView {
+                            prompts: root.approvals;
+                            can-decide: root.shell.can-control;
+                            connected: root.status.connected;
+                            decide(nonce, allow) => { root.decide(nonce, allow); }
                         }
-                        if root.current-page == 3: PendingView {
-                            title: @tr("Optional runtimes");
-                            step: 4;
+                        if root.current-page == 3: RuntimeView {
+                            model: root.runtime;
+                            manifest-file <=> root.runtime-manifest;
+                            manifest-hash <=> root.runtime-hash;
+                            source-directory <=> root.runtime-source;
+                            chromium-hash <=> root.chromium-hash;
+                            cdb-hash <=> root.cdb-hash;
+                            gdb-hash <=> root.gdb-hash;
+                            analysis-hash <=> root.analysis-hash;
+                            browser-origins <=> root.browser-origins;
+                            external-cdp <=> root.external-cdp;
+                            admit-runtime => { root.admit-runtime(); }
+                            configure-runtime => { root.configure-runtime(); }
                         }
-                        if root.current-page == 4: PendingView {
-                            title: @tr("Settings");
-                            step: 4;
+                        if root.current-page == 4: SettingsView {
+                            model: root.settings;
+                            workspaces: root.workspaces;
+                            language: root.language;
+                            workspace-draft <=> root.workspace-draft;
+                            set-language(code) => { root.set-language(code); }
+                            add-workspace => { root.add-workspace(); }
+                            remove-workspace(index) => { root.remove-workspace(index); }
+                            workspace-id-edited(index, value) => { root.workspace-id-edited(index, value); }
+                            workspace-path-edited(index, value) => { root.workspace-path-edited(index, value); }
+                            save-settings => { root.save-settings(); }
+                            reload-settings => { root.refresh-local(); }
+                            configure-login(enabled) => { root.configure-login(enabled); }
+                            reconcile-login => { root.reconcile-login(); }
                         }
                     }
                 }
@@ -562,5 +600,10 @@ export component AppWindow inherits Window {
                 }
             }
         }
+    }
+    if root.a11y-epoch: Rectangle {
+        width: 0px;
+        height: 0px;
+        accessible-role: none;
     }
 }

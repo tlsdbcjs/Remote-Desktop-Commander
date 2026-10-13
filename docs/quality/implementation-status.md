@@ -2869,3 +2869,29 @@ GUI 툴킷은 Iced에서 **Slint 1.16.x(소프트웨어 렌더러 기본)**로 �
 
 > [!NOTE]
 > 정책 revision CAS 저장은 연결된 Agent가 없어 실기 확인하지 않았다(저장 버튼은 연결 시에만 표시). 실행 중 새로 나타나는 다른 `if` 영역(알림, 상태 화면 카드 등)의 UIA 반영 여부는 4단계에서 Narrator로 다시 점검한다. 시험 중 자동화 도구가 입력 문자열을 클립보드로 붙여넣어 사용자 클립보드가 덮어써졌다. 설치·서비스 등록·등록 상태 변경은 하지 않았고 `%LOCALAPPDATA%\RACP\native-client`도 생성되지 않았다.
+
+### 2026-10-13 Slint 이전 4단계: 승인·선택 런타임·설정 화면 — v0.1.33
+
+[ADR-0032](../adr/ADR-0032-native-client.md) 5절의 4단계를 구현했다. PATCH **0.1.32→0.1.33 한 번**, uv/Cargo lock을 갱신했다. 이제 다섯 화면이 모두 Slint로 옮겨졌다. 기본 빌드는 5단계(Iced 제거) 전까지 그대로 Iced이고 Slint 화면은 `slint-ui` feature로만 빌드된다.
+
+- **승인 화면** [approvals.slint](../../apps/client-native/ui/approvals.slint): 대기 중인 요청마다 작업 이름, 요청 ID, 만료 시각, 대상 요약, 대상 digest를 표시하고 "이번 요청만 승인"/"요청 거절"을 보낸다. 결정은 nonce로 보내며, 이미 처리되었거나 만료된 요청은 보내지 않는다. Iced가 작업 이름의 단어만 보고 붙이던 위험도(높음/중간)와 만료 시각을 "TTL 남음"으로 표시하던 라벨은 근거가 없어 넣지 않았다.
+- **선택 런타임 화면** [runtime.slint](../../apps/client-native/ui/runtime.slint): 저장된 선택(revision, Chromium·CDB·GDB·분석 host manifest, 브라우저 origin 수, 외부 CDP)을 로컬 상태에서 읽어 표시한다. Iced의 항상 "없음"이던 승인 목록 카드는 대체했다. 번들 승인과 선택 저장은 Agent가 완전히 종료된 경우에만 가능하다.
+- **설정 화면** [settings.slint](../../apps/client-native/ui/settings.slint):
+  - 화면 언어 즉시 전환(Rust 쪽 카테고리 제목 포함). Iced와 같이 선택은 저장하지 않으며 다음 시작 때는 Windows 표시 언어를 따른다.
+  - 기본 작업 폴더와 이름 있는 작업 폴더(최대 15개) 편집·저장. 저장은 Agent 종료 상태에서만 하며, 새 등록에도 이 목록을 사용한다.
+  - Windows 로그인 후 시작 항목 상태와 켜기·끄기·갱신·미확정 변경 정리
+- 공통 부품(`SectionTitle`, `FieldLabel`, `IdentityItem`, `ChoiceButton`, `PrimaryButton`, `DangerButton`)을 [common.slint](../../apps/client-native/ui/common.slint)로 옮기고, 이전 예정 안내 카드는 삭제했다. 번역 선택은 Slint 문서대로 첫 컴포넌트를 만든 뒤 호출하도록 순서를 바로잡았다.
+- **접근성 트리 갱신 우회**: 실기에서 페이지를 바꿨는데도 UIA 트리가 이전 페이지에 머무는 경우를 재현했다. Slint 1.16 winit 접근성 어댑터는 트리를 만드는 도중에 생긴 컴포넌트를 다시 확인하지 않는다. 구조가 바뀔 수 있는 시점(렌더, 페이지 전환, 카테고리 펼침) 150ms 뒤, 창 끝의 빈 요소를 만들거나 없애 전체 트리 재구성을 유도한다(묶어서 한 번만 실행). 재구성은 접근성 클라이언트가 연결된 동안에만 일어난다.
+
+| 검사 | 결과 |
+|---|---|
+| `cargo check --locked`(기본·`slint-ui`), rustfmt, 번역 누락 검사 | PASS / 누락 0 |
+| clippy `--no-deps -D warnings` | 신규 오류 없음. 기존 `accessibility.rs` 2건·`native.rs` 1건 유지 |
+| inventory-check, version 단위 시험 | 114 ops·143 permissions·18 categories / 6 passed |
+| 실기 UIA(Windows 10 VM, 150% DPI, 빈 상태, Agent 없음) | 승인(미연결 안내)·선택 런타임(저장된 선택, "선택 안 함")·설정(미등록 안내) 표시 PASS. 영어 전환 시 메뉴·설정·카테고리 제목 변경, 한국어 복귀 PASS |
+| 접근성 트리 추적 | 우회 적용 후 5개 페이지 2회 왕복 전환 **10/10**에서 UIA가 보이는 페이지 제목과 일치. 영어 상태의 페이지 이동·한국어 복귀 PASS. 3단계 권한 화면 회귀(접힘 0개·펼침 15개·선택·미저장 표시) PASS |
+| 메모리 | working set 50~69MB |
+| 증거 | `dist/verification/client/0.1.33/slint-step4-20261013/` `approvals-disconnected.jpg`(SHA-256 `cb7089e8…e4ba`), `runtime-unregistered.jpg`(`e4c05bed…379d`), `settings-unregistered.jpg`(`5b4c9458…9c37`), `settings-english.jpg`(`a6d2d24e…69cf`) |
+
+> [!NOTE]
+> 승인 요청 목록과 결정 전송, 런타임 승인·선택 저장, 설정 저장, 로그인 시작 항목 변경은 실기 확인하지 않았다. 연결된 Agent와 등록 상태가 없고, 로컬 helper 실행은 상태 폴더를 만들 수 있어 누르지 않았다. 영어 모드에서 카탈로그 기반 카테고리 제목 중 번역 사전에 있는 6개만 영어로 바뀌고 나머지는 카탈로그의 한국어 이름이 남는다(Iced와 동일). Narrator 음성 확인은 하지 않았고 UIA 트리로 대신 확인했다. 설치·서비스 등록·등록 상태 변경은 하지 않았고 `%LOCALAPPDATA%\RACP\native-client`도 생성되지 않았다.
