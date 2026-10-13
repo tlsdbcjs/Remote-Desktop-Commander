@@ -1,6 +1,6 @@
 mod journal;
 pub mod journal_schema;
-pub use journal::{error_value, Acceptance, Journal, Record};
+pub use journal::{error_value, Acceptance, Journal, JournalHealth, Record};
 pub mod approval;
 mod connection;
 pub mod distribution;

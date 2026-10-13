@@ -93,6 +93,31 @@ pub struct ResourceRegistry {
     retirement: Arc<Mutex<()>>,
     workers: Arc<tokio::sync::Semaphore>,
 }
+/// Weak diagnostic view cannot keep retire closures or their Provider alive.
+#[derive(Clone)]
+pub(crate) struct ResourceObserver {
+    entries: std::sync::Weak<Mutex<BTreeMap<String, Arc<Entry>>>>,
+}
+impl ResourceObserver {
+    pub(crate) fn counts(&self) -> Result<serde_json::Value, RacpError> {
+        let entries = self
+            .entries
+            .upgrade()
+            .ok_or_else(|| RacpError::new("DIAGNOSTICS_UNAVAILABLE"))?;
+        let entries = entries
+            .try_lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_BUSY"))?;
+        let mut active = 0usize;
+        let mut borrowed = 0usize;
+        for entry in entries.values() {
+            active += usize::from(entry.active.load(Ordering::Acquire));
+            borrowed += usize::from(entry.resource.ownership == Ownership::Borrowed);
+        }
+        Ok(
+            serde_json::json!({"tracked":entries.len(),"active":active,"borrowed":borrowed,"cleanup_unconfirmed":entries.len()-active}),
+        )
+    }
+}
 impl Default for ResourceRegistry {
     fn default() -> Self {
         Self {
@@ -103,6 +128,11 @@ impl Default for ResourceRegistry {
     }
 }
 impl ResourceRegistry {
+    pub(crate) fn observer(&self) -> ResourceObserver {
+        ResourceObserver {
+            entries: Arc::downgrade(&self.entries),
+        }
+    }
     pub async fn register(&self, resource: Resource) -> Result<(), RacpError> {
         if resource.id.is_empty()
             || resource.id.len() > 256

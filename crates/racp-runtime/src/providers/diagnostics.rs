@@ -19,6 +19,8 @@ pub struct Diagnostics {
     boot: String,
     device: String,
     policy_revision: Arc<Mutex<u64>>,
+    source: Arc<Mutex<Option<crate::health::HealthSource>>>,
+    sampler: Arc<tokio::sync::Semaphore>,
 }
 impl Diagnostics {
     pub fn new(settings: &AgentSettings, boot: &str) -> Self {
@@ -27,7 +29,66 @@ impl Diagnostics {
             boot: boot.into(),
             device: settings.device_id.clone(),
             policy_revision: Arc::new(Mutex::new(0)),
+            source: Arc::new(Mutex::new(None)),
+            sampler: Arc::new(tokio::sync::Semaphore::new(1)),
         }
+    }
+    pub(crate) fn attach(&self, source: crate::health::HealthSource) -> Result<(), RacpError> {
+        *self
+            .source
+            .lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))? = Some(source);
+        Ok(())
+    }
+    async fn snapshot(
+        &self,
+        deadline: tokio::time::Instant,
+        cancel: &CancellationToken,
+    ) -> Result<Value, RacpError> {
+        if cancel.is_cancelled() {
+            return Err(RacpError::new("CANCELLED"));
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err(RacpError::new("TIMEOUT"));
+        }
+        let source = self
+            .source
+            .lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))?
+            .clone();
+        let mut result = self.agent();
+        let mut health = json!({"observed":false});
+        if let Some(source) = source {
+            health = source.sample()?;
+            let permit = self
+                .sampler
+                .clone()
+                .try_acquire_owned()
+                .map_err(|_| RacpError::new("RESOURCE_EXHAUSTED"))?;
+            // The permit stays inside the blocking task even if the RPC future is
+            // cancelled or times out, preventing an unbounded diagnostic backlog.
+            let task = tokio::task::spawn_blocking(move || {
+                let _permit = permit;
+                source.journal.health_counts()
+            });
+            let counts = tokio::select! { biased;
+                _=cancel.cancelled()=>return Err(RacpError::new("CANCELLED")),
+                _=tokio::time::sleep_until(deadline)=>return Err(RacpError::new("TIMEOUT")),
+                result=task=>result.map_err(|_|RacpError::new("DIAGNOSTICS_UNAVAILABLE"))??,
+            };
+            health["journal"] = serde_json::to_value(counts)?;
+        }
+        result["health"] = health;
+        if serde_json::to_vec(&result)?.len() > 8192 {
+            return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+        }
+        if cancel.is_cancelled() {
+            return Err(RacpError::new("CANCELLED"));
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err(RacpError::new("TIMEOUT"));
+        }
+        Ok(result)
     }
     fn agent(&self) -> Value {
         json!({"agent_version":VERSION,"device_id":self.device,"agent_boot_id":self.boot,"pid":std::process::id(),"os":std::env::consts::OS,"architecture":std::env::consts::ARCH,"policy_revision":self.policy_revision.lock().map(|v|*v).unwrap_or(0),"uptime_seconds":sysinfo::System::uptime(),"redacted_fields":["credential","token","cookie","clipboard","command_line","environment","gateway","state_paths"]})
@@ -41,7 +102,7 @@ impl Diagnostics {
             return Err(RacpError::new("CANCELLED"));
         }
         match op {
-            "diagnostics.agent" => Ok(self.agent()),
+            "diagnostics.agent" => self.snapshot(deadline, &cancel).await,
             "performance.sample" => {
                 let duration = p["duration_ms"].as_u64().unwrap_or(1000);
                 let interval = p["interval_ms"].as_u64().unwrap_or(250);
@@ -71,6 +132,11 @@ impl Diagnostics {
             "events.query" | "diagnostics.export" => {
                 #[cfg(windows)]
                 {
+                    let agent_snapshot = if op == "diagnostics.export" {
+                        Some(self.snapshot(deadline, &cancel).await?)
+                    } else {
+                        None
+                    };
                     let provider = self.clone();
                     let request = r.clone();
                     let cancelled = cancel.clone();
@@ -86,7 +152,7 @@ impl Diagnostics {
                         if cancelled.is_cancelled(){return Err(RacpError::new("CANCELLED"));}
                         if tokio::time::Instant::now()>=deadline{return Err(RacpError::new("TIMEOUT"));}
                         if request["operation"]=="events.query"{return Ok(events);}
-                        let report=json!({"agent":provider.agent(),"events":events,"redaction":"event system metadata only; sensitive event data omitted"});
+                        let report=json!({"agent":agent_snapshot,"events":events,"redaction":"event system metadata only; sensitive event data omitted"});
                         let bytes=serde_json::to_vec(&report)?;if bytes.len() as u64>request["payload"]["max_bytes"].as_u64().unwrap_or(1048576){return Err(RacpError::new("RESOURCE_EXHAUSTED"));}
                         let path=provider.spool.join(format!("{}.diagnostics.json",request["operation_id"].as_str().unwrap_or("op_invalid")));
                         racp_core::atomic_write(&path,&bytes,false)?;

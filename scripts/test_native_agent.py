@@ -333,6 +333,7 @@ def main() -> int:
                 "schema_version": 1,
                 "revision": 0,
                 "grants": {
+                    "diagnostics.agent.read": "allow",
                     "files.read.text": "allow",
                     "files.list": "allow",
                     "exec.argv": "allow",
@@ -533,6 +534,26 @@ def main() -> int:
                 for stream in (watcher.stdin, watcher.stdout, watcher.stderr):
                     if stream is not None:
                         stream.close()
+
+            diagnostic = execute("diagnostics.agent", {}).json()
+            require(diagnostic["state"] == "SUCCEEDED", "live Agent diagnosis failed")
+            report = diagnostic["result"]
+            require(report["agent_boot_id"] == boot_id, "diagnostics reported another Agent boot")
+            require(
+                report["health"]["observed"]
+                and report["health"]["gateway_phase"] == "ready"
+                and report["health"]["execution_lease_valid"],
+                "diagnostics did not observe the live Gateway execution lease",
+            )
+            require(
+                report["health"]["active_operations"] >= 1, "diagnostics missed its active request"
+            )
+            require("journal" in report["health"], "diagnostics omitted bounded queue/spool counts")
+            encoded = json.dumps(report)
+            require(len(encoded.encode()) <= 8192, "diagnostics exceeded its fixed response budget")
+            for secret in (owner, str(state), str(workspace), origin):
+                require(secret not in encoded, "diagnostics exposed a secret or local path")
+            passed("bounded_redacted_live_agent_diagnostics")
 
             read = execute("filesystem.read", {"path": "read.txt"})
             require(

@@ -1,8 +1,8 @@
 # Rust Agent 서비스 구현 및 검증 작업 계획
 
 > **Document ID**: `DOC-PLAN-AGENT-SERVICE`\
-> **Status**: Active · **Target Version**: v0.1.37 source / Agent 서비스 릴리스 인수 미완료\
-> **Last Updated**: 2026-10-13 · **Classification**: Service Implementation & Test Plan
+> **Status**: Active · **Target Version**: v0.1.39 source / Agent 서비스 릴리스 인수 미완료\
+> **Last Updated**: 2026-10-14 · **Classification**: Service Implementation & Test Plan
 
 ## 개요
 
@@ -197,7 +197,7 @@ P0는 Agent 서비스의 독립 실행·원격 제어·권한/정리 경계, P1�
 | AS07 / P0 | **구현됨·검증 필요: drain/자원 정리** | STOP/취소/revoke/lease 만료/단절 때 소유 child tree·ConPTY·stream·Broker/Guardian·입력 lease를 추적. 종료 예산과 정리 불확실성의 durable 기록을 확인. 소유하지 않은 process/session에 영향 없음 |
 | AS08 / P1 | **부분 구현: 미생성 restore intent 검사·CAS 취소 및 typed provision receipt 검사 / partial provision 인수 미완료** | helper/state/SCM 생성/ACL/bootstrap/config 변경 단계별 실패를 재현하고 pending/실제 상태/CAS를 대조. 안전한 중단·명시 복구·재시도 가능한 상태와 현지 확인이 필요한 상태를 구분. 기존 service/root를 자동 채택하지 않음 |
 | AS09 / P1 | **부분 구현: NONE recovery readback·durable 일회성 intent·완료 maintenance CAS 재개 / 자동 활성화 보류** | 현재 demand-start와 배포 시 auto-start의 선택, SCM failure actions, crash 재시작·backoff·영구 auth 실패·사용자 stop 후 재시작 여부를 확정. 무한 재시작/중복 Agent/재등록 반복 없음. 실제 부팅/SCM 시험은 설치 금지 해제 후 수행 |
-| AS10 / P1 | **보완: 서비스 health/진단·audit** | service/local READY/Gateway 상태, boot ID·최종 오류·작업/queue/spool·cleanup 상태를 bounded status/log로 제공. RPC 거부/승인/취소/복구 원인을 추적하되 credential/token·원문 민감 출력은 노출하지 않음. 이미 연결된 diagnostics API를 재작성하지 않음 |
+| AS10 / P1 | **source 구현: bounded runtime health·기존 diagnostics 연결 / 서비스 계정 인수 별도** | service/local READY/Gateway 상태, boot ID·최종 오류·작업/queue/spool·cleanup 상태를 bounded status/log로 제공. RPC 거부/승인/취소/복구 원인을 추적하되 credential/token·원문 민감 출력은 노출하지 않음. 이미 연결된 diagnostics API를 재작성하지 않음 |
 | AS11 / P1 | **보완·검증 필요: Session 0과 desktop backend** | 사용자 세션 Broker 등록/launch 주체·identity·session 변경·Guardian 정리를 확정. GUI app 없이 세션 backend를 연결/시험. 세션 없는 경우 정직한 unavailable 결과, 잠금/UAC/session mismatch에서 입력 금지, 사용자의 입력 개입 시 원격 입력 해제 |
 | AS12 / P1 | **source/staging 구현: Agent 서비스 단독 배포/CI / setup·설치 인수 보류** | AS01 계약에 맞는 서비스 전용 package/recipe/설치 보호·진단 정의를 Git 추적 가능하게 배치. Client EXE/shortcut 없음. `dist/agent` 역할별 manifest/SBOM/해시, pinned compiler와 CI 정적 검사 연결. artifact 생성과 실제 서비스 등록을 별도 단계로 유지 |
 | AS13 / P2 | **미완성: 업데이트/제거·버전 복구 제품 흐름** | protected image·service command·state schema·pending 전환의 호환성, 기존 버전 보존·rollback/UNKNOWN·정리 확인·명시 detach 조건을 정의. helper restore 코드와 완결된 updater를 구분. 실제 교체/제거는 전용 환경과 별도 실행 요청 후 검사 |
@@ -337,3 +337,6 @@ AS08 fresh provision progress uses a typed, bounded receipt with pinned-director
 
 
 AS16 now registers `hardware.enumerate` and `hardware.inspect` with the separate `hardware.inventory.read` leaf in the existing system category. Local `NativeRuntimeConfig.hardware_discovery_enabled` defaults false, is omitted when false, and requires explicit stopped-Agent selection to enable discovery. Startup/status do not enumerate attached hardware. Gateway and Agent permission admission remain mandatory; metadata only returns opaque targets, VID/PID and snapshot timing. Native open/read/collection are unsupported. Without notification continuity, each scan invalidates previous targets; inspect is bound to its publishing principal/workspace and expires after 30 seconds. Physical SDK/device acceptance remains unexecuted.
+
+
+AS10 reuses diagnostics.agent/export with a fixed, bounded runtime health projection rather than a second diagnostics API. Agent state, Gateway phase and effective lease are distinguished; task/resource/Journal/spool counts contain metadata only. Busy/unavailable observation is explicit, truncated Journal samples are lower bounds, unknown cleanup stays unknown, and no arbitrary last-error string is exposed. Agent uptime is monotonic and separate from the compatible legacy OS uptime field. Fixed RPC metadata tests and user-mode Gateway/WSS acceptance are tracked in Implementation Status; this does not itself establish SCM or service-account readiness.

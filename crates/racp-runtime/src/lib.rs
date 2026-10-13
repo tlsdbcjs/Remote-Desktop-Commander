@@ -7,6 +7,7 @@ mod transport;
 pub use transport::Agent;
 
 mod dispatch;
+mod health;
 pub mod platform;
 pub mod providers;
 

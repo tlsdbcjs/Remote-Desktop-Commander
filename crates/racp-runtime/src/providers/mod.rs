@@ -129,6 +129,7 @@ use std::sync::Arc;
 pub use terminal::{Terminal, TerminalBuffer};
 pub struct NativeProviders {
     providers: Vec<Arc<dyn Provider>>,
+    diagnostics: Arc<diagnostics::Diagnostics>,
 }
 #[derive(Clone, Default)]
 pub struct ProviderRuntimes {
@@ -147,6 +148,13 @@ impl NativeProviders {
             .push(Arc::new(jobs::Jobs::new(journal, tasks)));
         self
     }
+    pub(crate) fn with_health(
+        self,
+        source: crate::health::HealthSource,
+    ) -> Result<Self, RacpError> {
+        self.diagnostics.attach(source)?;
+        Ok(self)
+    }
     pub fn new(settings: &racp_core::AgentSettings, boot: &str) -> Result<Self, RacpError> {
         Self::with_browser(settings, boot, browser::BrowserConfig::default())
     }
@@ -163,6 +171,7 @@ impl NativeProviders {
         config: browser::BrowserConfig,
         runtimes: ProviderRuntimes,
     ) -> Result<Self, RacpError> {
+        let diagnostics = Arc::new(diagnostics::Diagnostics::new(settings, boot));
         let providers: Vec<Arc<dyn Provider>> = vec![
             Arc::new(hardware::Hardware::new(
                 settings,
@@ -170,7 +179,7 @@ impl NativeProviders {
                 runtimes.hardware_discovery_enabled,
             )?),
             Arc::new(Filesystem::new(settings)?),
-            Arc::new(diagnostics::Diagnostics::new(settings, boot)),
+            diagnostics.clone(),
             Arc::new(os_observation::OSObservation::new(settings, boot)),
             Arc::new(recipes::Recipes::new(settings, boot)?),
             Arc::new(native_carrier::NativeCarrier::with_runtimes(
@@ -192,7 +201,10 @@ impl NativeProviders {
             providers.push(Arc::new(desktop::Desktop::new(settings)?));
             providers
         };
-        Ok(Self { providers })
+        Ok(Self {
+            providers,
+            diagnostics,
+        })
     }
 }
 impl Provider for NativeProviders {

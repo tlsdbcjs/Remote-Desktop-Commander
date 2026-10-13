@@ -38,6 +38,7 @@ pub struct Agent {
     pub(crate) tasks: Arc<Mutex<std::collections::BTreeMap<String, crate::dispatch::Execution>>>,
     pub(crate) completed: Arc<tokio::sync::Notify>,
     pub(crate) status: Arc<RwLock<Value>>,
+    pub(crate) health: Arc<crate::health::LifecycleHealth>,
     pub(crate) peer: Arc<RwLock<Option<Peer>>>,
     pub(crate) lease: Arc<Mutex<tokio::time::Instant>>,
     lease_issued: Arc<AtomicBool>,
@@ -80,14 +81,32 @@ impl Agent {
         journal.recover_agent()?;
         let boot_id = new_id("boot");
         let tasks = Arc::new(Mutex::new(std::collections::BTreeMap::new()));
+        let outputs = OutputSpool::new(settings.data_dir.join("spool"), journal.clone())?;
+        let status = Arc::new(RwLock::new(
+            json!({"state":"RUNNING","connected":false,"execution_identity":whoami::username(),"connection_epoch":0,"connection_phase":"starting","active_operations":0,"desktop":{"enabled":settings.desktop_enabled,"healthy":false,"unavailable_reason":"DESKTOP_RUNTIME_UNAVAILABLE","sessions":[]},"operations":[]}),
+        ));
+        let lease = Arc::new(Mutex::new(tokio::time::Instant::now()));
+        let lease_retiring = Arc::new(AtomicBool::new(false));
+        let stopping = Arc::new(AtomicBool::new(false));
+        let resources = crate::resources::ResourceRegistry::default();
+        let health = Arc::new(crate::health::LifecycleHealth::default());
+        let health_source = crate::health::HealthSource {
+            journal: journal.clone(),
+            lifecycle: health.clone(),
+            status: Arc::downgrade(&status),
+            tasks: Arc::downgrade(&tasks),
+            lease: Arc::downgrade(&lease),
+            lease_retiring: Arc::downgrade(&lease_retiring),
+            stopping: Arc::downgrade(&stopping),
+            resources: resources.observer(),
+        };
         let providers: Arc<dyn crate::providers::Provider> = Arc::new(
             crate::providers::NativeProviders::with_runtimes(
                 &settings, &boot_id, browser, runtimes,
             )?
-            .with_jobs(journal.clone(), tasks.clone()),
+            .with_jobs(journal.clone(), tasks.clone())
+            .with_health(health_source)?,
         );
-        let outputs = OutputSpool::new(settings.data_dir.join("spool"), journal.clone())?;
-        let status = json!({"state":"RUNNING","connected":false,"execution_identity":whoami::username(),"connection_epoch":0,"connection_phase":"starting","active_operations":0,"desktop":{"enabled":settings.desktop_enabled,"healthy":false,"unavailable_reason":"DESKTOP_RUNTIME_UNAVAILABLE","sessions":[]},"operations":[]});
         Ok(Self {
             settings,
             journal,
@@ -99,19 +118,20 @@ impl Agent {
             native_settings_revision: None,
             policy: None,
             approvals: Default::default(),
-            resources: Default::default(),
+            resources,
             policy_retiring: Arc::new(AtomicBool::new(false)),
             policy_updates: Arc::new(Mutex::new(())),
             emission_gate: Arc::new(RwLock::new(())),
-            stopping: Arc::new(AtomicBool::new(false)),
+            stopping,
             credential: Arc::new(credential),
             artifacts,
             providers,
-            status: Arc::new(RwLock::new(status)),
+            status,
+            health,
             peer: Arc::new(RwLock::new(None)),
-            lease: Arc::new(Mutex::new(tokio::time::Instant::now())),
+            lease,
             lease_issued: Arc::new(AtomicBool::new(false)),
-            lease_retiring: Arc::new(AtomicBool::new(false)),
+            lease_retiring,
         })
     }
     pub async fn snapshot(&self) -> Value {
@@ -122,6 +142,7 @@ impl Agent {
                 && tokio::time::Instant::now() < *self.lease.lock().await
         );
         status["active_operations"] = json!(self.tasks.lock().await.len());
+        status["health"] = self.health.snapshot();
         status["operations"] = json!(self.execution_inventory().await.unwrap_or_default());
         if let Some(desktop) = self
             .providers
@@ -509,6 +530,7 @@ impl Agent {
                         .map_err(|_| RacpError::new("CLEANUP_UNKNOWN"))
                         .and_then(|result| result);
                     if let Err(error) = result {
+                        agent.health.error(error.code.0);
                         watched.cancel();
                         return Err(error);
                     }
@@ -602,6 +624,7 @@ impl Agent {
             }
             let result = self.session(&shutdown).await;
             if let Err(error) = result {
+                self.health.error(error.code.0);
                 self.phase("disconnected").await;
                 self.log("agent_disconnected", json!({"code":error.code}));
                 if error.code.0 == "TOKEN_REJECTED" {
@@ -613,37 +636,48 @@ impl Agent {
             delay = (delay * 2).min(Duration::from_secs(10));
         }
         shutdown.cancel();
-        self.cancel_all("shutdown").await?;
-        let cleanup = async {
-            loop {
-                let notified = self.completed.notified();
-                if self.tasks.lock().await.is_empty() {
-                    break;
+        self.health.cleanup(crate::health::CleanupPhase::InProgress);
+        let result = async {
+            self.cancel_all("shutdown").await?;
+            let cleanup = async {
+                loop {
+                    let notified = self.completed.notified();
+                    if self.tasks.lock().await.is_empty() {
+                        break;
+                    }
+                    notified.await;
                 }
-                notified.await;
-            }
-            let report = self
-                .resources
-                .retire(
-                    crate::resources::RetirementScope::default(),
-                    Duration::from_secs(15),
-                )
-                .await;
-            let provider_result = self.providers.cleanup().await;
-            if !report.failed_resource_ids.is_empty() {
-                return Err(RacpError::new("CLEANUP_UNKNOWN"));
-            }
-            provider_result
-        };
-        tokio::time::timeout(Duration::from_secs(15), cleanup)
-            .await
-            .map_err(|_| RacpError::new("CLEANUP_UNKNOWN"))??;
-        output_retry
-            .await
-            .map_err(|_| RacpError::new("CLEANUP_UNKNOWN"))??;
-        watchdog
-            .await
-            .map_err(|_| RacpError::new("CLEANUP_UNKNOWN"))??;
+                let report = self
+                    .resources
+                    .retire(
+                        crate::resources::RetirementScope::default(),
+                        Duration::from_secs(15),
+                    )
+                    .await;
+                let provider_result = self.providers.cleanup().await;
+                if !report.failed_resource_ids.is_empty() {
+                    return Err(RacpError::new("CLEANUP_UNKNOWN"));
+                }
+                provider_result
+            };
+            tokio::time::timeout(Duration::from_secs(15), cleanup)
+                .await
+                .map_err(|_| RacpError::new("CLEANUP_UNKNOWN"))??;
+            output_retry
+                .await
+                .map_err(|_| RacpError::new("CLEANUP_UNKNOWN"))??;
+            watchdog
+                .await
+                .map_err(|_| RacpError::new("CLEANUP_UNKNOWN"))??;
+            Ok::<(), RacpError>(())
+        }
+        .await;
+        if let Err(error) = result {
+            self.health.error(error.code.0);
+            self.health.cleanup(crate::health::CleanupPhase::Unknown);
+            return Err(error);
+        }
+        self.health.cleanup(crate::health::CleanupPhase::Complete);
         self.status.write().await["connected"] = json!(false);
         self.status.write().await["state"] = json!("STOPPED");
         self.phase("stopped").await;

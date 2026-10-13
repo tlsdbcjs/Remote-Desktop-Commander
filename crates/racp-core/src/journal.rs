@@ -40,6 +40,22 @@ pub struct Record {
     pub outcome_available: bool,
     pub publication_blocked: bool,
 }
+/// Bounded metadata sample, never request/result/error bodies or filesystem usage.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct JournalHealth {
+    pub operation_rows_sampled: u64,
+    pub operations_truncated: bool,
+    pub queued_operations: u64,
+    pub running_operations: u64,
+    pub cancellation_requested: u64,
+    pub reconciling_operations: u64,
+    pub unknown_outcomes: u64,
+    pub spool_rows_sampled: u64,
+    pub spool_truncated: bool,
+    pub pending_outputs: u64,
+    pub registered_pending_bytes: u64,
+    pub failed_pending_outputs: u64,
+}
 pub enum Acceptance {
     New(Record),
     Replay(Record),
@@ -122,6 +138,59 @@ impl Journal {
         self.db
             .lock()
             .map_err(|_| RacpError::new("LOCAL_STATE_FAILED"))
+    }
+    /// Try the shared connection without waiting behind execution writes. Each
+    /// table contributes at most 4096 rows; truncation means lower-bound counts.
+    pub fn health_counts(&self) -> Result<JournalHealth, RacpError> {
+        let db = self
+            .db
+            .try_lock()
+            .map_err(|_| RacpError::new("LOCAL_STATE_BUSY"))?;
+        let mut health = JournalHealth::default();
+        let mut statement = db
+            .prepare("SELECT substr(state,1,33) FROM operations LIMIT 4097")
+            .map_err(db_error)?;
+        let mut rows = statement.query([]).map_err(db_error)?;
+        while let Some(row) = rows.next().map_err(db_error)? {
+            if health.operation_rows_sampled == 4096 {
+                health.operations_truncated = true;
+                break;
+            }
+            let state: String = row.get(0).map_err(db_error)?;
+            match state.as_str() {
+                "ACCEPTED" | "DISPATCHED" => health.queued_operations += 1,
+                "RUNNING" => health.running_operations += 1,
+                "CANCEL_REQUESTED" => health.cancellation_requested += 1,
+                "RECONCILING" => health.reconciling_operations += 1,
+                "UNKNOWN" => health.unknown_outcomes += 1,
+                "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT" => {}
+                _ => return Err(RacpError::new("LOCAL_STATE_FAILED")),
+            }
+            health.operation_rows_sampled += 1;
+        }
+        drop(rows);
+        drop(statement);
+        let mut statement = db.prepare("SELECT artifact_id IS NULL,size_bytes,error_code IS NOT NULL FROM output_spool LIMIT 4097").map_err(db_error)?;
+        let mut rows = statement.query([]).map_err(db_error)?;
+        while let Some(row) = rows.next().map_err(db_error)? {
+            if health.spool_rows_sampled == 4096 {
+                health.spool_truncated = true;
+                break;
+            }
+            let pending: bool = row.get(0).map_err(db_error)?;
+            let bytes: u64 = row.get(1).map_err(db_error)?;
+            let failed: bool = row.get(2).map_err(db_error)?;
+            if pending {
+                health.pending_outputs += 1;
+                health.registered_pending_bytes = health
+                    .registered_pending_bytes
+                    .checked_add(bytes)
+                    .ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?;
+                health.failed_pending_outputs += u64::from(failed);
+            }
+            health.spool_rows_sampled += 1;
+        }
+        Ok(health)
     }
     pub fn accept(&self, request: &Value) -> Result<Acceptance, RacpError> {
         let text = |k: &str| {
@@ -661,4 +730,86 @@ fn resolution_digest(value: &Value) -> Result<String, RacpError> {
         &mut bytes, Formatter,
     ))?;
     Ok(digest(bytes))
+}
+
+#[cfg(test)]
+mod health_tests {
+    use super::*;
+    #[test]
+    fn health_samples_metadata_without_decoding_sensitive_bodies_and_refuses_busy_store() {
+        let root = tempfile::tempdir().unwrap();
+        let journal = Journal::open(&root.path().join("execution.db")).unwrap();
+        {
+            let db = journal.connection().unwrap();
+            for (i, state) in [
+                "ACCEPTED",
+                "DISPATCHED",
+                "RUNNING",
+                "CANCEL_REQUESTED",
+                "RECONCILING",
+                "UNKNOWN",
+                "FAILED",
+            ]
+            .iter()
+            .enumerate()
+            {
+                db.execute("INSERT INTO operations(id,scope,key_hash,payload_hash,device_id,request,state,created_at,updated_at,error) VALUES(?,'fixture',?,'hash','dev','private malformed request',?,'now','now','private error')", params![i.to_string(),i.to_string(),state]).unwrap();
+            }
+            db.execute("INSERT INTO output_spool VALUES('out','op','private-path',123,'hash','text/plain',NULL,NULL,'now','now',1,'private failure')", []).unwrap();
+            db.execute("INSERT INTO output_spool VALUES('done','op','private-path',456,'hash','text/plain','artifact',NULL,'now','now',0,NULL)", []).unwrap();
+            assert_eq!(
+                journal.health_counts().unwrap_err().code.0,
+                "LOCAL_STATE_BUSY"
+            );
+        }
+        let health = journal.health_counts().unwrap();
+        assert_eq!(
+            (
+                health.queued_operations,
+                health.running_operations,
+                health.cancellation_requested,
+                health.reconciling_operations,
+                health.unknown_outcomes
+            ),
+            (2, 1, 1, 1, 1)
+        );
+        assert_eq!(
+            (
+                health.spool_rows_sampled,
+                health.pending_outputs,
+                health.registered_pending_bytes,
+                health.failed_pending_outputs
+            ),
+            (2, 1, 123, 1)
+        );
+        assert!(!health.operations_truncated && !health.spool_truncated);
+        let serialized = serde_json::to_string(&health).unwrap();
+        assert!(!serialized.contains("private"));
+    }
+    #[test]
+    fn health_reports_lower_bounds_when_operation_and_spool_samples_are_truncated() {
+        let root = tempfile::tempdir().unwrap();
+        let journal = Journal::open(&root.path().join("execution.db")).unwrap();
+        {
+            let mut db = journal.connection().unwrap();
+            let tx = db.transaction().unwrap();
+            for i in 0..4097 {
+                tx.execute("INSERT INTO operations(id,scope,key_hash,payload_hash,device_id,request,state,created_at,updated_at) VALUES(?,'fixture',?,'hash','dev','{}','ACCEPTED','now','now')", params![i.to_string(),i.to_string()]).unwrap();
+                tx.execute("INSERT INTO output_spool VALUES(?,'op','private-path',1,'hash','text/plain',NULL,NULL,'now','now',0,NULL)", [i.to_string()]).unwrap();
+            }
+            tx.commit().unwrap();
+        }
+        let health = journal.health_counts().unwrap();
+        assert!(health.operations_truncated && health.spool_truncated);
+        assert_eq!(
+            (
+                health.operation_rows_sampled,
+                health.queued_operations,
+                health.spool_rows_sampled,
+                health.pending_outputs,
+                health.registered_pending_bytes
+            ),
+            (4096, 4096, 4096, 4096, 4096)
+        );
+    }
 }
