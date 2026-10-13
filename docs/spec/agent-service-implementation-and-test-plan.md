@@ -1,8 +1,8 @@
 # Rust Agent 서비스 구현 및 검증 작업 계획
 
 > **Document ID**: `DOC-PLAN-AGENT-SERVICE`\
-> **Status**: Active · **Target Version**: v0.1.26 기준 / Agent 서비스 릴리스 버전 미정\
-> **Last Updated**: 2026-10-12 · **Classification**: Service Implementation & Test Plan
+> **Status**: Active · **Target Version**: v0.1.27 source / Agent 서비스 릴리스 인수 미완료\
+> **Last Updated**: 2026-10-13 · **Classification**: Service Implementation & Test Plan
 
 ## 개요
 
@@ -13,7 +13,7 @@ GUI `apps/client-native`의 재구성은 이 계획에서 제외한다. 대상�
 Agent 서비스의 현재 후속 작업은 이 문서가 SSOT다. [Rust 전환 계획](rust-client-migration-plan.md)은 공통 설계 기준, [기존 Client·Agent 통합 계획](native-client-completion-and-test-plan.md)은 이전 범위의 참조로 유지한다. 실제 실행 결과·실패·artifact hash는 [구현 현황](../quality/implementation-status.md)에만 기록한다.
 
 > [!IMPORTANT]
-> 이번 요청은 **계획서 작성**이다. 코드 구현·빌드·테스트·설치·서비스 등록/시작/정지·기존 서비스 변경을 수행하지 않는다. 사용자의 **실제 설치 금지** 지시는 유지된다. 문서에 서비스 시험을 기재한 것이 실행 허가는 아니며, 실제 SCM 인수는 별도 요청과 전용 테스트 환경이 필요하다.
+> 이 문서는 2026-10-12 계획서 작성 요청으로 시작했으며, 2026-10-13 사용자가 **계획에 따른 미구현 Agent 기능 진행**을 요청해 source 구현·개발 빌드·격리 시험을 진행한다. 사용자의 **실제 설치 금지** 지시는 유지된다. 문서에 서비스 시험을 기재한 것이 실행 허가는 아니며, 실제 SCM 인수는 별도 요청과 전용 테스트 환경이 필요하다.
 
 ## 목차
 
@@ -32,7 +32,7 @@ Agent 서비스의 현재 후속 작업은 이 문서가 SSOT다. [Rust 전환 �
 
 | 구분 | 범위 |
 |---|---|
-| 서비스 실행 | 목표 경로 `apps/agent`(현재 `apps/agent-rust`), Windows SCM host, startup/readiness/stop/shutdown, 자동 시작·장애 복구 정책 |
+| 서비스 실행 | `apps/agent`, Windows SCM host, startup/readiness/stop/shutdown, 자동 시작·장애 복구 정책 |
 | 원격 실행 | Gateway/WSS 연결, 파일·artifact·명령·프로세스·터미널·원격 화면/입력, 작업 상태·취소·정리 |
 | 외장 장치/USB 분석 | 원격 대상에 실제 연결된 USB·동글·외장 장치의 탐색/식별·기존 driver 기반 접근·remote handle·지원 데이터 수집·정적 분석 artifact |
 | 플랫폼 구조 | 공통 계약/정책/원격 orchestration과 OS adapter 분리. Windows 우선, macOS/Linux 서비스·장치 adapter 미구현 명시 |
@@ -55,13 +55,13 @@ Agent 서비스의 현재 후속 작업은 이 문서가 SSOT다. [Rust 전환 �
 | 영역 | 확인한 코드/상태 | 남은 작업의 분류 |
 |---|---|---|
 | Agent 공통 실행 | [native_client.rs](../../crates/racp-runtime/src/native_client.rs)에 user run 및 service run, [기존 Agent 실행기](../../scripts/test_native_agent.py)에 격리된 user-mode 원격 검사 존재 | 구현됨. user-mode 결과를 SCM/service-account 결과로 이관하지 않고 서비스 조건 재검증 |
-| SCM host | [native_service.rs](../../apps/agent-rust/src/native_service.rs)의 dispatcher, STOP/SHUTDOWN cancellation, START/STOP_PENDING checkpoint·readiness 보고 | 구현됨·실제 SCM 검증 필요. OS lifecycle와 온라인 연결 상태 구분 필요 |
+| SCM host | [native_service.rs](../../apps/agent/src/platform/windows/service/native_service.rs)의 dispatcher, STOP/SHUTDOWN cancellation, START/STOP_PENDING checkpoint·readiness 보고 | 구현됨·실제 SCM 검증 필요. OS lifecycle와 온라인 연결 상태 구분 필요 |
 | 서비스 identity/state | [service_scope.rs](../../crates/racp-contract/src/service_scope.rs), [native_service.rs](../../crates/racp-core/src/native_service.rs), [machine_service.rs](../../crates/racp-core/src/machine_service.rs) | 고정 identity·경로·private ACL 코드 존재. 계정/접근 권한·Session 0 조건 미검증 |
-| provision/bootstrap/관리 | [service_provision.rs](../../apps/agent-rust/src/service_provision.rs), [service_bootstrap.rs](../../crates/racp-runtime/src/service_bootstrap.rs), [service_admin.rs](../../apps/agent-rust/src/service_admin.rs), [service_config.rs](../../crates/racp-core/src/service_config.rs) | fresh provision·등록·config·pending 처리 코드 존재. 전체 관리 절차와 단계별 실패 인수 부족 |
-| maintenance/restore | [service_restore.rs](../../apps/agent-rust/src/service_restore.rs), [service_maintenance.rs](../../crates/racp-runtime/src/service_maintenance.rs) | 일부 복구 경로 존재. 미확정 partial 상태 처리와 제품 전체 복구 흐름 미완성·미검증 |
-| 로컬 IPC/승인 | [local_ipc](../../crates/racp-runtime/src/local_ipc/mod.rs), [로컬 IPC 계약](../../crates/racp-contract/src/local_ipc.rs)에 인증·observer/controller 및 제어 메시지 존재 | GUI 없이 사용할 관리/시험 경로를 확정해야 함. 승인 검사를 제거하는 해결은 금지 |
-| 서비스 단독 payload | service host는 `pin_current_payload(true)`를 호출. [현재 BASE_FILES](../../crates/racp-contract/src/distribution.rs)는 `racp-client.exe`를 필수로 포함 | **구체적 결합 공백**. 현재 Agent-only build가 곧 service-admitted payload인 것은 아님 |
-| 머신 설치 recipe | [native-machine-installer.nsi](../../xtask/native-machine-installer.nsi)는 Agent와 Client를 함께 복사하고 Client shortcut을 생성 | **GUI 없는 Agent 서비스 배포 정의 미완성**. 새 역할의 admission/installer 정의 필요 |
+| provision/bootstrap/관리 | [service_provision.rs](../../apps/agent/src/platform/windows/service/service_provision.rs), [service_bootstrap.rs](../../crates/racp-runtime/src/service_bootstrap.rs), [service_admin.rs](../../apps/agent/src/platform/windows/service/service_admin.rs), [service_config.rs](../../crates/racp-core/src/service_config.rs) | fresh provision·등록·config·pending 처리 코드 존재. 전체 관리 절차와 단계별 실패 인수 부족 |
+| maintenance/restore | [service_restore.rs](../../apps/agent/src/platform/windows/service/service_restore.rs), [service_maintenance.rs](../../crates/racp-runtime/src/service_maintenance.rs) | 일부 복구 경로 존재. 미확정 partial 상태 처리와 제품 전체 복구 흐름 미완성·미검증 |
+| 로컬 IPC/승인 | [local_ipc](../../crates/racp-runtime/src/local_ipc/mod.rs), [로컬 IPC 계약](../../crates/racp-contract/src/local_ipc.rs)에 인증·observer/controller 및 제어 메시지 존재 | `native-control`/`native-service-control`이 같은 인증 IPC를 소비. 실제 service observer/controller 인수는 보류. 승인 검사는 유지 |
+| 서비스 단독 payload | service host·provision·관리·restore는 `pin_current_agent_service_payload()`를 호출. [현재 BASE_FILES](../../crates/racp-contract/src/distribution.rs)는 `racp-client.exe`를 필수로 포함 | 명시 `native-agent-service` 역할의 3-file manifest를 별도 admission. standalone `build/`와 서비스 `staging/payload/`를 구분. 실제 SCM 인수는 별도 |
+| 머신 설치 recipe | [native-machine-installer.nsi](../../xtask/native-machine-installer.nsi)는 Agent만 복사하며 Client EXE/shortcut을 생성하지 않음 | Agent 전용 recipe source를 정의. 실제 설치·SCM/계정/ACL 인수는 보류 |
 | 시작/장애 정책 | provision/restore의 SCM 생성·복구 경로는 `SERVICE_DEMAND_START` 사용 | 자동 시작·failure actions와 retry 정책을 제품 운영 기준으로 확정하고 검증할 필요 |
 | desktop 세션 | [service_session.rs](../../crates/racp-runtime/src/providers/desktop/service_session.rs)·[session_ledger.rs](../../crates/racp-runtime/src/providers/desktop/session_ledger.rs) 및 recovery 경로 존재 | 사용자 세션 등록과 자동 세션 launch를 구별. 코드 존재를 로그인/잠금/세션 전환 합격으로 해석하지 않음 |
 | USB/외장 장치 접근 | 현재 Agent/core/runtime와 공개 계약에서 USB·동글 탐색/연결/정적 수집 Provider를 확인하지 못함 | **미구현**. 파일 읽기·process memory·PCAP이 USB 장치의 protocol/firmware 접근을 대신하지 않음 |
@@ -107,11 +107,11 @@ SCM의 RUNNING, 로컬 runtime/IPC READY, Gateway ONLINE을 서로 다른 상태
 
 ### 3.4 플랫폼별 폴더·파일 구조 개선
 
-아래는 **목표 구조**이며 이번 문서 작업에서 폴더/파일을 이동하거나 stub를 구현하지 않는다. 공통과 OS adapter를 현재 crate 책임 안에서 구분한다. OS마다 Agent 앱이나 동일 정책 엔진을 복제하지 않는다.
+아래는 **목표 구조**다. `apps/agent` 및 Windows service/setup 경계는 source에 반영했으며, 나머지 runtime/core 재배치는 필요한 backend부터 점진적으로 진행한다. 공통과 OS adapter를 현재 crate 책임 안에서 구분한다. OS마다 Agent 앱이나 동일 정책 엔진을 복제하지 않는다.
 
-Agent 앱 디렉터리는 구현 언어 대신 제품 역할을 나타내는 **`apps/agent`**로 통일한다. 현재 `apps/agent-rust`는 전환 기간의 경로이며 AS15에서 변경한다. 언어와 dependency는 `Cargo.toml`과 `.rs` 파일로 식별한다. Cargo package 이름과 실행 파일 이름 `racp-agent`는 유지하고 공유 라이브러리는 기존 `crates/racp-*`에 둔다.
+Agent 앱 디렉터리는 구현 언어 대신 제품 역할을 나타내는 **`apps/agent`**로 통일한다. AS15에서 기존 `apps/agent-rust`를 `apps/agent`로 변경했다. 언어와 dependency는 `Cargo.toml`과 `.rs` 파일로 식별한다. Cargo package 이름과 실행 파일 이름 `racp-agent`는 유지하고 공유 라이브러리는 기존 `crates/racp-*`에 둔다.
 
-경로 변경 시 root Cargo workspace member와 path dependency, 빌드/패키징·version 도구·migration inventory, CI, 검사 스크립트, AGENTS 및 활성 문서의 source 링크를 함께 갱신한다. 현재 구현 근거인 §2의 링크는 실제 이동 전까지 `apps/agent-rust`를 가리킨다. 과거 검증 기록의 source 경로·기존 artifact manifest/hash는 당시 증거로 보존하며 배포 출력 `dist/agent`는 유지한다.
+경로 변경 시 root Cargo workspace member와 path dependency, 빌드/패키징·version 도구·migration inventory, CI, 검사 스크립트, AGENTS 및 활성 문서의 source 링크를 함께 갱신한다. 현재 구현 근거인 §2의 링크는 이동한 실제 경로를 가리킨다. 과거 검증 기록의 source 경로·기존 artifact manifest/hash는 당시 증거로 보존하며 배포 출력 `dist/agent`는 유지한다.
 
 ```text
 apps/agent/src/
@@ -146,7 +146,7 @@ crates/racp-core/src/
     └── linux/                       # 서비스용 저장·identity adapter 미구현
 ```
 
-현재 `native_service.rs`, `service_provision.rs`, `service_admin.rs`, `service_restore.rs`는 앱의 `platform/windows/service/`, `machine_install.rs`, `machine_setup.rs`는 `platform/windows/setup/`로 이동하는 것이 첫 후보다. shared crate의 Win32 OS 호출은 해당 crate의 Windows backend로 점진적으로 분리하되 기존 기능별 `windows.rs`를 의미 없이 중복하지 않는다. 공통 Provider는 target Device·권한·timeout·취소·artifact 흐름을 담당하고 driver handle/OS IO는 platform backend가 담당한다.
+AS15에서 `native_service.rs`, `service_provision.rs`, `service_admin.rs`, `service_restore.rs`를 앱의 `platform/windows/service/`, `machine_install.rs`, `machine_setup.rs`를 `platform/windows/setup/`로 이동했다. shared crate의 Win32 OS 호출은 해당 crate의 Windows backend로 점진적으로 분리하되 기존 기능별 `windows.rs`를 의미 없이 중복하지 않는다. 공통 Provider는 target Device·권한·timeout·취소·artifact 흐름을 담당하고 driver handle/OS IO는 platform backend가 담당한다.
 
 공개 Rust/IPC 계약은 가능한 유지하며 module export로 이동 범위를 제한한다. 기존 GUI 소비자를 깨뜨리지 않기 위해 GUI source를 동시에 재작성하지 않는다. `platform/windows` 밖 공통 계층에 Win32 의존성을 추가하지 않고 Cargo의 target-specific dependency와 `cfg(target_os)`로 선택한다. 새 crate나 고정 LOC 목표를 구조 개선의 필수 조건으로 만들지 않는다.
 
@@ -215,7 +215,7 @@ AS01/AS12의 서비스 payload를 만들기 위해 기존 Client payload의 필�
 
 ### 5.1 설치 없이 준비 가능한 시험
 
-이 시험들도 이번 문서 작성에서는 실행하지 않는다. 향후 작업 요청 시 Agent-only artifact와 임시 state/Gateway·인증된 시험 controller를 사용한다. user-mode 또는 모델 시험의 한계를 기록하며 SCM 합격으로 표현하지 않는다.
+아래 시험은 구현 요청에 따라 설치 없이 수행할 수 있는 범위부터 실행한다. 실제 실행 증거는 구현 현황에 기록한다. 향후 작업 요청 시 Agent-only artifact와 임시 state/Gateway·인증된 시험 controller를 사용한다. user-mode 또는 모델 시험의 한계를 기록하며 SCM 합격으로 표현하지 않는다.
 
 | ID | 대상 | 절차 및 합격 기준 |
 |---|---|---|
@@ -266,7 +266,7 @@ AST19는 이미 승인된 전용 서비스 환경이 없으면 user-mode 원격 
 | AST25 | 허용된 테스트 장치/시간, 기존 접근 backend | unplug/replug·busy·access denied·동시 요청·cancel/timeout·Agent stop/restart를 검사. generation이 바뀐 stale handle 거부, pending IO/handle/lease 정리, 다른 장치에 요청 전이 없음 |
 | AST26 | 지원 read protocol 또는 장치 연관 파일과 분석 도구 | descriptor/raw bytes/firmware 또는 driver 파일의 범위·출처·SHA-256·부분 수집 정보 확인 후 host 정적 분석. descriptor만 읽은 결과를 firmware dump로 표시하지 않음. unsupported 항목은 실제 제한 이유 반환 |
 
-AST24–AST26의 실제 장치 접근·분리/재연결·수집은 이번 문서 작업에서 실행하지 않는다. 대상 장치·허용한 read protocol·기존 driver·계정/실행 mode를 확정한 후 수행한다. 동글을 인증키로 사용하는 시험은 이 범위에 없다.
+AST24–AST26의 실제 장치 접근·분리/재연결·수집은 수행하지 않는다. 대상 장치·허용한 read protocol·기존 driver·계정/실행 mode를 확정한 후 수행한다. 동글을 인증키로 사용하는 시험은 이 범위에 없다.
 
 <a id="section-06"></a>
 
@@ -289,9 +289,9 @@ AST24–AST26의 실제 장치 접근·분리/재연결·수집은 이번 문서
 
 ## 7. 산출물·버전·증거 관리
 
-- Agent 앱 source의 목표 경로는 `apps/agent`이며 AS15 완료 전 실제 경로는 `apps/agent-rust`다. 공유 source는 `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`, 필요한 `xtask` 범위에 둔다. `apps/client-native` source/화면/실행을 이 계획의 구현·시험 대상으로 추가하지 않는다.
-- 현재 standalone build는 `dist/agent/<version>/win-x64/<build-id>/build/`다. service package의 목표는 같은 Agent batch의 `packages/`이며 AS01/AS12에서 manifest/recipe/entry point를 확정한다. 아직 없는 service package command를 실행 가능한 명령으로 문서화하지 않는다.
-- 현재 Client machine recipe를 Agent 단독 recipe로 오인하지 않는다. 기본 제품에 CPython/Node/Electron/Iced GUI·token·credential·Gateway 고정 설정·Device state를 넣지 않는다. 선택 runtime은 별도 admission이다.
+- Agent 앱 source의 현재 경로는 `apps/agent`다. `apps/agent-rust`는 과거 검증 이력에만 보존한다. 공유 source는 `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`, 필요한 `xtask` 범위에 둔다. `apps/client-native` source/화면/실행을 이 계획의 구현·시험 대상으로 추가하지 않는다.
+- 현재 standalone build는 `dist/agent/<version>/win-x64/<build-id>/build/`다. service staging은 같은 Agent batch의 `staging/payload/`, 명시 요청하는 setup artifact는 `packages/`다. `stage-agent-service`, `verify-agent-service`, `package-agent-service`가 각각 개발 빌드·정적 검증·setup 생성 단계이며 실제 설치/등록을 수행하지 않는다.
+- Client package는 user scope만 받으며 Agent service staging/recipe는 별도 역할을 사용한다. 기본 제품에 CPython/Node/Electron/Iced GUI·token·credential·Gateway 고정 설정·Device state를 넣지 않는다. 선택 runtime은 별도 admission이다.
 - raw evidence는 `dist/verification/agent/<version>/<run-id>/`, 실제 결과·실패·수치·hash는 [구현 현황](../quality/implementation-status.md)에 기록한다. mode(`user`/`service`/`model`), 계정/SID 역할, source/lock, 기대/실제 결과, 자원 정리를 포함하며 비밀 값은 제외한다.
 - 구현/build batch의 버전·재시도·출력 보존은 [AGENTS](../../AGENTS.md)를 따른다. 문서 작성만으로 v0.1.26을 증가시키거나 설치/서비스 작업을 시작하지 않는다.
 - 기존 서비스명·root·account·config 충돌은 보호 대상이다. 불확실한 provisioning/정리는 UNKNOWN/pending 증거를 보존하고 자동 강제 삭제하지 않는다. 설치 금지·기존 등록/state 보존 지시는 문서보다 우선한다.

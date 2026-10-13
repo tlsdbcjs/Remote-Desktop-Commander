@@ -1,10 +1,10 @@
 [workspace]
-members = ["crates/racp-contract", "crates/racp-core", "crates/racp-runtime", "apps/agent-rust", "apps/client-native", "xtask"]
+members = ["crates/racp-contract", "crates/racp-core", "crates/racp-runtime", "apps/agent", "apps/client-native", "xtask"]
 resolver = "2"
 exclude = ["apps/analysis-host"]
 
 [workspace.package]
-version = "0.1.26"
+version = "0.1.27"
 edition = "2021"
 rust-version = "1.90"
 license = "MIT"

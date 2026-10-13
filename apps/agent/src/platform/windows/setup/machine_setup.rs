@@ -287,7 +287,7 @@ pub fn execute(state: &Path, raw: &[u8]) -> Result<Value, RacpError> {
         return Err(RacpError::new("MACHINE_SETUP_CONFLICT"));
     }
     validate_request(raw)?;
-    let _payload = racp_core::distribution::pin_current_payload(true)?;
+    let _payload = racp_core::distribution::pin_current_agent_service_payload()?;
     let exe = std::env::current_exe()?;
     let _image = machine::pin_image_directory(
         exe.parent()
@@ -447,7 +447,7 @@ pub fn cleanup(raw: &[u8]) -> Result<Value, RacpError> {
     {
         return Err(RacpError::new("REQUEST_INVALID"));
     }
-    let _payload = racp_core::distribution::pin_current_payload(true)?;
+    let _payload = racp_core::distribution::pin_current_agent_service_payload()?;
     let exe = std::env::current_exe()?;
     let _image = machine::pin_image_directory(
         exe.parent()
@@ -627,7 +627,7 @@ unsafe extern "system" fn main(count: u32, _: *mut *mut u16) {
             return Err(RacpError::new("REQUEST_INVALID"));
         }
         machine::require_system()?;
-        let _payload = racp_core::distribution::pin_current_payload(true)?;
+        let _payload = racp_core::distribution::pin_current_agent_service_payload()?;
         let exe = std::env::current_exe()?;
         let _image = machine::pin_image_directory(
             exe.parent()
@@ -644,9 +644,9 @@ unsafe extern "system" fn main(count: u32, _: *mut *mut u16) {
         let maintenance = value["type"].as_str();
         let state = machine::data_parent()?.join("state");
         let result = if maintenance.is_some() {
-            super::service_admin::execute(&state, &request)
+            super::super::service::service_admin::execute(&state, &request)
         } else {
-            super::service_provision::execute(&state, &request)
+            super::super::service::service_provision::execute(&state, &request)
         };
         let receipt = match &result {
             Ok(value) => {

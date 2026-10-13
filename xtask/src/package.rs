@@ -1,4 +1,5 @@
 //! Native build/staging orchestration; no Python, Node, Tauri or browser download.
+pub mod agent_service;
 mod artifacts;
 mod evidence;
 mod imports;
@@ -74,6 +75,9 @@ fn options(args: &[String]) -> Result<Options> {
 }
 pub fn plan(root: &Path, args: &[String]) -> Result<()> {
     let options = options(args)?;
+    if options.install_scope != "user" {
+        return Err("Client packages support user scope only; stage-agent-service supplies the independent service payload".into());
+    }
     if !options.dry_run {
         return package(root, options);
     }
@@ -260,18 +264,42 @@ fn copy(root: &Path, source: &Path, name: &str) -> Result<PayloadFile> {
     })
 }
 pub fn stage(root: &Path, args: &[String]) -> Result<()> {
-    stage_component(root, args, false)
+    stage_component(root, args, StageRole::Client)
 }
 pub fn stage_agent(root: &Path, args: &[String]) -> Result<()> {
-    stage_component(root, args, true)
+    stage_component(root, args, StageRole::Agent)
 }
-fn stage_component(root: &Path, args: &[String], agent_only: bool) -> Result<()> {
+pub fn stage_agent_service(root: &Path, args: &[String]) -> Result<()> {
+    stage_component(root, args, StageRole::AgentService)
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StageRole {
+    Client,
+    Agent,
+    AgentService,
+}
+fn stage_component(root: &Path, args: &[String], role: StageRole) -> Result<()> {
     let options = options(args)?;
+    let agent_only = role != StageRole::Client;
+    let service = role == StageRole::AgentService;
+    let phase = if role == StageRole::Agent {
+        "build"
+    } else {
+        "staging"
+    };
+    if service
+        && (options.platform != "win" || options.arch != "x64" || options.install_scope != "user")
+    {
+        return Err(
+            "Agent service staging supports Windows x64 only; installation is a separate operation"
+                .into(),
+        );
+    }
     if options.dry_run {
         if agent_only {
             println!(
                 "{}",
-                json!({"mode":"definition_only", "version":VERSION, "output":root.join(format!("dist/agent/{VERSION}/win-x64/<build-id>/build")), "writes_files":false})
+                json!({"mode":"definition_only", "version":VERSION, "output":root.join(format!("dist/agent/{VERSION}/win-x64/<build-id>/{phase}")), "payload_kind":if service { "native-agent-service" } else { "development-native-agent" }, "base_files":AGENT_SERVICE_FILES, "writes_files":false})
             );
             return Ok(());
         }
@@ -287,7 +315,6 @@ fn stage_component(root: &Path, args: &[String], agent_only: bool) -> Result<()>
         .build_id
         .ok_or("stage requires an explicit unique --build-id")?;
     let component = if agent_only { "agent" } else { "client" };
-    let phase = if agent_only { "build" } else { "staging" };
     let parent = root.join(format!("dist/{component}/{VERSION}/win-x64/{build_id}"));
     racp_core::private_dir(&parent)?;
     let _batch_lock = racp_core::InstanceLock::acquire(&parent.join("native-build.lock"))?;
@@ -296,7 +323,7 @@ fn stage_component(root: &Path, args: &[String], agent_only: bool) -> Result<()>
         return Err("batch already exists; preserve prior outputs".into());
     }
     racp_core::create_private_native_directory(&batch)?;
-    let result = stage_batch(root, &batch, agent_only);
+    let result = stage_batch(root, &batch, role);
     if let Err(error) = result {
         // Only the newly reserved direct-child batch is moved; no recursive delete.
         racp_core::validate_local_path(&batch)?;
@@ -314,7 +341,9 @@ fn stage_component(root: &Path, args: &[String], agent_only: bool) -> Result<()>
     println!("NATIVE_STAGING_EVIDENCE {}", batch.display());
     Ok(())
 }
-fn stage_batch(root: &Path, batch: &Path, agent_only: bool) -> Result<()> {
+fn stage_batch(root: &Path, batch: &Path, role: StageRole) -> Result<()> {
+    let agent_only = role != StageRole::Client;
+    let service = role == StageRole::AgentService;
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let compiler = evidence::command(root, &cargo, &["--version"])?;
     if !compiler.starts_with("cargo 1.90.0 ") {
@@ -336,7 +365,10 @@ fn stage_batch(root: &Path, batch: &Path, agent_only: bool) -> Result<()> {
         return Err("pinned native rustc 1.90.0 required".into());
     }
     let source_before = evidence::source(root)?;
-    let target_dir = root.join("target/native-product");
+    let target_dir = std::env::var_os("RACP_NATIVE_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| root.join("target/native-product"));
+    let target_dir = racp_core::validate_local_path(&target_dir)?;
     let mut command = Command::new(&cargo);
     command
         .args([
@@ -364,19 +396,26 @@ fn stage_batch(root: &Path, batch: &Path, agent_only: bool) -> Result<()> {
         return Err("native production build failed".into());
     }
     if agent_only {
+        let service_payload = batch.join("payload");
+        let payload = if service {
+            racp_core::create_private_native_directory(&service_payload)?;
+            service_payload.as_path()
+        } else {
+            batch
+        };
         let executable = copy(
-            batch,
+            payload,
             &target_dir.join("x86_64-pc-windows-msvc/release/racp-agent.exe"),
             "racp-agent.exe",
         )?;
-        let license = copy(batch, &root.join("LICENSE"), "LICENSE")?;
+        let license = copy(payload, &root.join("LICENSE"), "LICENSE")?;
         let sbom = serde_json::to_vec_pretty(&evidence::sbom_for(
             root,
             &cargo,
             "RACP Agent",
             &["racp-agent"],
         )?)?;
-        write_new(&batch.join("sbom.json"), &sbom)?;
+        write_new(&payload.join("sbom.json"), &sbom)?;
         let files = vec![
             executable,
             license,
@@ -390,8 +429,24 @@ fn stage_batch(root: &Path, batch: &Path, agent_only: bool) -> Result<()> {
         if source["input_digest"] != source_before["input_digest"] {
             return Err("Agent source inputs changed during build".into());
         }
-        let mut binary = racp_core::secure_read_file(&batch.join("racp-agent.exe"))?;
-        let build = json!({"format_version":1, "product_version":VERSION, "kind":"development-native-agent", "platform":"win", "architecture":"x64", "source":source, "compiler":rustc_version.trim(), "cargo":compiler.trim(), "target":"x86_64-pc-windows-msvc", "static_crt":true, "cargo_lock_sha256":racp_contract::digest(fs::read(root.join("Cargo.lock"))?), "files":files, "native_imports":imports::inspect(&mut binary)?, "signed":false, "published":false, "tests":"not_run_by_xtask"});
+        let mut binary = racp_core::secure_read_file(&payload.join("racp-agent.exe"))?;
+        let mut build = json!({"format_version":1, "product_version":VERSION, "kind":if service { "development-native-agent-service" } else { "development-native-agent" }, "platform":"win", "architecture":"x64", "source":source, "compiler":rustc_version.trim(), "cargo":compiler.trim(), "target":"x86_64-pc-windows-msvc", "static_crt":true, "cargo_lock_sha256":racp_contract::digest(fs::read(root.join("Cargo.lock"))?), "files":files, "native_imports":imports::inspect(&mut binary)?, "signed":false, "published":false, "tests":"not_run_by_xtask"});
+        if service {
+            let manifest = NativePayload {
+                format_version: 1,
+                product_version: VERSION.into(),
+                kind: PayloadKind::AgentService,
+                platform: "win".into(),
+                architecture: "x64".into(),
+                files,
+            };
+            manifest.validate()?;
+            let bytes = serde_json::to_vec_pretty(&manifest)?;
+            write_new(&payload.join(MANIFEST_FILE), &bytes)?;
+            let _pins = racp_core::distribution::pin_agent_service_payload(payload)?;
+            build["payload_manifest_sha256"] = json!(racp_contract::digest(&bytes));
+            build["payload"] = serde_json::to_value(manifest)?;
+        }
         write_new(
             &batch.join("build-manifest.json"),
             &serde_json::to_vec_pretty(&build)?,
@@ -420,6 +475,7 @@ fn stage_batch(root: &Path, batch: &Path, agent_only: bool) -> Result<()> {
     let manifest = NativePayload {
         format_version: 1,
         product_version: VERSION.into(),
+        kind: PayloadKind::Client,
         platform: "win".into(),
         architecture: "x64".into(),
         files,
@@ -508,6 +564,55 @@ pub fn verify_agent(root: &Path, args: &[String]) -> Result<()> {
         return Err("Agent native imports mismatch".into());
     }
     println!("static_pass: standalone Agent {id} hashes and native target verified");
+    Ok(())
+}
+pub fn verify_agent_service(root: &Path, args: &[String]) -> Result<()> {
+    let options = options(args)?;
+    if options.platform != "win" || options.arch != "x64" || options.dry_run {
+        return Err("verify-agent-service requires a Windows x64 build ID".into());
+    }
+    let id = options
+        .build_id
+        .ok_or("verify-agent-service requires --build-id")?;
+    let batch = root.join(format!("dist/agent/{VERSION}/win-x64/{id}/staging"));
+    racp_core::verify_private_native_directory(&batch)?;
+    let metadata =
+        racp_core::read_bounded(&batch.join("build-manifest.json"), 16 * 1024 * 1024, true)?;
+    racp_contract::local_ipc::reject_duplicate_keys(&metadata)?;
+    let build: serde_json::Value = serde_json::from_slice(&metadata)?;
+    if build["format_version"] != 1
+        || build["product_version"] != VERSION
+        || build["kind"] != "development-native-agent-service"
+        || build["platform"] != "win"
+        || build["architecture"] != "x64"
+    {
+        return Err("Agent service build identity mismatch".into());
+    }
+    let payload = batch.join("payload");
+    let pins = racp_core::distribution::pin_agent_service_payload(&payload)?;
+    if build["payload"] != serde_json::to_value(&pins.manifest)?
+        || build["files"] != serde_json::to_value(&pins.manifest.files)?
+        || build["payload_manifest_sha256"]
+            != racp_contract::digest(racp_core::read_bounded(
+                &payload.join(MANIFEST_FILE),
+                1048576,
+                false,
+            )?)
+    {
+        return Err("Agent service manifest mismatch".into());
+    }
+    let mut actual: Vec<_> = fs::read_dir(&batch)?
+        .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
+        .collect::<std::io::Result<_>>()?;
+    actual.sort();
+    if actual != ["build-manifest.json", "payload"] {
+        return Err("Unexpected Agent service staging files".into());
+    }
+    let mut binary = racp_core::secure_read_file(&payload.join("racp-agent.exe"))?;
+    if build["native_imports"] != serde_json::to_value(imports::inspect(&mut binary)?)? {
+        return Err("Agent service native imports mismatch".into());
+    }
+    println!("static_pass: Agent service {id} / 3 GUI-free payload files / hashes and native target verified");
     Ok(())
 }
 pub fn verify(root: &Path, args: &[String]) -> Result<()> {

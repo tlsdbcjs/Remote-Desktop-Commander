@@ -173,7 +173,7 @@ unsafe extern "system" fn main(count: u32, args: *mut *mut u16) {
     let result = (|| -> Result<(), RacpError> {
         verify()?;
         let mode = start_mode(count, args)?;
-        let _payload = racp_core::distribution::pin_current_payload(true)?;
+        let _payload = racp_core::distribution::pin_current_agent_service_payload()?;
         let exe = std::env::current_exe()?;
         let _image = racp_core::machine_service::pin_image_directory(
             exe.parent()

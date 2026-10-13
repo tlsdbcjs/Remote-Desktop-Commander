@@ -9,8 +9,11 @@ fn main() {
     let result = match args.first().map(String::as_str) {
         Some("inventory-check" | "contract-check") if args.len() == 1 => inventory::check(root),
         Some("package") => package::plan(root, &args[1..]),
+        Some("package-agent-service") => package::agent_service::plan(root, &args[1..]),
         Some("stage") => package::stage(root, &args[1..]),
         Some("stage-agent") => package::stage_agent(root, &args[1..]),
+        Some("stage-agent-service") => package::stage_agent_service(root, &args[1..]),
+        Some("verify-agent-service") => package::verify_agent_service(root, &args[1..]),
         Some("verify-agent") => package::verify_agent(root, &args[1..]),
         Some("verify-staging") => package::verify(root, &args[1..]),
         _ => Err("usage: xtask inventory-check | contract-check | package --platform win --arch x64 --dry-run".into()),

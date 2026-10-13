@@ -1,8 +1,8 @@
 # RACP Agent Guidelines & Version Management
 
 > **Document ID**: `DOC-GOV-AGENTS`\
-> **Status**: Active · **Target Version**: v0.1.26\
-> **Last Updated**: 2026-10-12 · **Classification**: Repository Agent Guidelines
+> **Status**: Active · **Target Version**: v0.1.27\
+> **Last Updated**: 2026-10-13 · **Classification**: Repository Agent Guidelines
 
 This document defines repository instructions, operational principles, and semantic versioning policies for AI agents (Codex, Antigravity, Gemini, etc.) and contributors working on the **Remote-Desktop-Commander (RACP)** codebase.
 
@@ -25,7 +25,7 @@ This document defines repository instructions, operational principles, and seman
 - **Name**: Remote-Desktop-Commander (RACP - Remote Access and Control Protocol)
 - **Architecture**:
   - Python workspace (`uv` workspace): `apps/cli`, `apps/gateway`, `packages/domain`, `packages/protocol`, `packages/policy`, `packages/observability`, `packages/sdk`
-  - Rust workspace: `apps/agent-rust`, `apps/client-native` (Iced, including its local `src/ui_model.rs`), `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`, `xtask`; opt-in independent `apps/analysis-host`
+  - Rust workspace: `apps/agent`, `apps/client-native` (Iced, including its local `src/ui_model.rs`), `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`, `xtask`; opt-in independent `apps/analysis-host`
   - Node / Web workspace (`pnpm` workspace): `apps/console` (React + Vite) only
 - **Current Baseline Version**: Read `packages/domain/src/racp_domain/version.py` (SSOT).
 
@@ -220,6 +220,8 @@ The user installer bundles Client and Agent in one setup EXE. Its default path i
 | Gateway | `dist/gateway/<version>/win-x64/<build-id>/packages/` | Python server/runtime and compiled Web Console, portable ZIP; `uv run --frozen python scripts/build_gateway.py --node <node.exe> --build-id <id> --targets portable` |
 | Gateway workspace wheels | `dist/gateway/<version>/python-any/<build-id>/wheels/` | Python Gateway/CLI/shared-package wheels; `uv run --frozen python scripts/build.py --build-id <id>` |
 | Agent | `dist/agent/<version>/win-x64/<build-id>/build/` | Rust Agent EXE, LICENSE, Agent-only SBOM and hash manifest; `cargo run --locked -p xtask -- stage-agent --build-id <id>` |
+| Agent service staging | `dist/agent/<version>/win-x64/<build-id>/staging/` | GUI-free `payload/` with explicit `native-agent-service` manifest; `xtask stage-agent-service` / `verify-agent-service`. No installation/SCM changes |
+| Agent service setup | `dist/agent/<version>/win-x64/<build-id>/packages/` | Explicitly requested `xtask package-agent-service`; unsigned setup definition, no installer execution |
 | Client | `dist/client/<version>/win-x64/<build-id>/staging/` | Iced Client, required companion Agent, LICENSE/SBOM/manifest and native launcher; `xtask stage` / `verify-staging` |
 | Client product artifacts | `dist/client/<version>/<target>/<build-id>/packages/` | Explicitly requested setup/portable/ZIP; `xtask package` |
 | Console | `dist/console/<version>/web/<build-id>/build/` | `web/` static frontend and build manifest; `uv run --frozen python scripts/console_build.py --node <node.exe> --build-id <id>` |
