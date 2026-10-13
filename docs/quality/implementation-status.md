@@ -2613,3 +2613,35 @@ USB 동글의 용도는 사용자가 **원격 PC에 연결된 외장 장치/동�
      | **배포 패키지 ZIP** | [`dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64.zip`](../../dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64.zip) | 38,015,506 bytes<br>`6e2ec27e737206ac38c1bfeb21281ba27004e37c8d38cab4773959cd33e7eb63` |
      | **Standalone Agent** | [`dist/agent/0.1.26/win-x64/gui-20261013-d/build/racp-agent.exe`](../../dist/agent/0.1.26/win-x64/gui-20261013-d/build/racp-agent.exe) | 21,947,392 bytes |
 
+### 2026-10-13 Client 실행 장애(Startup Panic / Tray E_FAIL) 원인 규명 및 수정 (`gui-20261013-f`)
+
+사용자의 "전혀 실행이 안된다"는 피드백에 따라 바이너리 런타임 추적 및 백트레이스를 실시하여 초기 구동 실패 원인 2가지를 규명하고 완전히 해소했다.
+
+1. **초기 렌더링 패닉 (Cosmic-Text Line Height Panic)**:
+   - **원인**: 사이드바 승인 탭에서 대기 승인 건수가 0일 때 `container(text("").size(0))`가 렌더링되면서, Iced 내부 텍스트 셰이핑 엔진인 `cosmic-text`의 `Buffer::new_empty`에서 `assert_ne!(metrics.line_height, 0.0, "line height cannot be 0")` 어설션이 실패하여 첫 프레임 레이아웃 계산 즉시 프로세스가 panic(ExitCode 101)으로 비정상 종료됨.
+   - **해치**: `pending_count > 0`일 때만 배지 요소를 row에 동적으로 추가하도록 구조를 개선하여 `size(0)` 텍스트 생성을 원천 제거.
+
+2. **시스템 트레이 등록 실패에 따른 비정상 종료 및 창 비가시성 (Shell Tray & Window Visibility)**:
+   - **원인 1**: Windows 환경에서 탐색기(`Shell_TrayWnd`)가 일시적으로 알림 영역을 수신할 수 없거나 제한된 세션일 때 `Shell_NotifyIconW(NIM_ADD)`가 `0x80004005 (E_FAIL)`을 반환. 기존 코드는 이를 치명적 오류로 간주하여 모달 에러 메시지박스 호출 후 `exit(4)`로 프로세스를 즉시 강제 종료함.
+   - **원인 2**: `Settings`의 기본 윈도우 설정이 `visible: !cfg!(windows)`로 지정되어 Windows에서는 창이 숨겨진 상태(`visible: false`)로 생성되었음.
+   - **해치**:
+     - 트레이 등록 실패(`E_FAIL`) 시 프로세스를 종료하지 않고 경고 로그만 남기며 창이 독립적으로 계속 동작하도록 수정 (`TaskbarCreated` 수신 시 재등록).
+     - `main.rs`의 윈도우 설정을 `visible: true`로 명시하여 앱 실행 즉시 화면에 클라이언트 UI 창이 정상 노출되도록 보장.
+
+3. **검증 및 최종 산출물 (`dist/`, Build ID: `gui-20261013-f`)**:
+   - `racp-client.exe` 런타임 프로세스 테스트: PID 생성 및 `MainWindowTitle: "RACP Native Client v0.1.26"`, `Responding: True` 정상 확인.
+   - `cargo test -p racp-client-native`: 6개 단위 테스트 **100% 통과**.
+   - `xtask stage`: Release 최적화 바이너리 스테이징 완료.
+   - `xtask verify-staging`: 4개 페이로드 정적 검증 PASS.
+   - `xtask stage-agent` & `verify-agent`: PASS.
+   - `xtask package`: Windows Setup EXE, Portable EXE, 배포 ZIP 일괄 생성 완료.
+   - 빌드 산출물 일람:
+     | 구분 | 경로 | 크기 / SHA-256 해시 |
+     |---|---|---|
+     | **Client 실행 바이너리** | [`dist/client/0.1.26/win-x64/gui-20261013-f/staging/payload/racp-client.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-f/staging/payload/racp-client.exe) | 15,865,856 bytes<br>`1271b00b5225f2956bbfe4c98ff5d0f7c7a74f0798c55144de44be53dfa4d286` |
+     | **Companion Agent** | [`dist/client/0.1.26/win-x64/gui-20261013-f/staging/payload/racp-agent.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-f/staging/payload/racp-agent.exe) | 21,947,392 bytes |
+     | **Windows Setup 설치 파일** | [`dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64-setup.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64-setup.exe) | 10,582,863 bytes<br>`d59f46d263c2e8636eaff8d818a9a6bbad8186ef29b960e1b8173162974a0ace` |
+     | **Portable 배포 EXE** | [`dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64-portable.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64-portable.exe) | 40,648,280 bytes<br>`ec77641c73d6854fcfcec2e14859cf8bd0c324e04ed8cdfd0bc8fc6f7b5f22f7` |
+     | **배포 패키지 ZIP** | [`dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64.zip`](../../dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64.zip) | 38,013,970 bytes<br>`4eb980872a041cef0b5884235cb86c2825a3996da69ac5903cde37975a91365d` |
+     | **Standalone Agent** | [`dist/agent/0.1.26/win-x64/gui-20261013-f/build/racp-agent.exe`](../../dist/agent/0.1.26/win-x64/gui-20261013-f/build/racp-agent.exe) | 21,947,392 bytes |
+
