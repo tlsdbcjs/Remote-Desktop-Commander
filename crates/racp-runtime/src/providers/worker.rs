@@ -87,7 +87,7 @@ pub(crate) fn run(
         stdin.write_all(&bytes)?;
         stdin.write_all(b"\n")?;
         drop(stdin);
-        let (code, stdout) = capture_child(&mut child, stdout_limit, deadline, cancel)?;
+        let (code, stdout) = capture_child(&mut child, stdout_limit, 16384, deadline, cancel)?;
         racp_contract::local_ipc::reject_duplicate_keys(&stdout)?;
         let result: Value = serde_json::from_slice(&stdout)?;
         if cancel.is_cancelled() {
@@ -103,7 +103,10 @@ pub(crate) fn run(
     })();
     finish_owned(&mut child, result)
 }
-fn finish_owned<T>(child: &mut OwnedProcess, result: Result<T, RacpError>) -> Result<T, RacpError> {
+pub(crate) fn finish_owned<T>(
+    child: &mut OwnedProcess,
+    result: Result<T, RacpError>,
+) -> Result<T, RacpError> {
     child
         .kill_tree()
         .map_err(|_| RacpError::new("CLEANUP_UNKNOWN"))?;
@@ -116,9 +119,10 @@ fn finish_owned<T>(child: &mut OwnedProcess, result: Result<T, RacpError>) -> Re
     )?;
     result
 }
-fn capture_child(
+pub(crate) fn capture_child(
     child: &mut OwnedProcess,
     stdout_limit: usize,
+    stderr_limit: usize,
     deadline: Instant,
     cancel: &CancellationToken,
 ) -> Result<(i64, Vec<u8>), RacpError> {
@@ -134,7 +138,7 @@ fn capture_child(
         }
         for (pipe, data, limit) in [
             (&mut child.stdout, &mut stdout, stdout_limit),
-            (&mut child.stderr, &mut stderr, 16384),
+            (&mut child.stderr, &mut stderr, stderr_limit),
         ] {
             for _ in 0..4 {
                 match pipe.read_available(&mut buffer)? {
@@ -205,6 +209,7 @@ mod tests {
         let result = capture_child(
             &mut child,
             4 * 1024 * 1024,
+            16384,
             Instant::now() + Duration::from_secs(10),
             &CancellationToken::new(),
         );
@@ -222,6 +227,7 @@ mod tests {
         let result = capture_child(
             &mut child,
             4 * 1024 * 1024,
+            16384,
             Instant::now() + Duration::from_secs(10),
             &CancellationToken::new(),
         );
