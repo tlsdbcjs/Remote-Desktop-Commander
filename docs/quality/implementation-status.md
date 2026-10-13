@@ -2733,3 +2733,5 @@ Agent EXE는 **22,196,224 bytes**, SHA-256 `82eebcee2e621f149a3c6457b292b7ff8317
 
 > [!IMPORTANT]
 > AS09는 **recovery 계약·보수적 disabled 기본값·readback의 부분 구현**이다. bounded restart의 활성화, 일회성 관리 crash gate, queued restart 중지, boot auto-start 및 실제 SCM/계정/설치 인수는 남아 있다. AS07 간헐 Browser cleanup과 AS16–AS18 USB/장치 계약·backend·수집·물리 인수도 미완료다. 실제 설치·서비스 등록·driver/device IO·기존 profile 변경은 하지 않았다.
+
+후속 source commit **`3b54490`**은 로컬 main에 fast-forward로 반영했다. [main 통합 후 전체 직렬 suite](../../dist/verification/agent/0.1.28/recovery-main/rust-workspace-serial.log)는 **103 PASS / 0 FAIL / 4 ignored**, main의 Python 시험 **11 PASS**, Ruff/mypy PASS, version show **0.1.28**이다. main 출력 위치에 원본 staging bytes와 private DACL을 보존해 복사한 뒤 `verify-agent-service --build-id recovery-20261013-a`도 PASS이며 EXE hash는 위 최종 E2E와 같다. 최초 robocopy security 복사는 empty output root에서 Access denied로 실패해 owner/group 변경 없이 그 **생성된 출력 디렉터리의 DACL만** 원본과 맞춰 복사했고, 파일/payload 검증을 약화하지 않았다. 검증 로그·최종 E2E results만 보존했으며 시험 credential/등록 state는 main으로 복사하지 않았다. 기존 GUI source와 사용자 미추적 HTML/계획 파일 3개는 보존됐고 push는 하지 않았다. 후속 구현과 원본 격리 evidence 보존을 위해 managed worktree를 유지한다.
