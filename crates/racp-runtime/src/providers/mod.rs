@@ -122,6 +122,7 @@ mod process_memory;
 mod processes;
 pub use processes::Processes;
 pub mod browser;
+pub mod hardware;
 pub mod desktop;
 mod terminal;
 use std::sync::Arc;

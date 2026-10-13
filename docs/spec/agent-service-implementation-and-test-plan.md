@@ -1,7 +1,7 @@
 # Rust Agent 서비스 구현 및 검증 작업 계획
 
 > **Document ID**: `DOC-PLAN-AGENT-SERVICE`\
-> **Status**: Active · **Target Version**: v0.1.32 source / Agent 서비스 릴리스 인수 미완료\
+> **Status**: Active · **Target Version**: v0.1.33 source / Agent 서비스 릴리스 인수 미완료\
 > **Last Updated**: 2026-10-13 · **Classification**: Service Implementation & Test Plan
 
 ## 개요
@@ -203,9 +203,9 @@ P0는 Agent 서비스의 독립 실행·원격 제어·권한/정리 경계, P1�
 | AS13 / P2 | **미완성: 업데이트/제거·버전 복구 제품 흐름** | protected image·service command·state schema·pending 전환의 호환성, 기존 버전 보존·rollback/UNKNOWN·정리 확인·명시 detach 조건을 정의. helper restore 코드와 완결된 updater를 구분. 실제 교체/제거는 전용 환경과 별도 실행 요청 후 검사 |
 | AS14 / P3 | **미연결 확장** | 현재 catalog의 일반 서비스/registry/tasks/software·storage·memory write 등은 실제 사용 요구가 있을 때 선택. 새 OS object/API 전체를 AS01–AS12의 완료 조건에 강제하지 않음. 선택 runtime·타 OS도 요청된 범위만 추가 |
 | AS15 / P0 | **Agent 앱 Windows 경계 구현: 공유 backend는 점진 작업** | `apps/agent-rust`→`apps/agent` 변경과 Cargo·빌드/패키징·version/inventory·CI·검사 스크립트·AGENTS·활성 문서 참조를 같은 작업에서 갱신. §3.4에 따라 Windows service/setup 파일과 신규 hardware backend부터 책임별 이동/배치. package/EXE `racp-agent`·공개 계약·권한·동작 유지, Windows build/회귀 확인. macOS/Linux service/device는 미구현 명시; 코드 복제·불필요한 crate 분할·타 OS build 없음 |
-| AS16 / P1 | **미구현: 원격 USB/외장 장치 탐색·연결 계약** | §3.5의 ID/interface/backend/capability·opaque session/lease·권한을 정의하고 Windows enumeration/inspect/open/close와 protocol 연결. 발견/연결/수집 지원 상태를 구분, 다른 Agent/boot/replug generation의 handle 거부 |
-| AS17 / P1 | **미구현: 분석용 수집/정적 artifact 연결** | descriptor와 연관 파일 수집부터 구현하고 선정된 장치의 지원 read protocol/vendor backend를 추가. bounded IO·부분 수집·artifact hash/provenance·host 분석 연동 확인. 임의 firmware dump나 물리 memory 접근을 보편 지원으로 주장하지 않음 |
-| AS18 / P1 | **미구현: 장치 수명주기·IO 정리·진단** | unplug/replug·busy/access denied·timeout·worker crash·서비스 stop/restart 때 pending IO와 장치 handle/lease 정리. stale identity·다른 장치 재사용 거부. driver 설치/교체·장치 reset/write는 수행하지 않음 |
+| AS16 / P1 | **부분 source: 공통 identity/lease·Windows PnP 탐색 adapter / RPC·native open 미연결** | §3.5의 ID/interface/backend/capability·opaque session/lease·권한을 정의하고 Windows enumeration/inspect/open/close와 protocol 연결. 발견/연결/수집 지원 상태를 구분, 다른 Agent/boot/replug generation의 handle 거부 |
+| AS17 / P1 | **부분 source: 수집 provenance·기존 spool bridge / 실제 read backend 미연결** | descriptor와 연관 파일 수집부터 구현하고 선정된 장치의 지원 read protocol/vendor backend를 추가. bounded IO·부분 수집·artifact hash/provenance·host 분석 연동 확인. 임의 firmware dump나 물리 memory 접근을 보편 지원으로 주장하지 않음 |
+| AS18 / P1 | **부분 source: generation·cancel/deadline·cleanup 상태 모델 / native IO 인수 미완료** | unplug/replug·busy/access denied·timeout·worker crash·서비스 stop/restart 때 pending IO와 장치 handle/lease 정리. stale identity·다른 장치 재사용 거부. driver 설치/교체·장치 reset/write는 수행하지 않음 |
 
 AS01/AS12의 서비스 payload를 만들기 위해 기존 Client payload의 필수 파일 검사를 단순히 없애거나 모든 폴더를 허용하지 않는다. 역할을 명시한 계약·허용 파일·hash/ACL 검증을 유지한다. AS02는 승인 우회나 비인증 관리 API 추가를 의미하지 않는다.
 
@@ -225,6 +225,10 @@ AS08의 첫 복구 경계는 `inspect_restore_intent`와 `abort_uncreated_restor
 AS07 Browser 시작 실패 정리는 정상 close와 같은 부모 signal/Job tree-empty 확인 뒤에만 owned profile을 삭제한다. marker persist·CDP 연결·backend query·proxy/context 생성 실패에 적용하며, 5초 종료 budget이나 proof 조건을 약화하지 않는다. 종료 확인 불가에는 profile/기존 recovery marker를 보존하고 cleanup 실패를 반환한다. 아직 inventory에 들어가기 전의 startup 정리가 실패하면 Provider ready도 false로 유지해 새 요청/전체 cleanup 완료를 차단한다. 이 gate 보완과 간헐 parent signal 지연 원인 규명은 별개이며, recovery enumeration과 birth 조회 사이 exit race 및 부하 조건은 계속 검증해야 한다. main 통합은 동시 Slint GUI 작업이 완료·커밋된 뒤 진행한다.
 
 AS07의 대기 중 open/attach는 opening lock 획득 후 준비 상태를 다시 검사한다. Windows 재시작 복구는 읽기 전용 process handle을 고정해 같은 객체의 생성 시각과 종료 signal을 확인하며, 생성 시각 불일치/PID 재사용/live actor 불일치/조회 불확실성에는 profile을 보존한다. 이미 종료된 동일 객체를 살아 있는 PID 조회 실패로 처리하지 않는다. parent 종료 증명과 Job empty를 모두 요구하고 종료 예산은 그대로 유지한다. 실제 SDK의 owned subprocess·queued admission 회귀는 설치 없이 수행하며, 기존 간헐 termination 지연의 원인 규명/부하 인수와 구분한다.
+
+AS16–AS18의 설치 없는 첫 묶음은 공통 hardware target/lease/read plan/IO request·수집 manifest 계약과 core inventory/session 모델이다. PC Device ID와 별도 opaque hardware/interface/generation ID를 사용하고 caller/boot/workspace/lease와 IO operation/read plan을 binding한다. 완전한 bounded snapshot만 publish하고 unplug/replug·metadata 교체·알림 연속성 유실 때 기존 target을 거부한다. 단조 lease/IO deadline·pending/bytes/actor quota·stop admission·cancel/unknown cleanup 상태를 검증한다. timely/uncancelled/current-generation completion만 외부 JSON으로 만들 수 없는 수집 receipt를 생성한다.
+
+Windows adapter는 `crates/racp-runtime/src/platform/windows/hardware.rs`에 USB PnP interface 탐색 source와 bounded SDK buffer/UTF-16/Hardware ID decoder를 둔다. opaque interface path는 parse하지 않고 PnP Hardware IDs에서만 VID/PID를 읽는다. 시작/NativeProviders/RPC에 연결하지 않으며 실제 SDK 탐색은 이번 시험에서 실행하지 않는다. HID/WinUSB/vendor open·driver IO·notification continuity 및 preemptible worker는 후속이다. AS17은 receipt에 묶인 bytes·SHA/부분 수집·method/target을 한 JSON artifact로 만들어 기존 OutputSpool/재시도 경로를 재사용하고 host가 verify/extract할 수 있게 한다. emission fence·실제 backend 지원 profile·RPC permission admission과 연결하기 전 원격 USB 사용 가능이라고 선언하지 않는다. descriptor fixture를 실제 firmware dump 인수로 기록하지 않는다.
 
 <a id="section-05"></a>
 

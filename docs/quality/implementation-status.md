@@ -1,7 +1,7 @@
 # RACP 구현 작업 및 검증 현황 (Implementation Status)
 
 > **Document ID**: `DOC-QA-STATUS`\
-> **Status**: Active · **Target Version**: v0.1.32\
+> **Status**: Active · **Target Version**: v0.1.33\
 > **Last Updated**: 2026-10-13 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
@@ -2864,3 +2864,30 @@ PATCH **0.1.31→0.1.32 한 번**과 uv/workspace/독립 analysis-host lock loca
 
 
 [Browser 반복 1](../../dist/verification/agent/0.1.32/cleanup-races-20261013/browser-repeat-1.log)·[2](../../dist/verification/agent/0.1.32/cleanup-races-20261013/browser-repeat-2.log)·[3](../../dist/verification/agent/0.1.32/cleanup-races-20261013/browser-repeat-3.log)은 같은 최종 source의 `cargo test --locked -p racp-runtime --test browser -- --test-threads=1`을 최대 3회/첫 실패 시 중단하는 예산으로 수행해 각각 **20 PASS / 0 FAIL**, 총 **60 PASS**, exit 0이었다. startup cancel·concurrent close·timeout·external CDP·process protection·restart/live profile 보존을 포함한다. 짧은 직렬 반복이며 장시간/병렬 부하 또는 kernel/driver 원인 규명을 대신하지 않는다. 전체 workspace 결과도 Agent worktree의 Iced 기준 Client를 포함한 검사로서 main의 진행 중인 Slint source를 검증한 것이 아니다. Agent-only SBOM의 **241 components**에는 Client/Iced/Slint/Electron/CPython component가 없다.
+
+
+### 2026-10-13 AS16–AS18 hardware 계약·세션·수집 artifact 기반 — v0.1.33
+
+main 통합 보류와 관계없이 미구현 Agent source 작업을 계속했다. PATCH **0.1.32→0.1.33 한 번**, uv/workspace/독립 analysis-host local version을 동기화했다. 외부 dependency pin과 기존 operation/permission/schema는 바꾸지 않았고 Windows target-specific SDK feature 두 개만 추가했다.
+
+- [공통 hardware 계약](../../crates/racp-contract/src/hardware.rs): Agent PC Device ID와 별도 opaque hardware/interface/connection generation·session/lease ID를 분리한다. Caller는 외부 JSON으로 deserialize하지 않는 trusted context다. Read plan·operation ID·IO budget과 provenance manifest는 unknown field/raw handle/path/임의 control transfer 입력을 받지 않는다. descriptor·연관 파일·문서화된 read protocol을 구분하고 부분 수집 이유·시각·원본 size/SHA를 검증한다. 범용 firmware dump/license dongle 기능을 추가하지 않았다.
+- [core inventory/session](../../crates/racp-core/src/hardware.rs): 최대 256 interface의 완전한 snapshot만 원자적으로 교체한다. 동일 VID/PID는 서로 다른 장치이고 composite interface는 같은 physical identity 아래 별도 ID다. unplug/replug·metadata 교체·알림 연속성 유실은 이전 target을 거부한다. caller/PC/boot/workspace/정확한 lease·단조 lease/IO deadline·actor/session/IO/bytes quota를 검사한다. reserve는 OS open이 아니며 native open 확인 뒤만 Active가 된다. stop은 새 reserve/IO를 막고 pending IO drain과 원래 native handle 종료 확인 전 Closed로 보고하지 않는다. unknown 상태나 cancel/late/stale completion에는 수집 receipt를 생성하지 않는다.
+- [Windows PnP adapter](../../crates/racp-runtime/src/platform/windows/hardware.rs): target-specific SetupAPI source를 별도 platform 경계에 뒀다. 현재 활성 USB device interface, instance ID, PnP Hardware IDs의 VID/PID를 bounded/aligned SDK buffers로 읽는다. opaque symbolic path를 parse하거나 외부로 serialize하지 않는다. malformed UTF-16·terminator/size/probe/type·조회 불확실성은 실패한다. InfoSet은 RAII로 닫고 취소/deadline/256 cap을 확인한다. **이 SDK 탐색 함수를 시험·Agent startup에서 호출하지 않았다.** SDK 동기 호출의 선점을 주장하지 않으며 bounded worker·notification continuity가 후속이다.
+- [수집 artifact bridge](../../crates/racp-runtime/src/providers/hardware.rs): timely/uncancelled/current-generation IO 완료만 생성할 수 있는 내부 receipt에 target/read method/operation/bytes를 묶는다. manifest와 bytes를 하나의 JSON bundle로 기존 OutputSpool에 원자적으로 배치·등록한다. 하나의 artifact에 provenance와 원본 bytes가 함께 있어 기존 Gateway의 SHA/resumable transfer를 재사용할 수 있다. host decoder는 duplicate/unknown field·base64 크기·size/SHA를 다시 확인한다. 원래 emission fence와 permission admission은 future Provider 연결 시 계속 필요하다.
+
+[계약 시험](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/contract.log)은 초기 **2 PASS**, [core 초기](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/core.log)는 **8 PASS**, [Windows decoder](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/windows-decoder.log)는 **2 PASS**다. [수집/core 최초 실행](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/collection-and-core.log)은 receipt API에 inventory 인수를 추가한 뒤 fixture call 네 곳이 미갱신돼 compile exit 101이었다. signature를 고쳐 [수집/core 검사](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/collection-and-core-final.log)를 **15 PASS**, read plan 및 operation binding의 [후속](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/read-plan-binding.log)·[후속](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/operation-binding.log)도 통과했다. 최종 신규 일반 시험은 contract 3/core 10/runtime decoder 2/collection 3의 **18개**다. 실제 SDK 호출 시험은 없고 private fixture의 원자적 snapshot/시간·상태·scope/budget·spool/restart·hash 불변을 검사한다.
+
+[첫 전체 source 실행](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/rust-workspace.log)은 **146 PASS / 0 FAIL / 5 subprocess fixture ignored**, exit 0이었다. 이후 receipt를 다른 operation에 재사용하지 못하도록 binding을 보완했으므로 이 PASS를 최종 source 인수로 대신하지 않는다. [Python](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/python.log) **11 PASS**, [Ruff](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/ruff.log) PASS, [mypy](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/mypy.log) **98 files PASS**를 확인했다.
+
+> [!IMPORTANT]
+> AS16–AS18은 **공통 계약/상태·Windows 탐색 source·fixture 수집 artifact의 부분 구현**이다. Hardware RPC/permission catalog/NativeProviders/CLI에는 아직 연결하지 않았다. 실제 외장 장치·driver IO·HID/WinUSB/vendor open·descriptor/native collection·IO 취소·재연결 알림·service account·remote hardware 인수는 미완료다. fixture bytes를 장치에서 수집한 데이터로 표시하지 않는다. 기존 Agent remote/Rust suite를 hardware end-to-end 성공으로 해석하지 않는다. 실제 설치·SCM·장치 탐색/IO·driver 변경·GUI source 수정은 하지 않았다. main 통합만 보류하며 다음 독립 source 작업을 계속한다.
+
+
+| v0.1.33 최종 검사 | 결과·범위 |
+|---|---|
+| 전체 Rust 직렬 suite | [최종 로그](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/rust-workspace-final.log), **146 PASS / 0 FAIL / 5 subprocess fixture ignored**, exit 0. operation/read plan receipt binding 보완 뒤 최종 source; 신규 hardware 18개 포함. Agent worktree의 Iced 기준 Client 포함이며 main Slint source 인수 아님 |
+| Windows Agent 서비스용 개발 payload | [manifest](../../dist/agent/0.1.33/win-x64/hardware-foundation-20261013-a/staging/build-manifest.json)·[stage](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/stage.log)·[verify](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/verify-stage.log), Windows x64/Rust 1.90.0 release/static CRT·3 GUI-free files·hash/native target PASS. 네 신규 hardware source가 build input에 포함됨 |
+| 최종 EXE 기존 원격 회귀 | [results](../../dist/verification/agent/0.1.33/hardware-foundation-e2e-20261013-a/results.json)·[로그](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/e2e.log), **21 PASS / 0 FAIL**, exit 0. 격리 HTTPS/WSS·인증 IPC/headless·권한/승인/replay·파일/명령/ConPTY·멱등성/CAS/cancel/stop/restart. 기존 profile 미사용, 시험 Agent/Gateway 종료. Hardware/native service 인수 아님 |
+| 정적 검사 | [inventory](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/inventory.log) **114 operations / 143 permissions / 18 categories**, frozen 100 유지. scoped Rust fmt/git diff check PASS. 위 Python 11/Ruff/mypy 결과 유지 |
+
+최종 EXE **22,411,264 bytes**, SHA-256 **`23d759f9657c9080e3eb117b79089e9be7192ec82a040b9f7e073060686a6344`**; payload manifest **`5c0de5e1f10b49ab961bd2973d9a468f974c6ef74176ef6f324782697cb76484`**; input digest **`a3a0e6a349f4af6e65a9a4c6d4d998ca3af7448ae48041ac234b185cc736c029`**다. baseline `dc70b7e`와 당시 dirty source, unsigned/non-published 및 xtask tests=`not_run_by_xtask`를 기록했다. 최종 E2E hash는 manifest와 같고 harness SHA `fd9b319d459948f5fed9dc5b8b6b8ed6de46e249392c8f4191ccd9fa93d65a1e`다. main 통합 없이 이 묶음을 보존하고 bounded discovery worker·RPC/policy 및 AS08/AS09 등 다음 독립 source 범위를 계속 진행한다. 실제 장치/driver/SCM 인수와 AS07 간헐 signal 원인·독립 review는 계속 미완료다.

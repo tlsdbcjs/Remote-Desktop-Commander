@@ -8,6 +8,7 @@ pub use transport::Agent;
 
 mod dispatch;
 pub mod providers;
+pub mod platform;
 
 pub mod artifacts;
 mod streams;

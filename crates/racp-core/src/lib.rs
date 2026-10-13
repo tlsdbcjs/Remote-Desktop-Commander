@@ -4,6 +4,7 @@ pub use journal::{error_value, Acceptance, Journal, Record};
 pub mod approval;
 mod connection;
 pub mod distribution;
+pub mod hardware;
 #[cfg(windows)]
 pub mod machine_service;
 mod native_directory;
