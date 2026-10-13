@@ -50,11 +50,33 @@ async fn remove_profile_after_cleanup(
 fn terminate_owned(process: &mut OwnedProcess) -> Result<(), RacpError> {
     process.kill_tree()?;
     let deadline = Instant::now() + Duration::from_secs(5);
+    let mut discarded = [0usize; 2];
+    let mut buffer = [0u8; 8192];
     loop {
-        if process.poll()?.is_some() && process.tree_empty()? {
+        // The background reader takes the same process mutex. While close holds
+        // it, consume pending pipe output here so shutdown IO can complete.
+        // Discard bytes without exposing browser logs or relaxing exit proof.
+        for (index, pipe) in [&mut process.stdout, &mut process.stderr]
+            .into_iter()
+            .enumerate()
+        {
+            for _ in 0..8 {
+                match pipe.read_available(&mut buffer)? {
+                    Some(n) if n > 0 => discarded[index] += n,
+                    _ => break,
+                }
+            }
+        }
+        let parent_signaled = process.poll()?.is_some();
+        let tree_empty = process.tree_empty()?;
+        if parent_signaled && tree_empty {
             return Ok(());
         }
         if Instant::now() >= deadline {
+            eprintln!(
+                "browser termination incomplete parent_signaled={parent_signaled} tree_empty={tree_empty} discarded_stdout_bytes={} discarded_stderr_bytes={}",
+                discarded[0], discarded[1]
+            );
             return Err(RacpError::new("CLEANUP_FAILED"));
         }
         std::thread::sleep(Duration::from_millis(10));
@@ -1666,6 +1688,45 @@ mod frame_race_tests {
             std::fs::read(sibling.join("process.json")).unwrap(),
             b"unrelated"
         );
+    }
+    #[test]
+    fn owned_termination_consumes_backpressured_output_and_confirms_parent_and_job() {
+        let root = tempfile::tempdir().unwrap();
+        let (mut child, stdin) = OwnedProcess::spawn_stdio(CommandSpec {
+            argv: vec![
+                std::env::current_exe()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                "--ignored".into(),
+                "--exact".into(),
+                "providers::worker::tests::frame_fixture".into(),
+                "--nocapture".into(),
+            ],
+            environment: BTreeMap::new(),
+            cwd: Workspaces::new(root.path(), &[])
+                .unwrap()
+                .directory("default", root.path())
+                .unwrap(),
+        })
+        .unwrap();
+        drop(stdin);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut block = [0u8; 4096];
+        loop {
+            if matches!(child.stdout.read_available(&mut block), Ok(Some(n)) if n > 0) {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "owned output fixture did not start"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        std::thread::sleep(Duration::from_millis(20));
+        terminate_owned(&mut child).unwrap();
+        assert!(child.poll().unwrap().is_some());
+        assert!(child.tree_empty().unwrap());
     }
     #[test]
     fn late_parent_swap_preserves_new_child_context_but_remove_invalidates_it() {
