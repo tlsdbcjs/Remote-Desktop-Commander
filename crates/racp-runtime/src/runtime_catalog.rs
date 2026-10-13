@@ -34,6 +34,7 @@ pub async fn prepare(root: &Path, shutdown: &CancellationToken) -> Result<Prepar
             providers: ProviderRuntimes::default(),
             errors: BTreeMap::new(),
         };
+        result.providers.hardware_discovery_enabled = config.hardware_discovery_enabled;
         for (name, id, selected) in [
             ("chromium", RuntimeId::Chromium, &config.chromium_manifest),
             ("cdb", RuntimeId::Cdb, &config.cdb_manifest),

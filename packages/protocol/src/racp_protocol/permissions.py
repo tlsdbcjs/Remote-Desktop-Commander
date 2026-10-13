@@ -29,6 +29,8 @@ class PermissionDescriptor(StrictModel):
 
 OPERATION_PERMISSIONS: Mapping[str, tuple[str, ...]] = MappingProxyType(
     {
+        "hardware.enumerate": ("hardware.inventory.read",),
+        "hardware.inspect": ("hardware.inventory.read",),
         "filesystem.preview_image": ("files.preview.image", "artifacts.export"),
         "filesystem.trash": ("files.trash",),
         "filesystem.acl_read": ("files.acl.read",),

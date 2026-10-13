@@ -1,5 +1,5 @@
-//! Internal acquisition artifact bridge. RPC/permission admission and physical
-//! IO backends are not wired yet; nothing is added to NativeProviders here.
+//! Metadata Provider and internal acquisition artifact bridge. Device open/read
+//! and collection RPC admission remain unimplemented.
 use base64::{engine::general_purpose::STANDARD, Engine};
 use racp_contract::{hardware::*, new_id, RacpError};
 use racp_core::{hardware::HardwareIoReceipt, OutputSpool};
@@ -75,3 +75,5 @@ pub fn decode_collection(raw: &[u8]) -> Result<(HardwareCollectionManifest, Vec<
     bundle.manifest.validate_bytes(&bytes)?;
     Ok((bundle.manifest, bytes))
 }
+mod provider;
+pub use provider::Hardware;

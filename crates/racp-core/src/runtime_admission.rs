@@ -35,6 +35,11 @@ pub struct NativeRuntimeConfig {
     pub analysis_manifest: Option<String>,
     pub browser_allow_origins: Vec<String>,
     pub external_cdp: bool,
+    #[serde(default, skip_serializing_if = "discovery_disabled")]
+    pub hardware_discovery_enabled: bool,
+}
+fn discovery_disabled(value: &bool) -> bool {
+    !*value
 }
 impl Default for NativeRuntimeConfig {
     fn default() -> Self {
@@ -47,6 +52,7 @@ impl Default for NativeRuntimeConfig {
             analysis_manifest: None,
             browser_allow_origins: vec![],
             external_cdp: false,
+            hardware_discovery_enabled: false,
         }
     }
 }
@@ -527,4 +533,25 @@ fn native_binary(
 pub fn validate_host_binary(file: &mut std::fs::File) -> Result<(), RacpError> {
     let (os, arch) = host();
     native_binary(file, os, arch)
+}
+
+#[cfg(test)]
+mod hardware_selection_tests {
+    use super::*;
+    #[test]
+    fn hardware_discovery_requires_explicit_selection_and_preserves_disabled_config_shape() {
+        let original = NativeRuntimeConfig::default();
+        assert!(!original.hardware_discovery_enabled);
+        let value = serde_json::to_value(&original).unwrap();
+        assert!(value.get("hardware_discovery_enabled").is_none());
+        let decoded: NativeRuntimeConfig = serde_json::from_value(value).unwrap();
+        assert!(!decoded.hardware_discovery_enabled);
+        let mut selected = original;
+        selected.hardware_discovery_enabled = true;
+        assert_eq!(
+            serde_json::to_value(&selected).unwrap()["hardware_discovery_enabled"],
+            true
+        );
+        selected.validate().unwrap();
+    }
 }

@@ -59,8 +59,10 @@ def generate() -> list[dict[str, object]]:
                     "operations": operations,
                 }
             )
-    if len(result) != 143 or len({p["id"] for p in result}) != 143:
-        raise ValueError("permission specification must contain 143 unique candidate IDs")
+    if len(result) != 144 or len({p["id"] for p in result}) != 144:
+        raise ValueError(
+            "permission specification must contain 143 baseline IDs and one AS16 extension"
+        )
     return result
 
 

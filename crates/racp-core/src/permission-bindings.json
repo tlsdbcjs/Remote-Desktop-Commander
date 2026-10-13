@@ -1,4 +1,10 @@
 {
+  "hardware.enumerate": [
+    "hardware.inventory.read"
+  ],
+  "hardware.inspect": [
+    "hardware.inventory.read"
+  ],
   "filesystem.preview_image": [
     "files.preview.image",
     "artifacts.export"

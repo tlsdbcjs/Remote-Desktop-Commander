@@ -8,6 +8,7 @@ from racp_protocol.browser import BROWSER_MODELS
 from racp_protocol.clipboard import CLIPBOARD_MODELS
 from racp_protocol.desktop import DESKTOP_MODELS, DESKTOP_READS
 from racp_protocol.expansions import EXPANSION_MODELS, EXPANSION_MUTATIONS
+from racp_protocol.hardware import HARDWARE_MODELS
 from racp_protocol.models import ShellInput
 from racp_protocol.native_operations import NATIVE_MODELS
 from racp_protocol.network_capture import NetworkCapture
@@ -107,6 +108,7 @@ INPUT_MODELS: dict[str, type[BaseModel]] = {
     **NATIVE_MODELS,
     **CLIPBOARD_MODELS,
     **OS_OBSERVATION_MODELS,
+    **HARDWARE_MODELS,
     **BROWSER_MODELS,
     **DESKTOP_MODELS,
     **RE_MODELS,
@@ -238,6 +240,16 @@ for name, model in INPUT_MODELS.items():
         else 10000
         if name in {"browser.click", "browser.type", "browser.key"}
         else 30000,
+    )
+
+
+for name in HARDWARE_MODELS:
+    REGISTRY[name] = replace(
+        REGISTRY[name], minimum_os=("Windows",),
+        permission_scope="hardware.inventory.read", resource_lock_key="hardware_inventory",
+        cancel="contained_discovery_worker", max_timeout_ms=30000,
+        max_sync_timeout_ms=30000, default_job_timeout_ms=30000, max_job_timeout_ms=30000,
+        verification_ids=("AS16-META", "RPC-01", "POLICY-01", "LIFE-01"),
     )
 
 

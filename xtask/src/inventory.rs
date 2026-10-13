@@ -102,7 +102,7 @@ pub fn check(root: &Path) -> Result<()> {
             || !expected_ops.insert(id.into())
             || delta["owner_task"]
                 .as_str()
-                .is_none_or(|s| !s.starts_with("R11-"))
+                .is_none_or(|s| !s.starts_with("R11-") && !s.starts_with("AS16-"))
         {
             return Err(format!("invalid operation delta: {id}").into());
         }
@@ -110,6 +110,8 @@ pub fn check(root: &Path) -> Result<()> {
     if expected_ops != op_ids {
         return Err("operation additions/removals lack an explicit delta".into());
     }
+    let expected_permissions =
+        admitted_permissions(&baseline_permissions, &inventory["permission_deltas"])?;
     let bound_ids: BTreeSet<String> = bindings
         .as_object()
         .ok_or("bindings are not an object")?
@@ -206,11 +208,11 @@ pub fn check(root: &Path) -> Result<()> {
     if seen_ops != op_ids
         || seen_permissions != permission_ids
         || assigned_planned != expansion_ids
-        || permission_ids != baseline_permissions
+        || permission_ids != expected_permissions
     {
         return Err("inventory omissions".into());
     }
-    if permission_ids.len() != 143 || categories.len() != 18 {
+    if permission_ids.len() != expected_permissions.len() || categories.len() != 18 {
         return Err("baseline counts changed; record an explicit delta".into());
     }
     for consumer in inventory["legacy_consumers"]
@@ -240,7 +242,7 @@ pub fn check(root: &Path) -> Result<()> {
             return Err("consumer owner missing".into());
         }
     }
-    println!("static_pass: {} current operations / 143 permissions / 18 categories / 62 assigned expansion IDs ({} still planned); frozen baseline 100 operations preserved",op_ids.len(),planned.len());
+    println!("static_pass: {} current operations / {} permissions / 18 categories / 62 assigned expansion IDs ({} still planned); frozen baseline 100 operations / 143 permissions preserved",op_ids.len(),permission_ids.len(),planned.len());
     Ok(())
 }
 fn validate_entry(root: &Path, entry: &Value) -> Result<()> {
@@ -264,4 +266,56 @@ fn validate_entry(root: &Path, entry: &Value) -> Result<()> {
     strings(&entry["test_ids"])?;
     strings(&entry["cleanup_assertions"])?;
     Ok(())
+}
+
+fn admitted_permissions(baseline: &BTreeSet<String>, deltas: &Value) -> Result<BTreeSet<String>> {
+    let mut expected_permissions = baseline.clone();
+    for delta in deltas.as_array().into_iter().flatten() {
+        let id = delta["permission_id"]
+            .as_str()
+            .ok_or("permission delta ID missing")?;
+        if delta["action"] != "add"
+            || !expected_permissions.insert(id.into())
+            || delta["owner_task"]
+                .as_str()
+                .is_none_or(|s| !s.starts_with("AS16-"))
+            || delta["reason"].as_str().is_none_or(str::is_empty)
+        {
+            return Err(format!("invalid permission delta: {id}").into());
+        }
+    }
+    Ok(expected_permissions)
+}
+
+#[cfg(test)]
+mod permission_delta_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn permission_additions_require_explicit_unique_as16_delta_and_preserve_baseline() {
+        let baseline = BTreeSet::from(["system.identity.read".to_owned()]);
+        let addition = json!({"permission_id":"hardware.inventory.read","action":"add",
+            "owner_task":"AS16-metadata","reason":"bounded metadata extension"});
+        let admitted = admitted_permissions(&baseline, &json!([addition])).unwrap();
+        assert!(admitted.contains("system.identity.read"));
+        assert!(admitted.contains("hardware.inventory.read"));
+        assert_ne!(
+            admitted_permissions(&baseline, &Value::Null).unwrap(),
+            admitted
+        );
+        assert_ne!(
+            admitted,
+            BTreeSet::from(["hardware.inventory.read".to_owned()])
+        );
+        for field in ["action", "owner_task", "reason", "permission_id"] {
+            let mut invalid = addition.clone();
+            invalid[field] = json!(if field == "permission_id" {
+                "system.identity.read"
+            } else {
+                ""
+            });
+            assert!(admitted_permissions(&baseline, &json!([invalid])).is_err());
+        }
+        assert!(admitted_permissions(&baseline, &json!([addition, addition])).is_err());
+    }
 }

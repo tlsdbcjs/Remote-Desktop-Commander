@@ -1,7 +1,7 @@
 # Rust Agent 서비스 구현 및 검증 작업 계획
 
 > **Document ID**: `DOC-PLAN-AGENT-SERVICE`\
-> **Status**: Active · **Target Version**: v0.1.36 source / Agent 서비스 릴리스 인수 미완료\
+> **Status**: Active · **Target Version**: v0.1.37 source / Agent 서비스 릴리스 인수 미완료\
 > **Last Updated**: 2026-10-13 · **Classification**: Service Implementation & Test Plan
 
 ## 개요
@@ -203,7 +203,7 @@ P0는 Agent 서비스의 독립 실행·원격 제어·권한/정리 경계, P1�
 | AS13 / P2 | **미완성: 업데이트/제거·버전 복구 제품 흐름** | protected image·service command·state schema·pending 전환의 호환성, 기존 버전 보존·rollback/UNKNOWN·정리 확인·명시 detach 조건을 정의. helper restore 코드와 완결된 updater를 구분. 실제 교체/제거는 전용 환경과 별도 실행 요청 후 검사 |
 | AS14 / P3 | **미연결 확장** | 현재 catalog의 일반 서비스/registry/tasks/software·storage·memory write 등은 실제 사용 요구가 있을 때 선택. 새 OS object/API 전체를 AS01–AS12의 완료 조건에 강제하지 않음. 선택 runtime·타 OS도 요청된 범위만 추가 |
 | AS15 / P0 | **Agent 앱 Windows 경계 구현: 공유 backend는 점진 작업** | `apps/agent-rust`→`apps/agent` 변경과 Cargo·빌드/패키징·version/inventory·CI·검사 스크립트·AGENTS·활성 문서 참조를 같은 작업에서 갱신. §3.4에 따라 Windows service/setup 파일과 신규 hardware backend부터 책임별 이동/배치. package/EXE `racp-agent`·공개 계약·권한·동작 유지, Windows build/회귀 확인. macOS/Linux service/device는 미구현 명시; 코드 복제·불필요한 crate 분할·타 OS build 없음 |
-| AS16 / P1 | **부분 source: 공통 identity/lease·Windows PnP 탐색 adapter / RPC·native open 미연결** | §3.5의 ID/interface/backend/capability·opaque session/lease·권한을 정의하고 Windows enumeration/inspect/open/close와 protocol 연결. 발견/연결/수집 지원 상태를 구분, 다른 Agent/boot/replug generation의 handle 거부 |
+| AS16 / P1 | **부분 source: identity/lease·Windows metadata RPC / native open·실장치 인수 미완료** | §3.5의 ID/interface/backend/capability·opaque session/lease·권한을 정의하고 Windows enumeration/inspect/open/close와 protocol 연결. 발견/연결/수집 지원 상태를 구분, 다른 Agent/boot/replug generation의 handle 거부 |
 | AS17 / P1 | **부분 source: 수집 provenance·기존 spool bridge / 실제 read backend 미연결** | descriptor와 연관 파일 수집부터 구현하고 선정된 장치의 지원 read protocol/vendor backend를 추가. bounded IO·부분 수집·artifact hash/provenance·host 분석 연동 확인. 임의 firmware dump나 물리 memory 접근을 보편 지원으로 주장하지 않음 |
 | AS18 / P1 | **부분 source: generation·cancel/deadline·cleanup 상태 모델 / native IO 인수 미완료** | unplug/replug·busy/access denied·timeout·worker crash·서비스 stop/restart 때 pending IO와 장치 handle/lease 정리. stale identity·다른 장치 재사용 거부. driver 설치/교체·장치 reset/write는 수행하지 않음 |
 
@@ -334,3 +334,6 @@ AST24–AST26의 실제 장치 접근·분리/재연결·수집은 수행하지 
 
 
 AS08 fresh provision progress uses a typed, bounded receipt with pinned-directory identity, nonce, payload/bootstrap hashes and exact predecessor CAS. The SYSTEM administrative `inspect_provision_receipt` request requires the expected receipt SHA-256 and works before service config exists. Inspection reports recorded progress only: service and registration state are explicitly unobserved. Reserved does not prove SCM creation never happened; prepared does not prove enrollment/readiness. Corrupt, foreign, skipped or stale progress cannot overwrite a receipt. Automatic retry, adoption, resume/rollback and actual SCM failure injection remain incomplete; installation restrictions stay in force.
+
+
+AS16 now registers `hardware.enumerate` and `hardware.inspect` with the separate `hardware.inventory.read` leaf in the existing system category. Local `NativeRuntimeConfig.hardware_discovery_enabled` defaults false, is omitted when false, and requires explicit stopped-Agent selection to enable discovery. Startup/status do not enumerate attached hardware. Gateway and Agent permission admission remain mandatory; metadata only returns opaque targets, VID/PID and snapshot timing. Native open/read/collection are unsupported. Without notification continuity, each scan invalidates previous targets; inspect is bound to its publishing principal/workspace and expires after 30 seconds. Physical SDK/device acceptance remains unexecuted.

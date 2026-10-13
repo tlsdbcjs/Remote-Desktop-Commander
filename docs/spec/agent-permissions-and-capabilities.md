@@ -1,8 +1,8 @@
 # RACP Agent 세부 권한 및 원격 OS 기능 아키텍처
 
 > **Document ID**: `DOC-SPEC-AGENT-PERMISSIONS`\
-> **Status**: Draft · **Target Version**: v0.1.20 구현 진행 / v0.1.19 기준선\
-> **Last Updated**: 2026-10-10 · **Classification**: Architecture Specification\
+> **Status**: Draft · **Target Version**: v0.1.37 구현 진행 / v0.1.19 기준선\
+> **Last Updated**: 2026-10-13 · **Classification**: Architecture Specification\
 > **참조**: [종합 개발정의서](racp-specification-v1.1.md) · [Windows 계획](windows-engineering-plan.md) · [구현·시험 현황](../quality/implementation-status.md)
 
 > [!IMPORTANT]
@@ -117,6 +117,7 @@ Agent뿐 아니라 Broker/OS helper에도 검증된 대상·허용 action·revis
 | `system.sessions.read` | 로그인 사용자·session·잠금 상태 | SID/session identity, 민감한 계정 정보 구분 | 기존 desktop 일부 |
 | `system.locale.read` | 시간대·언어·환경 기본 경로 | 환경 전체 dump와 credential 출력 금지 | 후속 |
 | `system.environment.read` | 허용된 환경 변수 조회 | allowlist, 민감 변수 값 비노출 | 후속 |
+| `hardware.inventory.read` | 연결된 USB interface 메타데이터 | Windows 명시 opt-in, bounded snapshot·opaque target; native open/수집 미지원 | AS16 추가 |
 
 ### 5.2 파일 보기
 

@@ -1697,5 +1697,18 @@
     "baseline": "기존 coarse 설정 / v2 후속",
     "implementation": "planned",
     "operations": []
+  },
+  {
+    "id": "hardware.inventory.read",
+    "category": "system",
+    "category_label": "장비·OS·사용자 상태",
+    "label": "Attached USB inventory",
+    "description": "Read bounded snapshot metadata of attached USB interfaces.",
+    "baseline": "AS16 metadata extension",
+    "implementation": "rpc",
+    "operations": [
+      "hardware.enumerate",
+      "hardware.inspect"
+    ]
   }
 ]

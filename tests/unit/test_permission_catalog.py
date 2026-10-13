@@ -7,8 +7,8 @@ from racp_protocol.registry import REGISTRY
 
 def test_catalog_has_stable_unique_ids_and_explicit_implementation_status() -> None:
     catalog = permission_catalog()
-    assert len(catalog) == 143
-    assert len({p.id for p in catalog}) == 143
+    assert len(catalog) == 144
+    assert len({p.id for p in catalog}) == 144
     assert len({p.category for p in catalog}) == 18
     assert all(p.label and p.description for p in catalog)
     assert {p.implementation for p in catalog} == {"rpc", "planned"}

@@ -132,6 +132,7 @@ pub struct NativeProviders {
 }
 #[derive(Clone, Default)]
 pub struct ProviderRuntimes {
+    pub hardware_discovery_enabled: bool,
     pub cdb: Option<Arc<racp_core::runtime_admission::PinnedRuntime>>,
     pub gdb: Option<Arc<racp_core::runtime_admission::PinnedRuntime>>,
     pub analysis: Option<Arc<racp_core::runtime_admission::PinnedRuntime>>,
@@ -163,6 +164,11 @@ impl NativeProviders {
         runtimes: ProviderRuntimes,
     ) -> Result<Self, RacpError> {
         let providers: Vec<Arc<dyn Provider>> = vec![
+            Arc::new(hardware::Hardware::new(
+                settings,
+                boot,
+                runtimes.hardware_discovery_enabled,
+            )?),
             Arc::new(Filesystem::new(settings)?),
             Arc::new(diagnostics::Diagnostics::new(settings, boot)),
             Arc::new(os_observation::OSObservation::new(settings, boot)),

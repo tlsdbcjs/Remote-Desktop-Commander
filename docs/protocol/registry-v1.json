@@ -2148,6 +2148,138 @@
     "default_job_timeout_ms": 3600000,
     "max_job_timeout_ms": 86400000
   },
+  "hardware.enumerate": {
+    "name": "hardware.enumerate",
+    "mcp_name": "hardware_enumerate",
+    "capability": "hardware",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 100,
+          "maximum": 256,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      "title": "HardwareEnumerate"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "contained_discovery_worker",
+    "max_timeout_ms": 30000,
+    "resource_lock_key": "hardware_inventory",
+    "permission_scope": "hardware.inventory.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "AS16-META",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 30000,
+    "default_job_timeout_ms": 30000,
+    "max_job_timeout_ms": 30000
+  },
+  "hardware.inspect": {
+    "name": "hardware.inspect",
+    "mcp_name": "hardware_inspect",
+    "capability": "hardware",
+    "capability_version": "1.0.0",
+    "input_schema": {
+      "type": "object",
+      "$defs": {
+        "HardwareTarget": {
+          "additionalProperties": false,
+          "properties": {
+            "agent_device_id": {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "title": "Agent Device Id",
+              "type": "string"
+            },
+            "agent_boot_id": {
+              "pattern": "^[A-Za-z0-9_-]{1,96}$",
+              "title": "Agent Boot Id",
+              "type": "string"
+            },
+            "hardware_id": {
+              "pattern": "^hardware_[0-9a-f]{32}$",
+              "title": "Hardware Id",
+              "type": "string"
+            },
+            "interface_id": {
+              "pattern": "^hwif_[0-9a-f]{32}$",
+              "title": "Interface Id",
+              "type": "string"
+            },
+            "connection_generation": {
+              "pattern": "^connection_[0-9a-f]{32}$",
+              "title": "Connection Generation",
+              "type": "string"
+            }
+          },
+          "required": [
+            "agent_device_id",
+            "agent_boot_id",
+            "hardware_id",
+            "interface_id",
+            "connection_generation"
+          ],
+          "title": "HardwareTarget",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/HardwareTarget"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "title": "HardwareInspect"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "execution_modes": [
+      "sync",
+      "job"
+    ],
+    "side_effect": false,
+    "retry_class": "read_safe",
+    "cancel": "contained_discovery_worker",
+    "max_timeout_ms": 30000,
+    "resource_lock_key": "hardware_inventory",
+    "permission_scope": "hardware.inventory.read",
+    "minimum_os": [
+      "Windows"
+    ],
+    "verification_ids": [
+      "AS16-META",
+      "RPC-01",
+      "POLICY-01",
+      "LIFE-01"
+    ],
+    "default_timeout_ms": 30000,
+    "max_sync_timeout_ms": 30000,
+    "default_job_timeout_ms": 30000,
+    "max_job_timeout_ms": 30000
+  },
   "browser.open": {
     "name": "browser.open",
     "mcp_name": "browser_open",

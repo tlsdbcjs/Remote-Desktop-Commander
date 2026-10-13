@@ -15023,6 +15023,104 @@
       "backend": "jobs",
       "owner_task": "R11-C",
       "baseline_rust_source": "added_this_batch"
+    },
+    {
+      "platform": [
+        "Windows"
+      ],
+      "implementation_state": "in_progress",
+      "verification_state": "fixture_only",
+      "availability": "disabled_by_default",
+      "availability_reason": "Requires local discovery selection and permission; physical SDK acceptance is unverified.",
+      "required_runtime": [],
+      "test_ids": [
+        "AS16-META",
+        "RPC-01",
+        "POLICY-01"
+      ],
+      "evidence_ref": "docs/quality/implementation-status.md",
+      "evidence_commit": null,
+      "cleanup_assertions": [
+        "owned_resources_reclaimed",
+        "borrowed_resources_preserved",
+        "late_output_rejected"
+      ],
+      "blocking_dependency": "Physical acceptance and notification/open/read backends remain incomplete.",
+      "operation_id": "hardware.enumerate",
+      "operation_ids": [
+        "hardware.enumerate"
+      ],
+      "permission_ids": [
+        "hardware.inventory.read"
+      ],
+      "required_permission_ids": [
+        "hardware.inventory.read"
+      ],
+      "permission_semantics": {
+        "default": "AND",
+        "conditional_authority": "crates/racp-core/src/permissions.rs",
+        "conditional_authority_sha256": "8b2e9255c9b4a0eb50cf3507b9224153918e63448bfcd3045e81e1ef3d75ac1d",
+        "catalog_links_are_not_or_grants": true
+      },
+      "category": [
+        "system"
+      ],
+      "baseline_kind": "addition",
+      "source_path": "crates/racp-runtime/src/providers/hardware/provider.rs",
+      "dispatch_path": "crates/racp-runtime/src/providers/mod.rs",
+      "contract_digest": "d350b5e39c0179a24ccf684f678e8c642ced5a0581f3286fc8d4888a67c54480",
+      "backend": "windows_usb_pnp_metadata",
+      "owner_task": "AS16-metadata",
+      "baseline_rust_source": "added_this_batch"
+    },
+    {
+      "platform": [
+        "Windows"
+      ],
+      "implementation_state": "in_progress",
+      "verification_state": "fixture_only",
+      "availability": "disabled_by_default",
+      "availability_reason": "Requires local discovery selection and permission; physical SDK acceptance is unverified.",
+      "required_runtime": [],
+      "test_ids": [
+        "AS16-META",
+        "RPC-01",
+        "POLICY-01"
+      ],
+      "evidence_ref": "docs/quality/implementation-status.md",
+      "evidence_commit": null,
+      "cleanup_assertions": [
+        "owned_resources_reclaimed",
+        "borrowed_resources_preserved",
+        "late_output_rejected"
+      ],
+      "blocking_dependency": "Physical acceptance and notification/open/read backends remain incomplete.",
+      "operation_id": "hardware.inspect",
+      "operation_ids": [
+        "hardware.inspect"
+      ],
+      "permission_ids": [
+        "hardware.inventory.read"
+      ],
+      "required_permission_ids": [
+        "hardware.inventory.read"
+      ],
+      "permission_semantics": {
+        "default": "AND",
+        "conditional_authority": "crates/racp-core/src/permissions.rs",
+        "conditional_authority_sha256": "8b2e9255c9b4a0eb50cf3507b9224153918e63448bfcd3045e81e1ef3d75ac1d",
+        "catalog_links_are_not_or_grants": true
+      },
+      "category": [
+        "system"
+      ],
+      "baseline_kind": "addition",
+      "source_path": "crates/racp-runtime/src/providers/hardware/provider.rs",
+      "dispatch_path": "crates/racp-runtime/src/providers/mod.rs",
+      "contract_digest": "c8acb643dd9767a611e4e42eb2cdfda83bda84e31e96d7362a2fabbd9a544199",
+      "backend": "windows_usb_pnp_metadata",
+      "owner_task": "AS16-metadata",
+      "baseline_rust_source": "added_this_batch"
     }
   ],
   "permissions": [
@@ -19885,6 +19983,42 @@
       "contract_digest": "baeb135eec8881bd6516fa9ddbb1ba93144450378446788101791dafa6ee2043",
       "backend": "not_implemented",
       "owner_task": "R11-K"
+    },
+    {
+      "platform": [
+        "Windows"
+      ],
+      "implementation_state": "in_progress",
+      "verification_state": "fixture_only",
+      "availability": "disabled_by_default",
+      "availability_reason": "Explicit local selection plus separate read grant required.",
+      "required_runtime": [],
+      "test_ids": [
+        "AS16-META",
+        "POLICY-01"
+      ],
+      "evidence_ref": "docs/quality/implementation-status.md",
+      "evidence_commit": null,
+      "cleanup_assertions": [
+        "owned_resources_reclaimed",
+        "borrowed_resources_preserved",
+        "late_output_rejected"
+      ],
+      "blocking_dependency": "Physical SDK acceptance is unverified.",
+      "permission_id": "hardware.inventory.read",
+      "permission_ids": [
+        "hardware.inventory.read"
+      ],
+      "operation_ids": [
+        "hardware.enumerate",
+        "hardware.inspect"
+      ],
+      "category": "system",
+      "baseline_kind": "addition",
+      "source_path": "crates/racp-runtime/src/providers/hardware/provider.rs",
+      "contract_digest": "76086672497e7123dcc2da6efc4f2bb3d046c7b13973f204087c2ccf1e832846",
+      "backend": "windows_usb_pnp_metadata",
+      "owner_task": "AS16-metadata"
     }
   ],
   "legacy_consumers": [
@@ -20067,36 +20201,36 @@
       "path": "crates/racp-core/src/permissions.rs",
       "baseline_sha256": "8b2e9255c9b4a0eb50cf3507b9224153918e63448bfcd3045e81e1ef3d75ac1d",
       "current_sha256": "22ba65b58cd7223b5a30f8df3ad45c4135976f78527db6f8fd0b62f438619742",
-      "owner_task": "R05/R14",
-      "reason": "Consumed approval and conditional AND bindings preserved; R11-A/J linked core extensions retained; R14 removes legacy broad default permissions and requires explicit native policy."
+      "owner_task": "AS16-metadata",
+      "reason": "Preserve frozen inputs with explicit additive hardware metadata contracts and read permission."
     },
     {
       "path": "packages/protocol/src/racp_protocol/registry.py",
       "baseline_sha256": "bd7761986a51d97683c8daf43239932f86d5894d7865f6fe8259c386dc18d56c",
-      "current_sha256": "83f1471c8aae065ce19de3290b37a2ea5db93ad1c7712efb64606683f35c57b1",
-      "owner_task": "R11-A/R11-J",
-      "reason": "Typed expansion contracts, permission links and AND bindings added; frozen baseline retained. R11-A/J typed expansion contracts and AND bindings added."
+      "current_sha256": "013b682f0644bcb0f57fefd53f69db97aea36af293bd1381e70320378fd93ab7",
+      "owner_task": "AS16-metadata",
+      "reason": "Preserve frozen inputs with explicit additive hardware metadata contracts and read permission."
     },
     {
       "path": "docs/protocol/registry-v1.json",
       "baseline_sha256": "00abdbc97ec4cfce76963997aa3e1f365ab6431268b90f5bc4b846f97971f8b2",
-      "current_sha256": "cac20b17813e37e913347b069143732efcff71fad26c52b619f89abf9c01ba2f",
-      "owner_task": "R11-A/R11-J",
-      "reason": "Typed expansion contracts, permission links and AND bindings added; frozen baseline retained. R11-A/J typed expansion contracts and AND bindings added."
+      "current_sha256": "c854c01e4a624e41ede4fefb64cd78342467a8efcc790325bddea1fe19dd07da",
+      "owner_task": "AS16-metadata",
+      "reason": "Preserve frozen inputs with explicit additive hardware metadata contracts and read permission."
     },
     {
       "path": "packages/protocol/src/racp_protocol/permission_catalog.json",
       "baseline_sha256": "1e4cbc3723ce0ea2a3ee86f22935d57a7d150d3a849e523221e6acb753d8062a",
-      "current_sha256": "44192c4c23a41e36c8e640e07549277e90962d32fe2f8d00557068cb8f9651fe",
-      "owner_task": "R11-A/R11-J",
-      "reason": "Typed expansion contracts, permission links and AND bindings added; frozen baseline retained. R11-A/J typed expansion contracts and AND bindings added."
+      "current_sha256": "aef4573f0b4815489ba9182d51d9c719861e2e346143ab4cf01253a4c09f41ac",
+      "owner_task": "AS16-metadata",
+      "reason": "Preserve frozen inputs with explicit additive hardware metadata contracts and read permission."
     },
     {
       "path": "crates/racp-core/src/permission-bindings.json",
       "baseline_sha256": "b7b519986fc45929d164d69439c836729ff1102651049ab9945395f2f01d60a6",
-      "current_sha256": "51180e3b48727789be663c2945b447a207e4a7410549cace3bfaf9443aa5ffc3",
-      "owner_task": "R11-A/R11-J",
-      "reason": "Typed expansion contracts, permission links and AND bindings added; frozen baseline retained. R11-A/J typed expansion contracts and AND bindings added."
+      "current_sha256": "f39343e7321943626353f5bea058934c2e21ff8707581fcb093b42aa26fa810d",
+      "owner_task": "AS16-metadata",
+      "reason": "Preserve frozen inputs with explicit additive hardware metadata contracts and read permission."
     }
   ],
   "active_batch_version": "0.1.23",
@@ -20184,6 +20318,18 @@
       "action": "add",
       "owner_task": "R11-C",
       "reason": "Typed expansion contract and Windows Rust Provider added in batch 0.1.23."
+    },
+    {
+      "operation_id": "hardware.enumerate",
+      "action": "add",
+      "owner_task": "AS16-metadata",
+      "reason": "Explicit, default-disabled USB interface snapshot metadata."
+    },
+    {
+      "operation_id": "hardware.inspect",
+      "action": "add",
+      "owner_task": "AS16-metadata",
+      "reason": "Explicit, default-disabled USB interface snapshot metadata."
     }
   ],
   "current_counts": {
@@ -20192,5 +20338,13 @@
     "categories": 18,
     "rpc_permissions": 95,
     "planned_permissions": 48
-  }
+  },
+  "permission_deltas": [
+    {
+      "permission_id": "hardware.inventory.read",
+      "action": "add",
+      "owner_task": "AS16-metadata",
+      "reason": "Hardware metadata has a separate leaf; the frozen 143 identities are preserved."
+    }
+  ]
 }
