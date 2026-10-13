@@ -3,5 +3,5 @@
 Single Source of Truth (SSOT) for workspace-wide versioning.
 """
 
-VERSION = "0.1.31"
+VERSION = "0.1.32"
 __version__ = VERSION

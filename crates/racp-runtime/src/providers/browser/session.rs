@@ -291,6 +291,9 @@ impl Browser {
         effect: &std::sync::atomic::AtomicBool,
     ) -> Result<Value, RacpError> {
         let _opening = tokio::select! { _=cancel.cancelled()=>return Err(RacpError::new("CANCELLED")), opening=self.opening.lock()=>opening };
+        if !self.ready.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(RacpError::new("RESOURCE_BUSY"));
+        }
         let workspace = request["context"]["workspace_id"]
             .as_str()
             .unwrap_or("default");
@@ -1575,6 +1578,50 @@ impl Provider for Browser {
 #[cfg(test)]
 mod frame_race_tests {
     use super::*;
+    async fn queued_start_is_rejected_after_cleanup_failure(attach: bool) {
+        let root = tempfile::tempdir().unwrap();
+        let settings: AgentSettings = serde_json::from_value(json!({
+            "version":2,"gateway":"http://localhost:1234","device_id":"dev_queue",
+            "workspace":root.path(),"data_dir":root.path().join("data"),
+            "profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,
+            "desktop_enabled":false,"permissions":{"version":1,"grants":{},
+            "disabled_categories":[],"constraints":{"workspace_ids":[],
+            "max_timeout_ms":30000,"max_output_bytes":16777216,
+            "executable_allowlist":[],"executable_denylist":[],"strict_os_isolation":false}}
+        }))
+        .unwrap();
+        let browser = Browser::new(&settings, "boot_queue", BrowserConfig::default()).unwrap();
+        let opening = browser.opening.lock().await;
+        let request = json!({"payload":{},"context":{"workspace_id":"default"}});
+        let cancel = CancellationToken::new();
+        let effect = std::sync::atomic::AtomicBool::new(false);
+        let future: BoxFuture<'_, Result<Value, RacpError>> = if attach {
+            Box::pin(browser.attach(&request, &cancel, &effect))
+        } else {
+            Box::pin(browser.open(&request, &cancel, &effect))
+        };
+        tokio::pin!(future);
+        assert!(futures_util::poll!(&mut future).is_pending());
+        browser
+            .ready
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        drop(opening);
+        assert_eq!(future.await.unwrap_err().code.0, "RESOURCE_BUSY");
+        assert!(!effect.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(std::fs::read_dir(&browser.root).unwrap().count(), 0);
+        assert_eq!(
+            browser.cleanup().await.unwrap_err().code.0,
+            "CLEANUP_FAILED"
+        );
+    }
+    #[tokio::test]
+    async fn queued_browser_open_rechecks_cleanup_readiness_after_lock() {
+        queued_start_is_rejected_after_cleanup_failure(false).await;
+    }
+    #[tokio::test]
+    async fn queued_browser_attach_rechecks_cleanup_readiness_after_lock() {
+        queued_start_is_rejected_after_cleanup_failure(true).await;
+    }
     #[tokio::test]
     async fn startup_cleanup_failure_preserves_profile_and_recovery_record() {
         let root = tempfile::tempdir().unwrap();

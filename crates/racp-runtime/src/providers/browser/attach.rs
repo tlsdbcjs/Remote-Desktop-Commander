@@ -53,6 +53,9 @@ impl Browser {
         effect: &std::sync::atomic::AtomicBool,
     ) -> Result<Value, RacpError> {
         let _opening = tokio::select! {_ =cancel.cancelled()=>return Err(RacpError::new("CANCELLED")), opening=self.opening.lock()=>opening};
+        if !self.ready.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(RacpError::new("RESOURCE_BUSY"));
+        }
         {
             let sessions = self
                 .sessions

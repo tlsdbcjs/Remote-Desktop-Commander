@@ -1,7 +1,7 @@
 # RACP 구현 작업 및 검증 현황 (Implementation Status)
 
 > **Document ID**: `DOC-QA-STATUS`\
-> **Status**: Active · **Target Version**: v0.1.31\
+> **Status**: Active · **Target Version**: v0.1.32\
 > **Last Updated**: 2026-10-13 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
@@ -2831,3 +2831,36 @@ AS07 별도 진단도 보존한다. [stdout drain 실험](../../dist/verificatio
 | ready 차단 보완 전 전체 실행 | [이전 로그](../../dist/verification/agent/0.1.31/startup-cleanup-20261013/rust-workspace-serial.log) **124 PASS / 0 FAIL / 4 subprocess fixture ignored**, exit 0. 최종 source 결과를 이 성공으로 대체하지 않음. 최종 실패 뒤 Desktop/Filesystem/Memory/Process/Shell/Terminal/xtask target은 해당 최종 전체 실행에서 미실행 |
 | 버전·Python 정적 검사 | [버전 시험](../../dist/verification/agent/0.1.31/startup-cleanup-20261013/python-version.log) **6 PASS**, [Ruff](../../dist/verification/agent/0.1.31/startup-cleanup-20261013/ruff.log) PASS, [mypy](../../dist/verification/agent/0.1.31/startup-cleanup-20261013/mypy.log) **98 files PASS**, version show **0.1.31**, scoped Rust fmt/diff check PASS. 기존 Windows recipes naming/core unused-import warnings 유지 |
 | 배포·통합 | 이번 v0.1.31은 source/debug-test 묶음이며 새 release payload/setup 생성·최종 EXE 원격 인수는 하지 않음. v0.1.30 payload evidence를 v0.1.31 산출물로 해석하지 않음. GUI 완료 전 main 통합 보류·별도 Agent branch 보존 |
+
+
+### 2026-10-13 AS07 대기 admission·Windows 재시작 복구 경합 — v0.1.32
+
+[Browser open](../../crates/racp-runtime/src/providers/browser/session.rs)과 [external attach](../../crates/racp-runtime/src/providers/browser/attach.rs)는 opening lock 뒤 Provider ready를 다시 검사한다. 앞선 startup cleanup 실패로 ready=false가 된 동안 이미 잠금을 기다리던 요청도 RESOURCE_BUSY로 거부하며 새 profile/process/CDP 효과를 시작하지 않는다. [queued RED](../../dist/verification/agent/0.1.32/cleanup-races-20261013/queued-red.log)는 **0 PASS / 2 FAIL**(기존 open CAPABILITY_UNAVAILABLE, attach PERMISSION_DENIED까지 진행), [runtime GREEN](../../dist/verification/agent/0.1.32/cleanup-races-20261013/runtime-unit-green.log)은 **15 PASS / 1 subprocess fixture ignored**다.
+
+[Windows recovery adapter](../../crates/racp-runtime/src/providers/browser/recovery/windows.rs)는 읽기 전용 PROCESS_QUERY_LIMITED_INFORMATION/SYNCHRONIZE handle을 고정하고 같은 handle에서 birth·종료 signal을 관찰한다. 기존 process enumeration→살아 있는 PID만 허용하는 process_created 조회 사이 정상 종료를 오류로 다루던 경합을 제거했다. GetProcessTimes birth가 현재 receipt의 finite/positive create_time과 일치해야 하며 PID 재사용·live actor SID 불일치·조회 불확실성은 보존한다. live token 조회 실패 중 동시 종료만 **동일 pinned handle signal**로 확인한 경우에 허용한다. 종료된 객체는 다시 살아 있는 PID 조회를 요구하지 않는다. pid=0/범위 초과/비유한 birth는 거부하고, 고정된 valid OpenProcess 인수의 ERROR_INVALID_PARAMETER만 객체 부재로 처리한다. access denied/invalid handle/알 수 없는 오류를 부재로 바꾸지 않는다. 어느 경로도 process를 signal/kill하지 않으며, profile 삭제에는 여전히 이전 Job이 empty여야 한다. macOS/Linux backend를 구현하거나 빌드하지 않았다.
+
+[Witness RED](../../dist/verification/agent/0.1.32/cleanup-races-20261013/witness-red.log)는 **1 PASS / 1 FAIL**, 이미 종료된 실제 owned subprocess의 동일 birth 조회에서 LOCAL_STATE_FAILED였다. GREEN은 종료 전/후 pinned witness·종료된 handle 재조회·다른 birth 거부를 실제 Windows SDK/private fixture로 확인한다. 별도 fixture 시험은 부모가 stdin을 닫아 정상 종료시키며 기존 process/서비스/장치에 접근하지 않는다. 새 일반 시험은 **4개**(queued 2/witness 2), subprocess 전용 ignored entry 1개다.
+
+Win32의 [process handle 수명](https://learn.microsoft.com/en-us/windows/win32/procthread/process-handles-and-identifiers), [GetProcessTimes](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes), [WaitForSingleObject](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject)를 기준으로 구성했다. 종료 code/빈 Job이 parent signal을 대체하지 않는다. 기존 간헐 Browser termination signal 지연은 별도 문제이며 이 경합 수정으로 해결했다고 주장하지 않는다.
+
+PATCH **0.1.31→0.1.32 한 번**과 uv/workspace/독립 analysis-host lock local version을 동기화했다. 외부 dependency pin·공개 operation/permission 변경은 없다. main의 Slint GUI·lock·버전 작업은 보존하며 GUI 완료 전 통합하지 않는다. 실제 service 설치/등록/시작/설정·installer·driver/device IO는 실행하지 않는다.
+
+
+| v0.1.32 source 검사 | 실제 결과·범위 |
+|---|---|
+| 전체 Rust 직렬 suite | [로그](../../dist/verification/agent/0.1.32/cleanup-races-20261013/rust-workspace.log), `cargo test --locked --workspace -- --test-threads=1`, **128 PASS / 0 FAIL / 5 subprocess fixture ignored**, exit 0. Agent/contract/core/runtime·Browser 20·Desktop 11·Filesystem/Memory/Process/Shell/Terminal·xtask까지 모두 실행. 4개 신규 일반 시험과 부모가 명시 실행하는 Windows exit fixture 포함 |
+| Python·버전 | [로그](../../dist/verification/agent/0.1.32/cleanup-races-20261013/python.log), **11 PASS**(version 6/harness 5), [Ruff](../../dist/verification/agent/0.1.32/cleanup-races-20261013/ruff.log) PASS, [mypy](../../dist/verification/agent/0.1.32/cleanup-races-20261013/mypy.log) **98 source files PASS**. 기존 warnings는 유지 |
+
+이 전체 PASS는 이전 v0.1.31의 2건 CLEANUP_FAILED 실패 이력을 대체하지 않는다. 이번 수정의 재현 가능한 queued admission/normal-exit recovery 경합은 검증됐으나, 이전 forced termination의 parent signal 지연 원인은 여전히 미확정이다. 강제 종료 예산/parent signal·Job empty proof는 변경하지 않았으며 반복·부하 인수와 실제 서비스/USB 인수는 남아 있다. 독립 reviewer 완료 증거는 없으며 main 통합 전 검토가 남아 있다.
+
+
+| v0.1.32 Windows 산출물 검사 | 실제 결과·범위 |
+|---|---|
+| Agent 서비스용 개발 staging | [manifest](../../dist/agent/0.1.32/win-x64/cleanup-races-20261013-a/staging/build-manifest.json)·[stage](../../dist/verification/agent/0.1.32/cleanup-races-20261013/stage.log)·[verify](../../dist/verification/agent/0.1.32/cleanup-races-20261013/verify-stage.log), Rust 1.90.0 Windows x64 release/static CRT build 및 Agent/LICENSE/SBOM 3-file GUI-free allowlist·PE/native target/hash **PASS**. 새 untracked recovery/windows.rs도 source input에 포함됐음을 확인. installer/setup 생성·실행 없음 |
+| 최종 EXE 설치 없는 원격 회귀 | [results](../../dist/verification/agent/0.1.32/cleanup-races-e2e-20261013-a/results.json)·[로그](../../dist/verification/agent/0.1.32/cleanup-races-20261013/e2e.log), **21 PASS / 0 FAIL**, exit 0. 격리 HTTPS/WSS·인증 Named Pipe/headless·파일/명령/ConPTY·승인/replay·멱등성/CAS/cancel/owned child/stop·재시작 보존. 시험 Agent/Gateway 종료 완료, 기존 profile 미사용. 실제 SCM/service actor 및 Browser 반복 인수와 구분 |
+| 계약·형식 | [inventory](../../dist/verification/agent/0.1.32/cleanup-races-20261013/inventory.log), **114 ops / 143 permissions / 18 categories**, frozen 100 baseline 유지. scoped Rust fmt/git diff check PASS, version **0.1.32** |
+
+최종 Agent EXE **22,342,656 bytes**, SHA-256 **`2919577bc2699a248f363b22d1bfaa93f79f5f28330d9a0967624bb863105d67`**; payload manifest **`f7477c07d15f799e3e3dcf7e37d9a3841539a62a9b330a3123eea461fdcf73d2`**; source input digest **`d19a99ff41cb84f94acc248689b8126b570a9d119f4e0ee52d3daf0a8d95fee2`**다. 최종 E2E EXE SHA는 위 manifest와 같고 harness SHA **`fd9b319d459948f5fed9dc5b8b6b8ed6de46e249392c8f4191ccd9fa93d65a1e`**도 기록했다. baseline `47ff367`와 당시 dirty source를 기록한 unsigned/non-published 개발 산출물이며 xtask 자체 tests는 `not_run_by_xtask`다. main의 Slint GUI/버전/lock 변경은 수정하지 않았고 통합은 GUI 완료 뒤로 보류한다.
+
+
+[Browser 반복 1](../../dist/verification/agent/0.1.32/cleanup-races-20261013/browser-repeat-1.log)·[2](../../dist/verification/agent/0.1.32/cleanup-races-20261013/browser-repeat-2.log)·[3](../../dist/verification/agent/0.1.32/cleanup-races-20261013/browser-repeat-3.log)은 같은 최종 source의 `cargo test --locked -p racp-runtime --test browser -- --test-threads=1`을 최대 3회/첫 실패 시 중단하는 예산으로 수행해 각각 **20 PASS / 0 FAIL**, 총 **60 PASS**, exit 0이었다. startup cancel·concurrent close·timeout·external CDP·process protection·restart/live profile 보존을 포함한다. 짧은 직렬 반복이며 장시간/병렬 부하 또는 kernel/driver 원인 규명을 대신하지 않는다. 전체 workspace 결과도 Agent worktree의 Iced 기준 Client를 포함한 검사로서 main의 진행 중인 Slint source를 검증한 것이 아니다. Agent-only SBOM의 **241 components**에는 Client/Iced/Slint/Electron/CPython component가 없다.

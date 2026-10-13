@@ -11,6 +11,9 @@ use std::{
     time::Duration,
 };
 use tokio_util::sync::CancellationToken;
+#[cfg(windows)]
+#[path = "recovery/windows.rs"]
+mod windows;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Record {
@@ -129,32 +132,54 @@ impl Browser {
             return Err(RacpError::new("CLEANUP_FAILED"));
         }
         let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-        let pid = sysinfo::Pid::from_u32(record.pid);
-        let mut system = sysinfo::System::new();
-        loop {
-            system.refresh_processes_specifics(
-                sysinfo::ProcessesToUpdate::Some(&[pid]),
-                true,
-                sysinfo::ProcessRefreshKind::nothing(),
-            );
-            let running = system.process(pid).is_some_and(|process| {
-                process.status() != sysinfo::ProcessStatus::Zombie
-                    && process.status() != sysinfo::ProcessStatus::Dead
-            });
-            // A reused PID or a process whose identity cannot be read is ambiguous: retain its profile.
-            if running {
-                let birth = crate::identity::process_created(record.pid)?;
-                if (birth - record.create_time).abs() > 0.000001 {
+        #[cfg(windows)]
+        {
+            // Retain the exact process object across observations. A normal
+            // enumeration-to-exit race must not discard recovery authority.
+            let process = windows::ProcessWitness::open(record.pid, record.create_time)?;
+            loop {
+                let exited = match &process {
+                    Some(process) => process.exited()?,
+                    None => true,
+                };
+                if exited && job_empty(record.job_name.as_deref())? {
+                    return Ok(());
+                }
+                if tokio::time::Instant::now() >= deadline {
                     return Err(RacpError::new("CLEANUP_FAILED"));
                 }
+                tokio::time::sleep(Duration::from_millis(50)).await;
             }
-            if !running && job_empty(record.job_name.as_deref())? {
-                return Ok(());
+        }
+        #[cfg(not(windows))]
+        {
+            let pid = sysinfo::Pid::from_u32(record.pid);
+            let mut system = sysinfo::System::new();
+            loop {
+                system.refresh_processes_specifics(
+                    sysinfo::ProcessesToUpdate::Some(&[pid]),
+                    true,
+                    sysinfo::ProcessRefreshKind::nothing(),
+                );
+                let running = system.process(pid).is_some_and(|process| {
+                    process.status() != sysinfo::ProcessStatus::Zombie
+                        && process.status() != sysinfo::ProcessStatus::Dead
+                });
+                // A reused PID or a process whose identity cannot be read is ambiguous: retain its profile.
+                if running {
+                    let birth = crate::identity::process_created(record.pid)?;
+                    if (birth - record.create_time).abs() > 0.000001 {
+                        return Err(RacpError::new("CLEANUP_FAILED"));
+                    }
+                }
+                if !running && job_empty(record.job_name.as_deref())? {
+                    return Ok(());
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    return Err(RacpError::new("CLEANUP_FAILED"));
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
             }
-            if tokio::time::Instant::now() >= deadline {
-                return Err(RacpError::new("CLEANUP_FAILED"));
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
 }
