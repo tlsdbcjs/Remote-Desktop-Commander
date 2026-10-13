@@ -302,6 +302,14 @@ pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
         &payload_hash,
         &bootstrap_hash,
     )?;
+    super::recovery::configure(service.0)?;
+    progress(
+        &parent,
+        &nonce,
+        "recovery_committed",
+        &payload_hash,
+        &bootstrap_hash,
+    )?;
     if unsafe {
         ChangeServiceConfigW(
             service.0,
@@ -331,6 +339,7 @@ pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
     Ok(
         json!({"prepared":true,"started":false,"registered":false,"ready":false,"service_name":SERVICE_NAME,
         "state_dir":state,"control_dir":control,"bootstrap_sha256":bootstrap_hash,"nonce":nonce,
-        "recovery":"inspect_existing_disabled_or_demand_service_and_provision_receipt_no_automatic_adoption"}),
+        "recovery":"inspect_existing_disabled_or_demand_service_and_provision_receipt_no_automatic_adoption",
+        "startup_policy":"demand", "crash_recovery":racp_contract::service_recovery::ServiceRecoveryPolicy::default()}),
     )
 }

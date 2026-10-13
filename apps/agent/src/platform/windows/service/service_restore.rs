@@ -335,12 +335,19 @@ pub fn execute(root: &Path, input: &Value) -> Result<Value, RacpError> {
         let _ = start_type(&service, SERVICE_DISABLED);
         return Err(RacpError::new("SERVICE_RESTORE_IDENTITY_CHANGED"));
     }
+    // Maintenance is one-shot: explicitly keep recovery disabled after its confirmed stop.
+    if let Err(error) = super::recovery::configure(service.0) {
+        let _ = start_type(&service, SERVICE_DISABLED);
+        write("recovery_unconfirmed")?;
+        return Err(error);
+    }
     if registered {
         racp_core::native_release::publish(root)?;
     }
     write("restored_demand_start")?;
     Ok(
         json!({"restored":true,"agent_run_started":false,"registered":registered,"state_preserved":true,
-        "credential_accessed":false,"device_id":input["expected_device_id"],"request_id":nonce}),
+        "credential_accessed":false,"device_id":input["expected_device_id"],"request_id":nonce,
+        "startup_policy":"demand", "crash_recovery":racp_contract::service_recovery::ServiceRecoveryPolicy::default()}),
     )
 }

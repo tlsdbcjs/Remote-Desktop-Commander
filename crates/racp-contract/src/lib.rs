@@ -5,6 +5,7 @@ pub mod local_ipc;
 mod operations;
 pub mod runtime_manifest;
 mod schema;
+pub mod service_recovery;
 pub mod service_scope;
 pub use error::{ErrorCode, RacpError};
 pub use operations::{registry, validate_operation};

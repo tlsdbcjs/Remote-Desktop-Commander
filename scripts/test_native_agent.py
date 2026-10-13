@@ -21,6 +21,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -50,6 +51,48 @@ def wait_for(check: Any, timeout: float = 30) -> Any:
             return value
         time.sleep(0.1)
     raise TimeoutError("condition did not become true within the test budget")
+
+
+def wait_for_terminal_marker(
+    read: Callable[[str, int, float], httpx.Response],
+    marker: str,
+    timeout: float = 10,
+) -> str:
+    deadline = time.monotonic() + timeout
+    cursor, output = "0", ""
+    while time.monotonic() < deadline:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        wait_ms = max(1, min(1000, int(remaining * 1000)))
+        response = read(cursor, wait_ms, remaining)
+        if time.monotonic() >= deadline:
+            raise TimeoutError("terminal response arrived after the test budget")
+        require(
+            response.status_code == 200 and response.json()["state"] == "SUCCEEDED",
+            "terminal.read failed while collecting output",
+        )
+        result = response.json()["result"]
+        data, next_cursor = result["data"], result["next_cursor"]
+        require(
+            isinstance(data, str) and isinstance(next_cursor, str) and next_cursor.isdecimal(),
+            "invalid terminal read result",
+        )
+        require(
+            int(next_cursor) >= int(cursor) and (not data or int(next_cursor) > int(cursor)),
+            "terminal byte cursor did not advance",
+        )
+        output += data
+        require(
+            len(output.encode("utf-8")) <= 128 * 1024, "terminal output collection budget exceeded"
+        )
+        if marker in output:
+            return output
+        require(not result.get("eof", False), "terminal ended before expected output")
+        if next_cursor == cursor:
+            time.sleep(min(0.1, max(0, deadline - time.monotonic())))
+        cursor = next_cursor
+    raise TimeoutError("terminal marker did not arrive within the test budget")
 
 
 class Pipe:
@@ -408,7 +451,9 @@ def main() -> int:
             )
             passed("headless_cli_authenticated_snapshot")
 
-            def execute(operation: str, payload: dict[str, Any], **extra: Any) -> httpx.Response:
+            def execute(
+                operation: str, payload: dict[str, Any], *, http_timeout: float = 35, **extra: Any
+            ) -> httpx.Response:
                 return client.post(
                     "/api/v1/operations",
                     json={
@@ -419,6 +464,7 @@ def main() -> int:
                         "idempotency_key": "smoke-" + secrets.token_hex(8),
                         **extra,
                     },
+                    timeout=http_timeout,
                 )
 
             watcher = subprocess.Popen(
@@ -597,14 +643,13 @@ def main() -> int:
                 (workspace / "pty.marker").read_text().strip() == "native-terminal-file",
                 "terminal command did not execute",
             )
-            terminal_output = execute(
-                "terminal.read", {**terminal_target, "cursor": "0", "wait_ms": 1000}
-            )
-            require(
-                terminal_output.status_code == 200
-                and terminal_output.json()["state"] == "SUCCEEDED"
-                and "native-terminal-output" in terminal_output.json()["result"]["data"],
-                "terminal output missing",
+            wait_for_terminal_marker(
+                lambda cursor, wait_ms, remaining: execute(
+                    "terminal.read",
+                    {**terminal_target, "cursor": cursor, "wait_ms": wait_ms},
+                    http_timeout=remaining,
+                ),
+                "native-terminal-output",
             )
             resized = execute("terminal.resize", {**terminal_target, "cols": 100, "rows": 30})
             require(

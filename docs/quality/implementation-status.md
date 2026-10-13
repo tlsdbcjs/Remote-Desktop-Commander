@@ -1,7 +1,7 @@
 # RACP 구현 작업 및 검증 현황 (Implementation Status)
 
 > **Document ID**: `DOC-QA-STATUS`\
-> **Status**: Active · **Target Version**: v0.1.27\
+> **Status**: Active · **Target Version**: v0.1.28\
 > **Last Updated**: 2026-10-13 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
@@ -2706,3 +2706,30 @@ USB 동글의 용도는 사용자가 **원격 PC에 연결된 외장 장치/동�
 - Browser 권한 fixture 수정 직후 실행은 **17 PASS / 3 FAIL**였으며 concurrent close, evaluation timeout cleanup, external CDP의 owned browser 종료에서 실패했다. 임시 native cleanup 진단을 추가한 단독 close **1 PASS**와 [전체 Browser 재실행](../../dist/verification/agent/0.1.27/foundation-20261013/browser-group-trace.log) **20 PASS**에서는 재현되지 않아 진단 코드를 제거했다. 위 전체 workspace도 통과했지만 **간헐 cleanup 실패의 원인을 규명하거나 제품 수정으로 해결했다는 증거는 아니다**. AS07의 반복/부하 인수 공백으로 유지한다. 실제 owned process handle signal과 Job tree-empty 증명을 exit code만으로 대체하지 않았다.
 
 앞선 실패 로그와 당시 결과는 이력으로 보존한다. 후속 PASS는 source 회귀 근거이며 SCM/서비스 identity·설치·물리 USB 장치 인수를 대신하지 않는다.
+
+### 2026-10-13 AS09 recovery 계약·비활성 기본 정책 readback — v0.1.28
+
+기반 구현은 `5e1fd98`로 커밋하고 기존 GUI startup 수정 `8ac3e96`를 보존해 로컬 `main`의 `be5b456`에 통합했다. [main 통합 뒤 전체 suite](../../dist/verification/agent/0.1.27/foundation-main/rust-workspace.log)는 **92 PASS / 0 FAIL / 4 subprocess fixture ignored**다. 이후 AS09의 운영 정책 source를 후속 묶음으로 구현했으며 PATCH **0.1.27→0.1.28 한 번**과 Python/Rust/analysis-host lock의 로컬 package version을 동기화했다.
+
+- [공통 recovery 계약](../../crates/racp-contract/src/service_recovery.rs)은 OS 호출 없는 타입/검증으로 command·reboot·알 수 없는 필드·무제한/비단조 restart·non-crash recovery를 거부한다. 기본 정책은 **단일 `none` / non-crash false**다. 5초/30초/120초·terminal none·24시간 무실패 reset의 bounded profile은 계약/변환만 준비했고 SCM 활성화/CLI opt-in에 연결하지 않았다.
+- [Windows readback 어댑터](../../apps/agent/src/platform/windows/service/recovery.rs)는 신규 fixed-name service의 기본 정책을 명시하고 재확인한다. QueryServiceConfig2W는 NULL probe의 insufficient-buffer 크기로 최대 8 KiB를 할당하며 성공 호출의 미보장 size 값에 의존하지 않는다. 구조·array/count·alignment·포인터 범위·exact action/reset/flag·빈 command/reboot text를 확인한다. 실패는 `SERVICE_RECOVERY_OUTCOME_UNKNOWN`이다.
+- provision은 입력 commit 뒤 **서비스가 아직 disabled일 때** 기본 정책을 설정·확인한 다음 demand-start를 허용한다. restore는 새 service의 일회성 maintenance STOPPED/identity 검증 뒤 적용하며 readback 실패에는 disabled와 `recovery_unconfirmed` 기록을 남긴다. 기존 service를 채택/재구성하지 않는다.
+- focused review가 일회성 configure/reconcile/recover_sessions/remove의 crash 후 자동 재시작 위험을 지적해 기본값을 disabled로 유지했다. [기본값 RED](../../dist/verification/agent/0.1.28/recovery-20261013/default-red.log)는 4개 restart actions 대신 1개 none을 요구해 실패했고 [GREEN](../../dist/verification/agent/0.1.28/recovery-20261013/default-green.log)은 native parser/query/변환 **7 PASS**다. 재검토에서 해당 P1이 해소됐으며 reviewer는 실제 SCM/tests/build를 실행하지 않았다.
+
+실제 Windows API의 [failure-action 반복 규칙](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_failure_actionsw), [non-crash flag](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_failure_actions_flag), [query 크기 계약](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nf-winsvc-queryserviceconfig2w)을 기준으로 source를 구성했다. [이미 queue된 restart](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nf-winsvc-changeserviceconfig2w)는 STOPPED 보고만으로 취소되지 않는다. 명시 disabled·durable startup gate·관리/중지 orchestration을 완성하기 전 자동 restart/boot auto-start를 지원한다고 선언하지 않는다.
+
+| 최종 검사 | 결과·범위 |
+|---|---|
+| 전체 Rust 직렬 suite | [로그](../../dist/verification/agent/0.1.28/recovery-20261013/rust-workspace-serial.log), `cargo test --locked --workspace -- --test-threads=1`, **103 PASS / 0 FAIL / 4 ignored**, exit 0. 새 contract 4/native adapter 7 포함; SCM API를 호출하는 시험은 없음 |
+| Python | [로그](../../dist/verification/agent/0.1.28/recovery-20261013/python-final.log), 버전 6/ConPTY harness 5의 **11 PASS**. Ruff PASS, mypy **98 files PASS**, scoped Rust fmt/git diff check PASS. Inventory **114 ops / 143 permissions / 18 categories**, frozen 100 baseline 유지 |
+| Windows 개발 서비스 payload | [build manifest](../../dist/agent/0.1.28/win-x64/recovery-20261013-a/staging/build-manifest.json), [stage 로그](../../dist/verification/agent/0.1.28/recovery-20261013/stage.log), release/static CRT Windows x64 build 및 GUI 없는 3-file allowlist·PE/native imports·hash verify PASS. 설치 artifact 생성/installer 실행/SCM 설정은 하지 않음 |
+| 최종 EXE 실제 원격 회귀 | [결과](../../dist/verification/agent/0.1.28/recovery-e2e-final-b-20261013/results.json)·[로그](../../dist/verification/agent/0.1.28/recovery-20261013/e2e-final-b.log), **21 PASS / 0 FAIL**, exit 0. 위 최종 EXE hash와 최종 harness hash를 대조했다. 격리 HTTPS/WSS/user-mode/인증 IPC·권한·승인/replay·파일·stdout/stderr/exit·멱등성·ConPTY·CAS·cancel/child 종료·stop/drain·restart 보존을 재검증했다. 시험 Agent/Gateway 종료 완료, 기존 profile 미사용. 서비스 계정/SCM 조건의 결과로 해석하지 않음 |
+
+Agent EXE는 **22,196,224 bytes**, SHA-256 `82eebcee2e621f149a3c6457b292b7ff83172aa0c0f3ea2c505055aa5fb751c1`; payload manifest SHA-256 `63c2e9be9a8d9fb9bbda03507ca587db595fd02007b9c66d9a87e2362ff5aa74`; source input digest `8c334c614858382642f5f1f6e0d2f1718b9731c05e65a54edd46ab623b1ec932`다. source evidence는 baseline `be5b456`와 당시 dirty input을 기록한다. unsigned/non-published이며 xtask 자체의 기능 시험은 `not_run_by_xtask`다.
+
+실패도 보존한다. [최종 병렬 suite](../../dist/verification/agent/0.1.28/recovery-20261013/rust-workspace-disabled-final.log)는 Browser **17 PASS / 3 FAIL**에서 중단했으며 실패는 concurrent close, frame scope close, origin-fence cleanup이었다. 이번 source 묶음에 Browser/runtime Provider 변경은 없다. 직렬 PASS가 **간헐 CLEANUP_FAILED를 해결했다는 증거는 아니다**. AS07 부하/병렬 cleanup 인수 공백은 유지하며 종료 deadline·parent signal/Job tree-empty 확인을 약화하지 않았다.
+
+최초 원격 harness 실행은 ConPTY 명령의 파일 효과까지 확인한 뒤 단일 read 출력 assertion에서 실패했다. 비동기 출력이 여러 read로 나뉘는 조건을 [harness 시험](../../tests/unit/test_native_agent_harness.py)으로 고정하고 byte cursor를 따라 UTF-8 marker를 128 KiB/10초 예산 안에서 수집하도록 수정했다. read 실패/EOF/역행 cursor/초과 크기 및 마감 후 도착한 marker를 거부하며 HTTP timeout에도 남은 예산을 전달한다. 생산 Provider·cleanup deadline은 변경하지 않았다. 앞선 E2E 실패와 [late-marker RED](../../dist/verification/agent/0.1.28/recovery-20261013/terminal-deadline-red.log)를 최종 성공으로 덮어쓰지 않는다.
+
+> [!IMPORTANT]
+> AS09는 **recovery 계약·보수적 disabled 기본값·readback의 부분 구현**이다. bounded restart의 활성화, 일회성 관리 crash gate, queued restart 중지, boot auto-start 및 실제 SCM/계정/설치 인수는 남아 있다. AS07 간헐 Browser cleanup과 AS16–AS18 USB/장치 계약·backend·수집·물리 인수도 미완료다. 실제 설치·서비스 등록·driver/device IO·기존 profile 변경은 하지 않았다.

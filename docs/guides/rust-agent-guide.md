@@ -1,7 +1,7 @@
 # Rust Agent 실행 가이드
 
 > **Document ID**: `DOC-GUIDE-RUST-AGENT`\
-> **Status**: Active · **Target Version**: v0.1.27 native development\
+> **Status**: Active · **Target Version**: v0.1.28 native development\
 > **Last Updated**: 2026-10-13 · **Classification**: User Guide
 
 ## 개요
@@ -69,6 +69,8 @@ $controlRequest | .\racp-agent.exe native-service-control --service-control 'C:\
 Chromium/CDB/GDB/별도 native 분석 host는 manifest hash·전체 파일 hash/size·OS/architecture/version을 확인하고 명시적으로 admission해야 한다. 자동 PATH 탐색·옆의 chromium 폴더·plugins.json·native-runtime.json을 사용하는 fallback이 없다. runtime의 admission과 첫 authorized 실행의 READY 상태는 구분한다. 기본 Client는 프로젝트 Java bridge를 실행하지 않으며 분석 엔진은 별도 [native host](../../apps/analysis-host/Cargo.toml)에 둔다.
 
 사용자 Agent의 desktop 기능은 같은 사용자 세션의 Rust Broker/Guardian을 사용한다. 서비스는 고정 RACPNativeAgent 계정·private state·observer/controller IPC를 사용하는 별도 구현 경로다.
+
+신규 provision/명시 restore의 운영 기본값은 수동 `demand-start`와 자동 장애 복구 비활성화다. source는 `none` action·non-crash recovery false·빈 command/reboot text를 설정하고 bounded query로 재검증한다. 5초/30초/120초 뒤 최대 세 번 재시작하는 계약/Win32 변환은 준비했지만 CLI 활성화에는 연결하지 않았다. 일회성 설정·복구·제거 중 crash가 일반 Agent 시작으로 바뀌지 않도록 유지한다. [Windows의 queued restart 규칙](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nf-winsvc-changeserviceconfig2w)에 따라 STOPPED 보고는 이미 예약된 재시작을 취소하지 않으므로, 자동 복구 활성화에는 disabled/startup gate·관리 작업·명시 stop의 추가 orchestration과 SCM 인수가 필요하다.
 
 > [!IMPORTANT]
 > native service provisioning·[현재 사용자 session 연결](desktop-client-guide.md#69-service의-현재-사용자-화면-연결-source-구현-실기-보류)·[SYSTEM handoff/세션 복구](desktop-client-guide.md#610-관리자-system-handoff와-세션-복구-source-구현-실행-보류)를 source로 연결했다. 실제 서비스/입력 인수·불확실한 partial 상태의 강제 복구·per-machine packaging은 미완료다. 이전 service-login.json, Task Scheduler Guardian 또는 기존 RACPAgent 설정을 native fallback으로 사용하지 않는다. source 경계를 실제 설치 절차나 동작 인수로 해석하지 않는다.

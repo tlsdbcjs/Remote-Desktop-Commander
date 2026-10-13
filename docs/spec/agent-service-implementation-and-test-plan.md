@@ -1,7 +1,7 @@
 # Rust Agent 서비스 구현 및 검증 작업 계획
 
 > **Document ID**: `DOC-PLAN-AGENT-SERVICE`\
-> **Status**: Active · **Target Version**: v0.1.27 source / Agent 서비스 릴리스 인수 미완료\
+> **Status**: Active · **Target Version**: v0.1.28 source / Agent 서비스 릴리스 인수 미완료\
 > **Last Updated**: 2026-10-13 · **Classification**: Service Implementation & Test Plan
 
 ## 개요
@@ -188,26 +188,28 @@ P0는 Agent 서비스의 독립 실행·원격 제어·권한/정리 경계, P1�
 
 | ID / 우선순위 | 작업 종류와 대상 | 작업 및 완료 조건 |
 |---|---|---|
-| AS01 / P0 | **미완성: GUI 없는 서비스 payload admission** | Agent-only service manifest/허용 파일/PE target/hash/SBOM과 machine receipt를 정의. service host·provision·maintenance·restore가 같은 역할의 payload를 검증하도록 연결. `racp-client.exe` 부재 상태에서 서비스 경로가 admitted되며 무결성 검사를 약화하지 않음 |
-| AS02 / P0 | **보완: headless 관리·승인 경로** | 기존 로컬 IPC/CLI의 observer/controller·policy/config CAS·승인 결정·cancel/status/event를 시험 도구에서 사용 가능하게 정리. 재구성 예정 GUI를 요구하지 않으며 승인자 부재/만료/재사용/미인가 controller가 실제 실행을 허용하지 않음 |
+| AS01 / P0 | **source 구현: GUI 없는 서비스 payload admission / SCM 인수 보류** | Agent-only service manifest/허용 파일/PE target/hash/SBOM과 machine receipt를 정의. service host·provision·maintenance·restore가 같은 역할의 payload를 검증하도록 연결. `racp-client.exe` 부재 상태에서 서비스 경로가 admitted되며 무결성 검사를 약화하지 않음 |
+| AS02 / P0 | **source 구현·user-mode 검증: headless 관리·승인 / service 계정 인수 보류** | 기존 로컬 IPC/CLI의 observer/controller·policy/config CAS·승인 결정·cancel/status/event를 시험 도구에서 사용 가능하게 정리. 재구성 예정 GUI를 요구하지 않으며 승인자 부재/만료/재사용/미인가 controller가 실제 실행을 허용하지 않음 |
 | AS03 / P0 | **구현됨·검증 필요: 서비스 등록/credential** | fresh provision→bootstrap→enrollment→보호 저장→입력 정리의 전체 흐름과 중단 지점 검사. virtual account에서 재시작 후 credential 사용 가능, 일반 사용자 credential import 없음, token 소모 뒤 불확실한 등록 재실행 없음 |
 | AS04 / P0 | **구현됨·검증 필요: SCM lifecycle/readiness** | START_PENDING/READY/RUNNING·STOP_PENDING/STOPPED 및 오류/체크포인트 검사. 시작 중 취소·SCM STOP·OS SHUTDOWN이 같은 정리 경로에 도달. 네트워크 오프라인과 초기화 실패를 구분하고 확인되지 않은 정리를 정상 종료로 보고하지 않음 |
 | AS05 / P0 | **구현됨·서비스 조건 검증 필요: 원격 핵심 작업** | 실제 MCP/API→Gateway→service Agent의 파일/전송·명령 stdout/stderr/exit·process·ConPTY 작업을 검사. service account의 workspace/executable 권한과 실제 부작용·최종 결과 일치. 다른 Device·폴더·process를 실행 대상으로 채택하지 않음 |
 | AS06 / P0 | **구현됨·검증 필요: journal/멱등성/재연결** | ACK·결과 유실, Agent/Gateway 재시작, 중복·충돌·정책 변경·취소 경합 검사. 동일 변경 중복 실행 없음, 완료 결과 불변, 불확실한 부작용은 UNKNOWN 보존. 재연결 자체를 작업 성공으로 보지 않음 |
 | AS07 / P0 | **구현됨·검증 필요: drain/자원 정리** | STOP/취소/revoke/lease 만료/단절 때 소유 child tree·ConPTY·stream·Broker/Guardian·입력 lease를 추적. 종료 예산과 정리 불확실성의 durable 기록을 확인. 소유하지 않은 process/session에 영향 없음 |
 | AS08 / P1 | **미완성·검증 필요: partial provision/관리 복구** | helper/state/SCM 생성/ACL/bootstrap/config 변경 단계별 실패를 재현하고 pending/실제 상태/CAS를 대조. 안전한 중단·명시 복구·재시도 가능한 상태와 현지 확인이 필요한 상태를 구분. 기존 service/root를 자동 채택하지 않음 |
-| AS09 / P1 | **미완성: 자동 시작·장애 복구 운영 정책** | 현재 demand-start와 배포 시 auto-start의 선택, SCM failure actions, crash 재시작·backoff·영구 auth 실패·사용자 stop 후 재시작 여부를 확정. 무한 재시작/중복 Agent/재등록 반복 없음. 실제 부팅/SCM 시험은 설치 금지 해제 후 수행 |
+| AS09 / P1 | **부분 구현: demand/disabled recovery 명시·readback / 자동 활성화 보류** | 현재 demand-start와 배포 시 auto-start의 선택, SCM failure actions, crash 재시작·backoff·영구 auth 실패·사용자 stop 후 재시작 여부를 확정. 무한 재시작/중복 Agent/재등록 반복 없음. 실제 부팅/SCM 시험은 설치 금지 해제 후 수행 |
 | AS10 / P1 | **보완: 서비스 health/진단·audit** | service/local READY/Gateway 상태, boot ID·최종 오류·작업/queue/spool·cleanup 상태를 bounded status/log로 제공. RPC 거부/승인/취소/복구 원인을 추적하되 credential/token·원문 민감 출력은 노출하지 않음. 이미 연결된 diagnostics API를 재작성하지 않음 |
 | AS11 / P1 | **보완·검증 필요: Session 0과 desktop backend** | 사용자 세션 Broker 등록/launch 주체·identity·session 변경·Guardian 정리를 확정. GUI app 없이 세션 backend를 연결/시험. 세션 없는 경우 정직한 unavailable 결과, 잠금/UAC/session mismatch에서 입력 금지, 사용자의 입력 개입 시 원격 입력 해제 |
-| AS12 / P1 | **미완성: Agent 서비스 단독 배포/CI** | AS01 계약에 맞는 서비스 전용 package/recipe/설치 보호·진단 정의를 Git 추적 가능하게 배치. Client EXE/shortcut 없음. `dist/agent` 역할별 manifest/SBOM/해시, pinned compiler와 CI 정적 검사 연결. artifact 생성과 실제 서비스 등록을 별도 단계로 유지 |
+| AS12 / P1 | **source/staging 구현: Agent 서비스 단독 배포/CI / setup·설치 인수 보류** | AS01 계약에 맞는 서비스 전용 package/recipe/설치 보호·진단 정의를 Git 추적 가능하게 배치. Client EXE/shortcut 없음. `dist/agent` 역할별 manifest/SBOM/해시, pinned compiler와 CI 정적 검사 연결. artifact 생성과 실제 서비스 등록을 별도 단계로 유지 |
 | AS13 / P2 | **미완성: 업데이트/제거·버전 복구 제품 흐름** | protected image·service command·state schema·pending 전환의 호환성, 기존 버전 보존·rollback/UNKNOWN·정리 확인·명시 detach 조건을 정의. helper restore 코드와 완결된 updater를 구분. 실제 교체/제거는 전용 환경과 별도 실행 요청 후 검사 |
 | AS14 / P3 | **미연결 확장** | 현재 catalog의 일반 서비스/registry/tasks/software·storage·memory write 등은 실제 사용 요구가 있을 때 선택. 새 OS object/API 전체를 AS01–AS12의 완료 조건에 강제하지 않음. 선택 runtime·타 OS도 요청된 범위만 추가 |
-| AS15 / P0 | **보완: 역할 중심 경로·공통/플랫폼 경계** | `apps/agent-rust`→`apps/agent` 변경과 Cargo·빌드/패키징·version/inventory·CI·검사 스크립트·AGENTS·활성 문서 참조를 같은 작업에서 갱신. §3.4에 따라 Windows service/setup 파일과 신규 hardware backend부터 책임별 이동/배치. package/EXE `racp-agent`·공개 계약·권한·동작 유지, Windows build/회귀 확인. macOS/Linux service/device는 미구현 명시; 코드 복제·불필요한 crate 분할·타 OS build 없음 |
+| AS15 / P0 | **Agent 앱 Windows 경계 구현: 공유 backend는 점진 작업** | `apps/agent-rust`→`apps/agent` 변경과 Cargo·빌드/패키징·version/inventory·CI·검사 스크립트·AGENTS·활성 문서 참조를 같은 작업에서 갱신. §3.4에 따라 Windows service/setup 파일과 신규 hardware backend부터 책임별 이동/배치. package/EXE `racp-agent`·공개 계약·권한·동작 유지, Windows build/회귀 확인. macOS/Linux service/device는 미구현 명시; 코드 복제·불필요한 crate 분할·타 OS build 없음 |
 | AS16 / P1 | **미구현: 원격 USB/외장 장치 탐색·연결 계약** | §3.5의 ID/interface/backend/capability·opaque session/lease·권한을 정의하고 Windows enumeration/inspect/open/close와 protocol 연결. 발견/연결/수집 지원 상태를 구분, 다른 Agent/boot/replug generation의 handle 거부 |
 | AS17 / P1 | **미구현: 분석용 수집/정적 artifact 연결** | descriptor와 연관 파일 수집부터 구현하고 선정된 장치의 지원 read protocol/vendor backend를 추가. bounded IO·부분 수집·artifact hash/provenance·host 분석 연동 확인. 임의 firmware dump나 물리 memory 접근을 보편 지원으로 주장하지 않음 |
 | AS18 / P1 | **미구현: 장치 수명주기·IO 정리·진단** | unplug/replug·busy/access denied·timeout·worker crash·서비스 stop/restart 때 pending IO와 장치 handle/lease 정리. stale identity·다른 장치 재사용 거부. driver 설치/교체·장치 reset/write는 수행하지 않음 |
 
 AS01/AS12의 서비스 payload를 만들기 위해 기존 Client payload의 필수 파일 검사를 단순히 없애거나 모든 폴더를 허용하지 않는다. 역할을 명시한 계약·허용 파일·hash/ACL 검증을 유지한다. AS02는 승인 우회나 비인증 관리 API 추가를 의미하지 않는다.
+
+AS09 source의 기본 정책은 **demand-start 유지와 recovery 비활성화**다. 신규 provision 및 명시 restore가 만든 fixed-name service에 `none` action·non-crash recovery false·빈 command/reboot text를 명시하고 query로 다시 확인한다. restore는 일회성 maintenance의 STOPPED 검증 후 적용한다. bounded crash-only profile은 5초/30초/120초 재시작·마지막 `none`·24시간 무실패 reset 계약과 Win32 변환만 준비했으며 **SCM 활성화/CLI opt-in에는 연결하지 않는다**. 일회성 configure/reconcile/recover_sessions/remove가 crash 뒤 정상 Agent 실행으로 바뀌지 않도록 기본 recovery를 계속 끈다. 이미 queue된 SCM 재시작은 STOPPED 보고만으로 취소되지 않으므로 명시 disabled·durable startup gate·관리 전환/중지 orchestration을 갖춘 뒤에만 opt-in/auto-start를 연결해야 한다. 계약/Win32 변환·readback 실패 시험→보수적 provision/restore 연결→Windows compile/회귀→증거 기록 순서이며, 실제 SCM API 실행은 설치 금지 해제 전 수행하지 않는다.
 
 <a id="section-05"></a>
 
