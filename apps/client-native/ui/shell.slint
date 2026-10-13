@@ -1,0 +1,14 @@
+// Shell-level state pushed from Rust (src/slint_ui.rs).
+export struct ShellModel {
+    // 0 unregistered, 1 stopped, 2 connecting, 3 online, 4 failed/offline
+    agent-status: int,
+    service: bool,
+    // 0 none, 1 controller, 2 observer
+    role: int,
+    can-control: bool,
+    can-hide: bool,
+    pending-approvals: int,
+    device-id: string,
+    device-id-short: string,
+    state-root: string,
+}

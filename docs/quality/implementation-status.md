@@ -2814,3 +2814,27 @@ GUI 툴킷은 Iced에서 **Slint 1.16.x(소프트웨어 렌더러 기본)**로 �
 
 > [!NOTE]
 > 실행 중인 Agent·등록 상태가 없는 환경에서 확인했다. 실제 Agent 연결, 종료 시 Agent 정리, 승인 요청 표시는 2단계 이후 실기 확인 대상이다. `--state-dir`는 스테이징된 payload manifest가 필요해 단독 빌드로는 실행되지 않았다. 설치·서비스 등록·등록 상태 변경은 하지 않았고 `%LOCALAPPDATA%\RACP\native-client`도 생성되지 않았다. `racp-core` clippy 오류 3건과 Iced 화면 파일의 기존 rustfmt 실패(`views/status.rs` 줄 끝 공백)는 이번 범위 밖이다.
+
+### 2026-10-13 Slint 이전 2단계: Status 화면 — v0.1.31
+
+[ADR-0032](../adr/ADR-0032-native-client.md) 5절의 2단계를 구현했다. PATCH **0.1.30→0.1.31 한 번**, uv/Cargo lock을 갱신했다. 기본 빌드는 그대로 Iced이고 Slint 화면은 `slint-ui` feature로만 빌드된다.
+
+- **Status 화면** [status.slint](../../apps/client-native/ui/status.slint): 데모 디자인을 따르고 Agent가 보내는 값만 표시한다.
+  - 엔드포인트 상태 카드: 상태 배지, 상태 경로, Device·Gateway·작업 폴더·프로필, 로컬 상태 새로고침, Agent 시작·정지, 로컬 요청 취소, 서비스 모드의 현재 화면 연결·해제
+  - 지표 카드 4개(연결 시에만): 이벤트 순번·boot, 활성 작업 수, 대기 승인 수(승인 화면 이동), 정책 revision. 데모의 PID·가동 시간·"Guardian Ready"·"/ 32 Slots"처럼 근거 없는 값은 넣지 않았다.
+  - `.racp` 등록 폼: 경로 입력·확인, token 없는 미리보기(Gateway·만료·CA hash), 파일 SHA-256 자동 입력, 기본 작업 폴더, 실행 프로필 선택, pending 경고, 새 등록 제출. 경로를 바꾸면 미리보기와 hash를 지운다.
+  - 실행 중 작업 목록과 작업 취소, 제어 결과 기록(감사 로그)과 로그 비우기(화면 표시만 지우며 Agent 기록은 그대로)
+- **공통 계층**: [onboarding.rs](../../apps/client-native/src/onboarding.rs)에 `inspect_file`·`run_action`을 분리했다. 영수증 요약 [`completion_line`](../../apps/client-native/src/ui_model.rs)을 추가하고 Iced 감사 로그의 중복 구현을 이 함수로 바꿨다.
+- **컨트롤러** [slint_ui.rs](../../apps/client-native/src/slint_ui.rs): 등록·로컬 helper 실행·취소, 작업 취소 확인, 서비스 화면 연결 정리와 종료 순서를 Iced와 같은 규칙으로 옮겼다. 등록 정책의 제약 편집은 3단계에서 연결하며, 그전까지 현재 모델 제약을 사용한다.
+- 실기 확인 중 `IdentityItem` 라벨이 남는 폭을 차지해 경로 값이 화면 밖으로 밀리는 문제를 발견해 고쳤다.
+
+| 검사 | 결과 |
+|---|---|
+| `cargo check --locked`(기본·`slint-ui`), rustfmt(새 파일) | PASS |
+| clippy `--no-deps -D warnings` | 신규 오류 없음. 기존 `accessibility.rs` 2건·`native.rs` 1건 유지 |
+| inventory-check, version 단위 시험, `racp-core` connection 시험 | 114 ops·143 permissions·18 categories / 6 passed / 1 passed |
+| 실기(Windows 10 VM, 150% DPI, 빈 상태, 등록 없음) | 미등록 화면·한국어·키보드 한글 경로 입력·프로필 선택(UIA Toggle)·연결 파일 오류 안내(`CONNECTION_FILE_INVALID`)·로그 비우기·로컬 새로고침 PASS. 가짜 Gateway(`https://gateway.invalid:8765`)·가짜 token의 시험 파일로 미리보기와 SHA-256 자동 입력 PASS, token 미표시. 등록 제출은 하지 않았고 시험 파일은 삭제했다 |
+| 증거 | `dist/verification/client/0.1.31/slint-step2-20261013/` `status-unregistered-full.jpg`(SHA-256 `65af5052…ac59`), `status-enroll-preview.jpg`(`757041c5…9d13`) |
+
+> [!NOTE]
+> 실행 중인 Agent에 연결된 화면(지표 카드, 작업 목록, 작업 취소, Agent 정지, 감사 로그 항목)과 서비스 모드 화면 연결은 연결 가능한 Agent가 없어 실기 확인하지 않았다. 자동화 도구의 마우스 클릭과 `Ctrl+A`는 Slint 창에 안정적으로 전달되지 않아 UIA와 키보드 입력으로 확인했다. 도구가 긴 문자열을 클립보드로 붙여넣어 시험 중 사용자 클립보드가 덮어써졌다. 설치·서비스 등록·등록 상태 변경은 하지 않았고 `%LOCALAPPDATA%\RACP\native-client`도 생성되지 않았다.

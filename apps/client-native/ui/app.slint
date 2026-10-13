@@ -3,23 +3,11 @@
 import { Theme } from "theme.slint";
 import { Icon, Icons } from "icons.slint";
 import { Tag, Divider, Card, Button, NavItem, ScrollBar } from "widgets.slint";
+import { ShellModel } from "shell.slint";
+import { StatusView, StatusModel, ActivityRow, LogLine, EnrollPreview } from "status.slint";
 
-export { Theme }
+export { Theme, ShellModel, StatusModel, ActivityRow, LogLine, EnrollPreview }
 
-// Shell-level state pushed from Rust (src/slint_ui.rs).
-export struct ShellModel {
-    // 0 unregistered, 1 stopped, 2 connecting, 3 online, 4 failed/offline
-    agent-status: int,
-    service: bool,
-    // 0 none, 1 controller, 2 observer
-    role: int,
-    can-control: bool,
-    can-hide: bool,
-    pending-approvals: int,
-    device-id: string,
-    device-id-short: string,
-    state-root: string,
-}
 
 // --- Header ---
 
@@ -426,11 +414,29 @@ export component AppWindow inherits Window {
     in property <string> notice;
     in property <bool> quitting;
     in-out property <int> current-page: 0;
+    in property <StatusModel> status;
+    in property <[ActivityRow]> activity;
+    in property <[LogLine]> log-lines;
+    in property <EnrollPreview> preview;
+    in-out property <string> connection-path;
+    in-out property <string> connection-hash;
+    in-out property <string> workspace-draft;
+    in-out property <string> profile: "read_only";
 
     callback emergency-stop();
     callback hide-to-tray();
     callback quit();
     callback exit-anyway();
+    callback refresh-local();
+    callback start-agent();
+    callback cancel-local();
+    callback connect-desktop();
+    callback disconnect-desktop();
+    callback connection-path-edited(string);
+    callback inspect-connection();
+    callback enroll();
+    callback cancel-operation(int);
+    callback clear-log();
 
     title: (shell.service ? @tr("RACP Service Control") : @tr("RACP Native Client")) + " v" + root.version;
     icon: @image-url("../assets/app.png");
@@ -475,9 +481,28 @@ export component AppWindow inherits Window {
                             quitting: root.quitting;
                             exit-anyway => { root.exit-anyway(); }
                         }
-                        if root.current-page == 0: PendingView {
-                            title: @tr("Status");
-                            step: 2;
+                        if root.current-page == 0: StatusView {
+                            shell: root.shell;
+                            model: root.status;
+                            activity: root.activity;
+                            log-lines: root.log-lines;
+                            preview: root.preview;
+                            connection-path <=> root.connection-path;
+                            connection-hash <=> root.connection-hash;
+                            workspace-draft <=> root.workspace-draft;
+                            profile <=> root.profile;
+                            refresh-local => { root.refresh-local(); }
+                            start-agent => { root.start-agent(); }
+                            stop-agent => { root.emergency-stop(); }
+                            cancel-local => { root.cancel-local(); }
+                            connect-desktop => { root.connect-desktop(); }
+                            disconnect-desktop => { root.disconnect-desktop(); }
+                            connection-path-edited(value) => { root.connection-path-edited(value); }
+                            inspect-connection => { root.inspect-connection(); }
+                            enroll => { root.enroll(); }
+                            cancel-operation(index) => { root.cancel-operation(index); }
+                            clear-log => { root.clear-log(); }
+                            open-approvals => { root.current-page = 2; }
                         }
                         if root.current-page == 1: PendingView {
                             title: @tr("Permissions");

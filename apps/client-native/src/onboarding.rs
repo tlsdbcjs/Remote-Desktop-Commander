@@ -60,6 +60,10 @@ pub fn refresh() -> Task<Message> {
         Message::LocalInfo,
     )
 }
+/// Validates a `.racp` connection file and returns its token-free preview. Blocking.
+pub fn inspect_file(path: &str) -> Result<Value, String> {
+    racp_core::inspect_connection(std::path::Path::new(path), None).map_err(|e| e.to_string())
+}
 pub fn inspect(path: String) -> Task<Message> {
     if crate::control_target::service() {
         return Task::done(Message::ConnectionInfo(Err(
@@ -68,10 +72,7 @@ pub fn inspect(path: String) -> Task<Message> {
     }
     Task::perform(
         async move {
-            tokio::task::spawn_blocking(move || {
-                racp_core::inspect_connection(std::path::Path::new(&path), None)
-                    .map_err(|e| e.to_string())
-            })
+            tokio::task::spawn_blocking(move || inspect_file(&path))
             .await
             .map_err(|_| "LOCAL_STATE_FAILED".to_owned())?
         },
@@ -145,6 +146,24 @@ pub fn start_agent() -> Task<Message> {
         Task::done(Message::StartResult(Err("NATIVE_PLATFORM_DEFERRED".into())))
     }
 }
+/// Runs one local Agent helper command. Connection tokens stay inside the Agent helper.
+#[cfg(windows)]
+pub async fn run_action(
+    action: Action,
+    input: Value,
+    cancel: tokio_util::sync::CancellationToken,
+) -> Result<Value, String> {
+    let root = racp_core::state_schema::default_user_root().map_err(|e| e.to_string())?;
+    use racp_runtime::local_agent::LocalAgentCommand;
+    let command = match action {
+        Action::Enroll => LocalAgentCommand::Enroll,
+        Action::AdmitRuntime => LocalAgentCommand::AdmitRuntime,
+        Action::ConfigureRuntime => LocalAgentCommand::ConfigureRuntime,
+        Action::ConfigureSettings => LocalAgentCommand::ConfigureSettings,
+        Action::ConfigureLogin => LocalAgentCommand::ConfigureLogin,
+    };
+    racp_runtime::local_agent::invoke(command, input, &root, cancel).await
+}
 #[derive(Clone, Copy, Debug)]
 pub enum Action {
     Enroll,
@@ -167,19 +186,7 @@ pub fn action(
     #[cfg(windows)]
     {
         Task::perform(
-            async move {
-                let root =
-                    racp_core::state_schema::default_user_root().map_err(|e| e.to_string())?;
-                use racp_runtime::local_agent::LocalAgentCommand;
-                let command = match action {
-                    Action::Enroll => LocalAgentCommand::Enroll,
-                    Action::AdmitRuntime => LocalAgentCommand::AdmitRuntime,
-                    Action::ConfigureRuntime => LocalAgentCommand::ConfigureRuntime,
-                    Action::ConfigureSettings => LocalAgentCommand::ConfigureSettings,
-                    Action::ConfigureLogin => LocalAgentCommand::ConfigureLogin,
-                };
-                racp_runtime::local_agent::invoke(command, input, &root, cancel).await
-            },
+            run_action(action, input, cancel),
             move |result| Message::LocalAction(action, result),
         )
     }

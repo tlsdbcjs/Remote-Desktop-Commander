@@ -92,3 +92,141 @@ msgstr "정리 요청 없이 앱만 종료"
 
 msgid "This screen moves to the Slint client in migration step {}. Use the default (Iced) build until then."
 msgstr "이 화면은 이전 {}단계에서 Slint Client로 옮겨집니다. 그 전까지는 기본(Iced) 빌드를 사용하세요."
+
+msgid "A cancel receipt is not task termination. Check the task state and cleanup result separately."
+msgstr "취소 접수와 작업 종료는 별개입니다. 작업 상태와 정리 결과를 각각 확인하세요."
+
+msgid "A previous registration result is uncertain. A new registration is not retried until the pending state is checked."
+msgstr "이전 등록 결과가 불확실합니다. 기존 pending 상태를 확인하기 전에는 새 등록을 재시도하지 않습니다."
+
+msgid "Active control tasks"
+msgstr "활성 제어 작업"
+
+msgid "Agent process"
+msgstr "Agent 프로세스"
+
+msgid "Audit log"
+msgstr "감사 로그"
+
+msgid "Cancel local request"
+msgstr "로컬 요청 취소"
+
+msgid "Cancel task"
+msgstr "작업 취소"
+
+msgid "Cancellation receipts appear in the audit log."
+msgstr "취소 결과는 감사 로그에 표시됩니다."
+
+msgid "Changes are saved against this revision."
+msgstr "변경은 이 revision을 기준으로 저장됩니다."
+
+msgid "Clear log"
+msgstr "로그 비우기"
+
+msgid "Connect current desktop"
+msgstr "현재 화면 연결"
+
+msgid "Connected to the Agent over authenticated local IPC."
+msgstr "인증된 로컬 IPC로 Agent에 연결되어 있습니다."
+
+msgid "Connection file SHA-256 (filled by verification)"
+msgstr "연결 파일 SHA-256 (확인 시 자동 입력)"
+
+msgid "Connection file path (.racp)"
+msgstr "연결 파일 경로 (.racp)"
+
+msgid "Connection file verified. Only the Gateway, expiry and public CA hash are shown."
+msgstr "연결 파일을 확인했습니다. Gateway, 만료 시각, 공개 CA hash만 표시합니다."
+
+msgid "Connects the desktop of the signed-in user. Permission policy and per-request approval still apply, and the shared service keeps running after this app closes."
+msgstr "현재 로그인한 사용자의 화면을 연결합니다. 권한 정책과 요청별 승인은 그대로 적용되며, 앱을 종료해도 공유 서비스는 계속 실행됩니다."
+
+msgid "Control receipts (audit log)"
+msgstr "제어 결과 기록 (감사 로그)"
+
+msgid "Default workspace folder"
+msgstr "기본 작업 폴더"
+
+msgid "Disconnect current desktop"
+msgstr "현재 화면 연결 해제"
+
+msgid "Endpoint control status"
+msgstr "엔드포인트 제어 상태"
+
+msgid "Execution profile"
+msgstr "실행 프로필"
+
+msgid "Existing client settings and credentials are never imported. Verify the distributed connection file (.racp) first."
+msgstr "기존 Client 설정과 credential은 자동으로 가져오지 않습니다. 배포된 연결 파일(.racp)을 먼저 확인하세요."
+
+msgid "Expires"
+msgstr "만료"
+
+msgid "In-flight remote operations"
+msgstr "실행 중인 원격 작업"
+
+msgid "Last known operations (connection lost)"
+msgstr "마지막으로 확인한 작업 (연결 끊김)"
+
+msgid "No control receipts in this Agent session yet."
+msgstr "이 Agent 세션에는 아직 제어 결과 기록이 없습니다."
+
+msgid "Not online"
+msgstr "오프라인"
+
+msgid "Online"
+msgstr "온라인"
+
+msgid "Open approvals"
+msgstr "승인 화면 열기"
+
+msgid "Pending approval requests"
+msgstr "대기 중인 승인 요청"
+
+msgid "Policy revision"
+msgstr "정책 revision"
+
+msgid "Refresh local status"
+msgstr "로컬 상태 새로고침"
+
+msgid "Register this PC with a connection file (.racp) to start."
+msgstr "연결 파일(.racp)로 이 PC를 등록하면 시작할 수 있습니다."
+
+msgid "Register this PC"
+msgstr "이 PC 등록"
+
+msgid "Registration uses the current Permissions selection. The initial selection denies everything."
+msgstr "등록에는 권한 탭의 현재 선택을 사용합니다. 초기 선택은 모두 거부입니다."
+
+msgid "Service control path"
+msgstr "서비스 제어 경로"
+
+msgid "Service control role: Controller"
+msgstr "서비스 제어 권한: 제어"
+
+msgid "Service control role: Observer (read-only)"
+msgstr "서비스 제어 권한: 조회 전용 (변경 불가)"
+
+msgid "Shows up to 16 recent receipts. A lost connection, Agent restart or missing record does not mean cleanup succeeded."
+msgstr "최근 최대 16개를 표시합니다. 연결 끊김, Agent 재시작, 기록 누락은 정리 성공을 뜻하지 않습니다."
+
+msgid "Start Agent"
+msgstr "Agent 시작"
+
+msgid "State path"
+msgstr "상태 저장 경로"
+
+msgid "Stop Agent"
+msgstr "Agent 정지"
+
+msgid "Submit new registration"
+msgstr "새 등록 제출"
+
+msgid "The Agent is not connected. Start the Agent to connect."
+msgstr "Agent가 연결되어 있지 않습니다. Agent를 시작하면 연결됩니다."
+
+msgid "Verify file"
+msgstr "연결 파일 확인"
+
+msgid "Waiting for the service connection."
+msgstr "서비스 연결을 기다리는 중입니다."

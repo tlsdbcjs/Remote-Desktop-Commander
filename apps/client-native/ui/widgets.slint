@@ -432,3 +432,45 @@ export component ScrollBar inherits Rectangle {
         }
     }
 }
+
+// Single-line text field with a placeholder and focus outline.
+export component TextField inherits Rectangle {
+    in property <string> label;
+    in-out property <string> text <=> input.text;
+    in property <bool> mono: false;
+    in property <bool> enabled: true;
+    callback edited(string);
+    height: 36px;
+    background: Theme.well-bg;
+    border-radius: Theme.r-lg;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.indigo-500 : Theme.line-strong;
+    opacity: enabled ? 1 : 0.6;
+    animate border-color { duration: Theme.t-fast; }
+    forward-focus: input;
+
+    input := TextInput {
+        x: 12px;
+        width: parent.width - 24px;
+        height: parent.height;
+        vertical-alignment: center;
+        single-line: true;
+        enabled: root.enabled;
+        font-family: root.mono ? Theme.mono : Theme.sans;
+        font-size: Theme.fs-xs;
+        color: Theme.text-200;
+        selection-background-color: Theme.indigo-600;
+        accessible-label: root.label;
+        edited => { root.edited(self.text); }
+    }
+    if input.text == "": Text {
+        x: 12px;
+        width: parent.width - 24px;
+        height: parent.height;
+        text: root.label;
+        font-size: Theme.fs-xs;
+        color: Theme.text-500;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+}

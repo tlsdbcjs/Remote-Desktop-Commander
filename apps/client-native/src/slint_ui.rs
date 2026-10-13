@@ -1,4 +1,5 @@
-//! Slint frontend (ADR-0032), migration step 1: window, tray, Agent state feed and lifecycle.
+//! Slint frontend (ADR-0032). Step 1: window, tray, Agent state feed and lifecycle.
+//! Step 2: Status view (registration, Agent start/stop, metrics, operations, receipts).
 //! The window is presentation only. All state lives in `Controller` on the UI thread, and
 //! background work reports back through `post`, mirroring the Iced `update` rules.
 slint::include_modules!();
@@ -6,23 +7,27 @@ slint::include_modules!();
 use crate::{
     ipc::Feed,
     native::{Shell, ShellEvent},
-    onboarding::LocalInfo,
+    onboarding::{Action, LocalInfo},
     ui_model::UiModel,
 };
 use racp_contract::{
     local_ipc::{AgentStatus, ControlCommand, ControlReply, ControlResult, StateChange},
     service_scope::ControllerRole,
 };
-use slint::{CloseRequestResponse, ComponentHandle};
-use std::{cell::RefCell, sync::Arc};
+use slint::{CloseRequestResponse, ComponentHandle, ModelRc, VecModel};
+use std::{cell::RefCell, collections::BTreeSet, rc::Rc, sync::Arc};
+use tokio_util::sync::CancellationToken;
 
 /// Results that background tasks deliver to the UI thread.
 enum Msg {
     Feed(Feed),
     Local(Result<LocalInfo, String>),
+    Connection(Result<serde_json::Value, String>),
+    LocalAction(Action, Result<serde_json::Value, String>),
     Started(Result<serde_json::Value, String>),
     Reply(Result<ControlReply, String>),
     ExitCheck(Result<bool, String>),
+    DesktopFinished(Result<(), String>),
     Shell(ShellEvent),
 }
 
@@ -35,6 +40,15 @@ struct Controller {
     local: Option<LocalInfo>,
     notice: Option<String>,
     state_root: String,
+    state_root_full: String,
+    connection_preview: Option<serde_json::Value>,
+    local_cancel: Option<CancellationToken>,
+    desktop_cancel: Option<CancellationToken>,
+    desktop_cleanup_failed: bool,
+    /// Receipts the user cleared from the audit log view. The Agent history is unchanged.
+    cleared_receipts: BTreeSet<String>,
+    activity: Rc<VecModel<ActivityRow>>,
+    log_lines: Rc<VecModel<LogLine>>,
     can_hide: bool,
     quitting: bool,
     starting: bool,
@@ -76,6 +90,10 @@ pub fn run(shell: Option<Arc<Shell>>, auto_start: bool) -> Result<(), String> {
     }
     let window = AppWindow::new().map_err(|_| "GUI_RENDERER_OR_WINDOW_FAILED".to_owned())?;
     window.set_version(racp_contract::VERSION.into());
+    let activity = Rc::new(VecModel::default());
+    let log_lines = Rc::new(VecModel::default());
+    window.set_activity(ModelRc::from(activity.clone()));
+    window.set_log_lines(ModelRc::from(log_lines.clone()));
     wire(&window);
 
     let receiver = shell.as_ref().map(|shell| shell.receiver.clone());
@@ -92,6 +110,16 @@ pub fn run(shell: Option<Arc<Shell>>, auto_start: bool) -> Result<(), String> {
         local: None,
         notice: None,
         state_root: state_root_label(),
+        state_root_full: crate::control_target::root()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|e| e.to_string()),
+        connection_preview: None,
+        local_cancel: None,
+        desktop_cancel: None,
+        desktop_cleanup_failed: false,
+        cleared_receipts: BTreeSet::new(),
+        activity,
+        log_lines,
         can_hide,
         quitting: false,
         starting: false,
@@ -142,6 +170,56 @@ fn wire(window: &AppWindow) {
     window.on_exit_anyway(|| {
         let _ = slint::quit_event_loop();
     });
+    window.on_refresh_local(|| {
+        with(|c| c.refresh_local());
+    });
+    window.on_start_agent(|| {
+        with(|c| {
+            c.start_agent();
+            c.render();
+        });
+    });
+    window.on_cancel_local(|| {
+        with(|c| {
+            if let Some(cancel) = &c.local_cancel {
+                cancel.cancel();
+            }
+        });
+    });
+    window.on_connect_desktop(|| {
+        with(|c| c.connect_desktop());
+    });
+    window.on_disconnect_desktop(|| {
+        with(|c| c.disconnect_desktop());
+    });
+    window.on_connection_path_edited(|_| {
+        with(|c| {
+            // A different file invalidates the verified preview and its hash.
+            c.connection_preview = None;
+            c.window.set_connection_hash("".into());
+            c.render();
+        });
+    });
+    window.on_inspect_connection(|| {
+        with(|c| c.inspect_connection());
+    });
+    window.on_enroll(|| {
+        with(|c| c.enroll());
+    });
+    window.on_cancel_operation(|index| {
+        with(|c| c.cancel_operation(index));
+    });
+    window.on_clear_log(|| {
+        with(|c| {
+            if let Some(snapshot) = &c.model.snapshot {
+                for receipt in &snapshot.recent_control_results {
+                    c.cleared_receipts
+                        .insert(crate::ui_model::completion_line(receipt).0);
+                }
+            }
+            c.render();
+        });
+    });
     window.window().on_close_requested(|| {
         with(|c| {
             if c.can_hide {
@@ -169,6 +247,10 @@ fn state_root_label() -> String {
     parts.into_iter().rev().collect::<Vec<_>>().join("\\")
 }
 
+fn is_cancellable_state(state: &str) -> bool {
+    matches!(state, "ACCEPTED" | "DISPATCHED" | "RUNNING" | "RECONCILING")
+}
+
 impl Controller {
     fn service(&self) -> bool {
         crate::control_target::service()
@@ -178,14 +260,32 @@ impl Controller {
         !self.service() || !self.model.needs_resync && self.role == Some(ControllerRole::Controller)
     }
 
+    fn registered(&self) -> bool {
+        self.local.as_ref().is_some_and(|info| info.state.is_some())
+    }
+
+    fn registration_pending(&self) -> bool {
+        self.local
+            .as_ref()
+            .is_some_and(|info| info.registration_pending)
+    }
+
     fn handle(&mut self, msg: Msg) {
         match msg {
             Msg::Feed(Feed::Snapshot(snapshot, role)) => {
                 self.role = Some(role);
+                if self
+                    .model
+                    .snapshot
+                    .as_ref()
+                    .is_some_and(|old| old.boot_id != snapshot.boot_id)
+                {
+                    self.cleared_receipts.clear();
+                }
                 self.tray_status(u32::from(snapshot.status == AgentStatus::Online));
                 self.model.replace_snapshot(snapshot);
                 self.tray_control();
-                if self.quitting {
+                if self.quitting && self.local_cancel.is_none() {
                     self.send(ControlCommand::Stop);
                 }
             }
@@ -200,7 +300,7 @@ impl Controller {
                 match &event.change {
                     StateChange::CancelFinished { .. } => {
                         self.notice = Some(
-                            "작업 취소 결과를 받았습니다. 상태 화면에서 정리 결과를 확인하세요."
+                            "작업 취소 결과를 받았습니다. 감사 로그에서 정리 결과를 확인하세요."
                                 .into(),
                         );
                     }
@@ -243,11 +343,23 @@ impl Controller {
                 self.model.needs_resync = true;
                 self.tray_status(0);
                 self.tray_control();
-                if self.quitting {
+                if self.quitting && self.local_cancel.is_none() {
                     self.exit_check(true);
                 }
             }
             Msg::Local(Ok(info)) => {
+                if let Some(state) = &info.state {
+                    self.window
+                        .set_workspace_draft(state.workspace.display().to_string().into());
+                    self.window.set_profile(state.profile.as_str().into());
+                }
+                if self.model.needs_resync {
+                    if let Some(policy) = &info.policy {
+                        self.model.grants.extend(policy.grants.clone());
+                        self.model.disabled_categories = policy.disabled_categories.clone();
+                        self.model.constraints = Some(policy.constraints.clone());
+                    }
+                }
                 let start = self.auto_start && info.state.is_some() && !info.registration_pending;
                 self.auto_start = false;
                 self.local = Some(info);
@@ -256,6 +368,59 @@ impl Controller {
                 }
             }
             Msg::Local(Err(code)) => self.notice = Some(code),
+            Msg::Connection(Ok(info)) => {
+                self.window
+                    .set_connection_hash(info["file_sha256"].as_str().unwrap_or("").into());
+                self.connection_preview = Some(info);
+                self.notice = None;
+            }
+            Msg::Connection(Err(code)) => {
+                self.connection_preview = None;
+                self.notice = Some(code);
+            }
+            Msg::LocalAction(action, result) => {
+                self.local_cancel = None;
+                self.notice = Some(match result {
+                    Ok(value) => match action {
+                        Action::Enroll => format!(
+                            "새 등록 완료: {}",
+                            value["device_id"].as_str().unwrap_or("")
+                        ),
+                        Action::AdmitRuntime => format!(
+                            "런타임 승인 완료: {} — 실행 선택은 별도로 저장합니다.",
+                            value["manifest_sha256"].as_str().unwrap_or("")
+                        ),
+                        Action::ConfigureRuntime => {
+                            "런타임 설정 저장 완료. 다음 Agent 시작부터 적용됩니다.".into()
+                        }
+                        Action::ConfigureSettings => format!(
+                            "설정 revision {} 저장 완료 — Agent를 다시 시작하세요.",
+                            value["revision"]
+                        ),
+                        Action::ConfigureLogin => format!(
+                            "로그인 시작: {} · 소유 확인: {} · 미확정 변경: {}",
+                            if value["enabled"] == true {
+                                "등록됨"
+                            } else {
+                                "해제됨"
+                            },
+                            value["owned"],
+                            value["pending"]
+                        ),
+                    },
+                    Err(code) => {
+                        format!("로컬 요청: {code}. 결과가 불확실하면 상태를 새로 확인하세요.")
+                    }
+                });
+                if matches!(action, Action::Enroll) {
+                    self.connection_preview = None;
+                }
+                if self.quitting {
+                    self.exit_check(false);
+                } else {
+                    self.refresh_local();
+                }
+            }
             Msg::Started(result) => {
                 self.starting = false;
                 let spawned = result.as_ref().is_ok_and(|value| value["spawned"] == true);
@@ -298,6 +463,19 @@ impl Controller {
                 self.notice = Some(format!("종료 확인: {code}"));
                 self.show();
             }
+            Msg::DesktopFinished(result) => {
+                self.desktop_cancel = None;
+                self.desktop_cleanup_failed = result.as_ref().is_err_and(|error| {
+                    error.contains("CLEANUP_FAILED") || error.contains("CLEANUP_UNKNOWN")
+                });
+                self.notice = Some(match result {
+                    Ok(()) => "현재 사용자 화면 연결을 정리했습니다.".into(),
+                    Err(error) => format!("현재 사용자 화면 연결: {error}"),
+                });
+                if self.quitting && !self.desktop_cleanup_failed {
+                    let _ = slint::quit_event_loop();
+                }
+            }
             Msg::Shell(ShellEvent::Show) => self.show(),
             Msg::Shell(ShellEvent::StopAgent) => self.stop(),
             Msg::Shell(ShellEvent::Quit) => self.quit(),
@@ -327,7 +505,8 @@ impl Controller {
         if self.service()
             || !self.model.needs_resync
             || self.starting
-            || self.local.as_ref().is_none_or(|info| info.state.is_none())
+            || self.local_cancel.is_some()
+            || !self.registered()
         {
             return;
         }
@@ -340,6 +519,138 @@ impl Controller {
                 .and_then(|result| result);
             post(Msg::Started(result));
         });
+    }
+
+    fn inspect_connection(&mut self) {
+        if self.service() {
+            return;
+        }
+        let path = self.window.get_connection_path().to_string();
+        self.runtime.spawn(async move {
+            let result =
+                tokio::task::spawn_blocking(move || crate::onboarding::inspect_file(&path))
+                    .await
+                    .map_err(|_| "LOCAL_STATE_FAILED".to_owned())
+                    .and_then(|result| result);
+            post(Msg::Connection(result));
+        });
+    }
+
+    fn enroll(&mut self) {
+        if self.service()
+            || self.local_cancel.is_some()
+            || self.registered()
+            || self.registration_pending()
+        {
+            return;
+        }
+        if self.connection_preview.is_none() {
+            self.notice = Some("연결 파일을 먼저 확인하세요.".into());
+            self.render();
+            return;
+        }
+        // Constraint editing moves in step 3; until then the current model constraints apply.
+        let mut policy = racp_core::state_schema::NativePolicy::deny_all();
+        policy.grants = self.model.grants.clone();
+        policy.disabled_categories = self.model.disabled_categories.clone();
+        if let Some(constraints) = &self.model.constraints {
+            policy.constraints = constraints.clone();
+        }
+        let named: Vec<racp_core::WorkspaceSpec> = Vec::new();
+        let input = serde_json::json!({
+            "connection_file": self.window.get_connection_path().as_str(),
+            "connection_sha256": self.window.get_connection_hash().as_str(),
+            "workspace": self.window.get_workspace_draft().as_str(),
+            "allowed_workspaces": named,
+            "profile": self.window.get_profile().as_str(),
+            "policy": policy,
+        });
+        self.local_action(Action::Enroll, input);
+    }
+
+    fn local_action(&mut self, action: Action, input: serde_json::Value) {
+        if self.local_cancel.is_some() {
+            return;
+        }
+        let cancel = CancellationToken::new();
+        self.local_cancel = Some(cancel.clone());
+        self.notice = Some("로컬 요청 처리 중".into());
+        self.runtime.spawn(async move {
+            let result = crate::onboarding::run_action(action, input, cancel).await;
+            post(Msg::LocalAction(action, result));
+        });
+        self.render();
+    }
+
+    fn cancel_operation(&mut self, index: i32) {
+        let target = self.model.snapshot.as_ref().and_then(|snapshot| {
+            let position = snapshot.activity.len().checked_sub(1 + index as usize)?;
+            let item = snapshot.activity.get(position)?;
+            Some((
+                snapshot.boot_id.clone(),
+                item.operation_id.clone(),
+                item.request_id.clone(),
+                item.state.clone(),
+            ))
+        });
+        let Some((boot_id, operation_id, target_request_id, state)) = target else {
+            return;
+        };
+        if !self.can_control()
+            || self.model.needs_resync
+            || self.quitting
+            || operation_id.is_empty()
+            || target_request_id.is_empty()
+            || !is_cancellable_state(&state)
+        {
+            self.notice =
+                Some("작업 상태가 변경되었습니다. 현재 Agent 상태를 다시 확인하세요.".into());
+            self.render();
+            return;
+        }
+        self.send(ControlCommand::CancelOperation {
+            boot_id,
+            operation_id,
+            target_request_id,
+        });
+    }
+
+    fn connect_desktop(&mut self) {
+        if !self.service()
+            || !self.can_control()
+            || self.desktop_cancel.is_some()
+            || self.quitting
+            || self.desktop_cleanup_failed
+        {
+            return;
+        }
+        let root = match crate::control_target::root() {
+            Ok(root) => root,
+            Err(error) => {
+                self.notice = Some(error.to_string());
+                self.render();
+                return;
+            }
+        };
+        let cancel = CancellationToken::new();
+        self.desktop_cancel = Some(cancel.clone());
+        self.notice =
+            Some("현재 사용자 화면 연결 중 — 상태는 Agent의 세션 목록에서 확인합니다.".into());
+        self.runtime.spawn(async move {
+            let result = racp_runtime::providers::desktop::run_service_session(&root, cancel)
+                .await
+                .map_err(|error| error.to_string());
+            post(Msg::DesktopFinished(result));
+        });
+        self.render();
+    }
+
+    fn disconnect_desktop(&mut self) {
+        if let Some(cancel) = &self.desktop_cancel {
+            cancel.cancel();
+            self.notice = Some("현재 사용자 화면 연결과 입력 정리를 기다립니다.".into());
+            self.render();
+        }
     }
 
     fn send(&mut self, command: ControlCommand) {
@@ -375,12 +686,25 @@ impl Controller {
     fn quit(&mut self) {
         self.quitting = true;
         if self.service() {
-            // Step 1 offers no service desktop session, so nothing needs cleanup here.
-            let _ = slint::quit_event_loop();
+            if self.desktop_cancel.is_some() {
+                self.disconnect_desktop();
+            } else if self.desktop_cleanup_failed {
+                self.notice = Some(
+                    "화면 입력 정리를 확인하지 못했습니다. 정리 결과를 확인한 뒤 종료하세요."
+                        .into(),
+                );
+                self.show();
+            } else {
+                let _ = slint::quit_event_loop();
+            }
+            self.render();
             return;
         }
         if self.starting {
             self.notice = Some("Agent 시작 결과를 확인한 뒤 종료합니다.".into());
+        } else if let Some(cancel) = &self.local_cancel {
+            cancel.cancel();
+            self.notice = Some("로컬 요청 정리 후 종료합니다.".into());
         } else if self.model.needs_resync {
             self.exit_check(false);
         } else {
@@ -446,7 +770,8 @@ impl Controller {
 
     fn render(&self) {
         let snapshot = self.model.snapshot.as_ref();
-        let registered = self.local.as_ref().is_some_and(|info| info.state.is_some());
+        let registered = self.registered();
+        let connected = snapshot.is_some() && !self.model.needs_resync;
         let agent_status = match snapshot {
             Some(snapshot) if !self.model.needs_resync => match snapshot.status {
                 AgentStatus::Online => 3,
@@ -459,15 +784,11 @@ impl Controller {
             _ if registered || self.local.is_none() => 1,
             _ => 0,
         };
-        let device_id = snapshot
-            .and_then(|s| s.identity.as_ref())
+        let local_state = self.local.as_ref().and_then(|info| info.state.as_ref());
+        let identity = snapshot.and_then(|s| s.identity.as_ref());
+        let device_id = identity
             .map(|identity| identity.device_id.clone())
-            .or_else(|| {
-                self.local
-                    .as_ref()
-                    .and_then(|info| info.state.as_ref())
-                    .map(|state| state.device_id.clone())
-            })
+            .or_else(|| local_state.map(|state| state.device_id.clone()))
             .unwrap_or_default();
         let device_id_short = if device_id.chars().count() > 16 {
             device_id.chars().take(16).collect::<String>() + "…"
@@ -476,6 +797,7 @@ impl Controller {
         } else {
             device_id.clone()
         };
+        let can_control = self.can_control() && !self.model.needs_resync;
         self.window.set_shell(ShellModel {
             agent_status,
             service: self.service(),
@@ -484,12 +806,131 @@ impl Controller {
                 Some(ControllerRole::Observer) => 2,
                 None => 0,
             },
-            can_control: self.can_control() && !self.model.needs_resync,
+            can_control,
             can_hide: self.can_hide,
             pending_approvals: snapshot.map_or(0, |s| s.pending_approvals.len() as i32),
-            device_id: device_id.into(),
+            device_id: device_id.as_str().into(),
             device_id_short: device_id_short.into(),
             state_root: self.state_root.as_str().into(),
+        });
+
+        let active_count = snapshot.map_or(0, |s| {
+            s.activity
+                .iter()
+                .filter(|a| matches!(a.state.as_str(), "RUNNING" | "DISPATCHED" | "ACCEPTED"))
+                .count() as i32
+        });
+        let busy_lifecycle = snapshot.is_some_and(|s| {
+            matches!(
+                s.status,
+                AgentStatus::Draining | AgentStatus::Stopped | AgentStatus::Failed
+            )
+        });
+        self.window.set_status(StatusModel {
+            connected,
+            sequence: snapshot.map_or(0, |s| s.sequence).to_string().into(),
+            boot_id: snapshot
+                .map(|s| s.boot_id.chars().take(12).collect::<String>())
+                .unwrap_or_default()
+                .into(),
+            policy_revision: snapshot.map_or(0, |s| s.policy_revision).to_string().into(),
+            active_count,
+            pending_count: snapshot.map_or(0, |s| s.pending_approvals.len() as i32),
+            activity_stale: self.model.needs_resync,
+            registered: registered || self.service(),
+            registration_pending: self.registration_pending(),
+            device_id: device_id.into(),
+            gateway: identity
+                .map(|identity| identity.gateway_origin.clone())
+                .or_else(|| local_state.map(|state| state.gateway.clone()))
+                .unwrap_or_default()
+                .into(),
+            workspace: local_state
+                .map(|state| state.workspace.display().to_string())
+                .unwrap_or_default()
+                .into(),
+            profile: local_state
+                .map(|state| state.profile.clone())
+                .unwrap_or_default()
+                .into(),
+            state_root: self.state_root_full.as_str().into(),
+            can_start: !self.service()
+                && registered
+                && !self.registration_pending()
+                && self.model.needs_resync
+                && !self.starting
+                && self.local_cancel.is_none(),
+            can_stop: can_control && !self.quitting,
+            local_busy: self.local_cancel.is_some(),
+            can_enroll: !self.service()
+                && !registered
+                && !self.registration_pending()
+                && self.local_cancel.is_none(),
+            can_connect_desktop: self.service()
+                && can_control
+                && self.desktop_cancel.is_none()
+                && !self.quitting
+                && !self.desktop_cleanup_failed,
+            desktop_connected: self
+                .desktop_cancel
+                .as_ref()
+                .is_some_and(|token| !token.is_cancelled()),
+        });
+
+        let rows: Vec<ActivityRow> = snapshot
+            .map(|s| {
+                s.activity
+                    .iter()
+                    .rev()
+                    .map(|item| ActivityRow {
+                        operation_id: item.operation_id.as_str().into(),
+                        operation: item.operation.as_str().into(),
+                        state: item.state.as_str().into(),
+                        request_id: item.request_id.as_str().into(),
+                        cancellable: can_control
+                            && !self.quitting
+                            && !busy_lifecycle
+                            && !item.operation_id.is_empty()
+                            && !item.request_id.is_empty()
+                            && is_cancellable_state(&item.state),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.activity.set_vec(rows);
+
+        let lines: Vec<LogLine> = snapshot
+            .map(|s| {
+                s.recent_control_results
+                    .iter()
+                    .rev()
+                    .map(crate::ui_model::completion_line)
+                    .filter(|(receipt, _, _)| !self.cleared_receipts.contains(receipt))
+                    .map(|(receipt, message, tone)| LogLine {
+                        receipt: receipt.into(),
+                        message: message.into(),
+                        tone,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.log_lines.set_vec(lines);
+
+        let preview = self.connection_preview.as_ref();
+        self.window.set_preview(EnrollPreview {
+            shown: preview.is_some(),
+            gateway: preview
+                .and_then(|info| info["gateway"].as_str())
+                .unwrap_or("")
+                .into(),
+            expires: preview
+                .and_then(|info| info["expires_at"].as_str())
+                .unwrap_or("")
+                .into(),
+            ca_hash: preview
+                .and_then(|info| info["ca_sha256"].as_str())
+                .unwrap_or("없음")
+                .into(),
         });
         self.window
             .set_notice(self.notice.clone().unwrap_or_default().into());
