@@ -1,7 +1,7 @@
 # RACP 구현 작업 및 검증 현황 (Implementation Status)
 
 > **Document ID**: `DOC-QA-STATUS`\
-> **Status**: Active · **Target Version**: v0.1.33\
+> **Status**: Active · **Target Version**: v0.1.34\
 > **Last Updated**: 2026-10-13 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
@@ -2891,3 +2891,16 @@ main 통합 보류와 관계없이 미구현 Agent source 작업을 계속했다
 | 정적 검사 | [inventory](../../dist/verification/agent/0.1.33/hardware-foundation-20261013/inventory.log) **114 operations / 143 permissions / 18 categories**, frozen 100 유지. scoped Rust fmt/git diff check PASS. 위 Python 11/Ruff/mypy 결과 유지 |
 
 최종 EXE **22,411,264 bytes**, SHA-256 **`23d759f9657c9080e3eb117b79089e9be7192ec82a040b9f7e073060686a6344`**; payload manifest **`5c0de5e1f10b49ab961bd2973d9a468f974c6ef74176ef6f324782697cb76484`**; input digest **`a3a0e6a349f4af6e65a9a4c6d4d998ca3af7448ae48041ac234b185cc736c029`**다. baseline `dc70b7e`와 당시 dirty source, unsigned/non-published 및 xtask tests=`not_run_by_xtask`를 기록했다. 최종 E2E hash는 manifest와 같고 harness SHA `fd9b319d459948f5fed9dc5b8b6b8ed6de46e249392c8f4191ccd9fa93d65a1e`다. main 통합 없이 이 묶음을 보존하고 bounded discovery worker·RPC/policy 및 AS08/AS09 등 다음 독립 source 범위를 계속 진행한다. 실제 장치/driver/SCM 인수와 AS07 간헐 signal 원인·독립 review는 계속 미완료다.
+
+
+### 2026-10-13 AS16 Windows 탐색 worker·AS07 공통 helper 종료 증명 — v0.1.34
+
+v0.1.33의 source 기반을 `aed05cf`로 보존한 뒤 main 통합 없이 다음 범위를 이어갔다. [Windows worker](../../crates/racp-runtime/src/platform/windows/hardware/worker.rs)는 [Agent 고정 mode](../../apps/agent/src/main.rs)와 [공통 contained helper](../../crates/racp-runtime/src/providers/worker.rs)에 연결했다. 현재 Agent EXE만 실행하고 Job/memory 256 MiB/timeout/cancel·stdout 최대 4 MiB를 적용한다. child input 128 bytes, timeout 1–30000 ms 및 private row 256개 제한·중복/unknown fields·raw path/driver/executable override 거부를 검사한다. raw locators는 worker-private IPC DTO이며 Gateway response/IO authority로 쓰지 않는다. core의 완전한 snapshot validator를 재사용한다. 기본 startup/NativeProviders/RPC에는 연결하지 않았고 실제 SDK worker 탐색은 실행하지 않았다.
+
+AS07의 공통 helper는 cleanup이 Job-empty만 검사해 parent의 비동기 종료 signal이나 poll 오류를 확인하지 못하던 경로를 보완했다. 동일 5초 budget에 parent signal과 tree-empty를 함께 요구하고 query 오류는 CLEANUP_UNKNOWN이다. pre-cancel/deadline에는 child를 만들지 않으며, frame 처리 직후에도 deadline/cancel을 재확인한다. 기존 worker stdout/stderr 16 KiB 제한은 유지하고 hardware snapshot stdout만 4 MiB로 제한한다. [cleanup RED](../../dist/verification/agent/0.1.34/hardware-worker-20261013/cleanup-red.log) **0 PASS / 2 FAIL**→[worker GREEN](../../dist/verification/agent/0.1.34/hardware-worker-20261013/worker-green.log) **4 PASS**를 확인했다. 실제 stalled driver를 만들지 않고 parent signal 미확정/Job empty·query 실패·정상 종료의 모델로 gate를 검증했다. 새 Agent argument 시험 1개는 mode/고정 argv 검증만 하며 OS action은 없다.
+
+PATCH **0.1.33→0.1.34 한 번**, uv/workspace/독립 analysis-host lock local version을 동기화했다. 외부 pin/공개 operation·permission은 변경하지 않았다. no-install/SCM/device IO/driver 변경 금지와 GUI source 보존을 유지한다. actual worker containment/SetupAPI 데이터·불확실한 native helper의 durable recovery·RPC/policy/notification/native IO 연결 및 기존 간헐 process signal 원인은 별도 인수다.
+
+최종 [전체 Rust](../../dist/verification/agent/0.1.34/hardware-worker-20261013/rust-workspace-fixture.log)는 **152 PASS / 0 FAIL / 5 fixture IGNORE**다. Python version 11/Ruff/mypy 98 PASS와 [inventory](../../dist/verification/agent/0.1.34/hardware-worker-20261013/inventory.log) 114 operations/143 permissions/18 categories를 확인했다. 실패 재실행도 보존했다: [첫 검사](../../dist/verification/agent/0.1.34/hardware-worker-20261013/rust-workspace-final.log)는 동시에 실행한 xtask.exe 파일 잠금으로 compile 실패, [다음 검사](../../dist/verification/agent/0.1.34/hardware-worker-20261013/rust-workspace-retry.log)는 Chromium fixture 환경변수 누락으로 Browser 9 PASS/11 FAIL이었다. fixture 지정 최종 실행은 통과했다. package fmt가 이전 source의 lib.rs/providers/mod.rs 모듈 순서 두 곳을 발견했으며 다음 묶음에서 정리한다. git diff check PASS.
+
+[stage-a](../../dist/verification/agent/0.1.34/hardware-worker-20261013/stage.log)는 compile 후 SetupAPI import admission 부재로 실패했다. staging.quarantine을 보존하고 [PE verifier](../../xtask/src/package/imports.rs)에 정확한 setupapi.dll만 추가했다. 유사 DLL/vendor/WinUSB/dynamic CRT 거부 시험도 통과했다. 같은 버전의 [stage-b](../../dist/verification/agent/0.1.34/hardware-worker-20261013/stage-b.log)·[verify-b](../../dist/verification/agent/0.1.34/hardware-worker-20261013/verify-b.log)는 GUI-free 3파일/hash/target 검사 PASS다. [최종 EXE E2E](../../dist/verification/agent/0.1.34/hardware-worker-e2e-20261013-b/results.json) **21 PASS**; EXE **22,432,768 bytes**, SHA-256 **214c0d0f32d6a40510f8c206be0736bc9fb5ff90beb9083094c45426eca205b5**; payload manifest **0122abf23f12def89dbcfe1dc40f7842b11134bf896779711db8cf179a777d16**; source input **facee8a00394d9a8d48ea327dfd10922a95dce5a714c83a6a248241303d255bc**, baseline aed05cf/dirty source다. unsigned/non-published이며 실제 SDK 탐색/장치 IO/SCM 인수를 포함하지 않는다. checkpoint 이후 main을 기다리지 않고 helper 초기 실패 정리와 frame 완전 수신을 이어서 보완한다.

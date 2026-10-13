@@ -1,5 +1,6 @@
 //! Explicit-call USB PnP discovery only. Not installed in NativeProviders and
 //! never called at Agent startup. No CreateFile/driver IO/install/reset/transfer.
+pub mod worker;
 use racp_contract::{hardware::MAX_HARDWARE_INTERFACES, RacpError};
 use racp_core::hardware::ObservedInterface;
 use std::time::Instant;

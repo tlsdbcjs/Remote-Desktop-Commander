@@ -116,48 +116,7 @@ pub fn inspect(file: &mut File) -> Result<Vec<String>> {
             return Err("PE DLL name unterminated".into());
         }
         let name = String::from_utf8(name)?.to_ascii_lowercase();
-        let system = [
-            "kernel32.dll",
-            "ntdll.dll",
-            "advapi32.dll",
-            "user32.dll",
-            "gdi32.dll",
-            "shell32.dll",
-            "ole32.dll",
-            "combase.dll",
-            // Native AccessKit/UIA provider: UiaReturnRawElementProvider is
-            // exported by this Windows system DLL (uiautomationcoreapi.h).
-            "uiautomationcore.dll",
-            "oleaut32.dll",
-            "ws2_32.dll",
-            "iphlpapi.dll",
-            "version.dll",
-            "wtsapi32.dll",
-            "pdh.dll",
-            "powrprof.dll",
-            "netapi32.dll",
-            "secur32.dll",
-            "psapi.dll",
-            "wevtapi.dll",
-            "bcryptprimitives.dll",
-            "crypt32.dll",
-            "bcrypt.dll",
-            "imm32.dll",
-            "dwmapi.dll",
-            "uxtheme.dll",
-            "comctl32.dll",
-            "shcore.dll",
-            "winmm.dll",
-            "dbghelp.dll",
-            "d3d11.dll",
-            "dxgi.dll",
-            "d3d12.dll",
-            "d3dcompiler_47.dll",
-        ];
-        if !system.contains(&name.as_str())
-            && !name.starts_with("api-ms-win-core-")
-            && !name.starts_with("api-ms-win-shcore-")
-        {
+        if !is_admitted(&name) {
             return Err(format!("base dependency is not admitted: {name}").into());
         }
         names.insert(name);
@@ -166,4 +125,72 @@ pub fn inspect(file: &mut File) -> Result<Vec<String>> {
         return Err("PE imports lack termination".into());
     }
     Ok(names.into_iter().collect())
+}
+
+fn is_admitted(name: &str) -> bool {
+    let system = [
+        "kernel32.dll",
+        "ntdll.dll",
+        "advapi32.dll",
+        // SetupDi USB interface discovery is supplied by the Windows SDK.
+        "setupapi.dll",
+        "user32.dll",
+        "gdi32.dll",
+        "shell32.dll",
+        "ole32.dll",
+        "combase.dll",
+        // Native AccessKit/UIA provider: UiaReturnRawElementProvider is
+        // exported by this Windows system DLL (uiautomationcoreapi.h).
+        "uiautomationcore.dll",
+        "oleaut32.dll",
+        "ws2_32.dll",
+        "iphlpapi.dll",
+        "version.dll",
+        "wtsapi32.dll",
+        "pdh.dll",
+        "powrprof.dll",
+        "netapi32.dll",
+        "secur32.dll",
+        "psapi.dll",
+        "wevtapi.dll",
+        "bcryptprimitives.dll",
+        "crypt32.dll",
+        "bcrypt.dll",
+        "imm32.dll",
+        "dwmapi.dll",
+        "uxtheme.dll",
+        "comctl32.dll",
+        "shcore.dll",
+        "winmm.dll",
+        "dbghelp.dll",
+        "d3d11.dll",
+        "dxgi.dll",
+        "d3d12.dll",
+        "d3dcompiler_47.dll",
+    ];
+    system.contains(&name)
+        || name.starts_with("api-ms-win-core-")
+        || name.starts_with("api-ms-win-shcore-")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_admitted;
+
+    #[test]
+    fn setupapi_admission_is_exact_and_keeps_dynamic_crt_rejected() {
+        assert!(is_admitted("setupapi.dll"));
+        assert!(is_admitted("kernel32.dll"));
+        for name in [
+            "setupapi2.dll",
+            "setupapi.dll.extra",
+            "vendorusb.dll",
+            "winusb.dll",
+            "vcruntime140.dll",
+            "ucrtbase.dll",
+            "api-ms-win-crt-runtime-l1-1-0.dll",
+        ] {
+            assert!(!is_admitted(name), "unexpected admission: {name}");
+        }
+    }
 }

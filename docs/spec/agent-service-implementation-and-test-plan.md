@@ -1,7 +1,7 @@
 # Rust Agent 서비스 구현 및 검증 작업 계획
 
 > **Document ID**: `DOC-PLAN-AGENT-SERVICE`\
-> **Status**: Active · **Target Version**: v0.1.33 source / Agent 서비스 릴리스 인수 미완료\
+> **Status**: Active · **Target Version**: v0.1.34 source / Agent 서비스 릴리스 인수 미완료\
 > **Last Updated**: 2026-10-13 · **Classification**: Service Implementation & Test Plan
 
 ## 개요
@@ -229,6 +229,8 @@ AS07의 대기 중 open/attach는 opening lock 획득 후 준비 상태를 다�
 AS16–AS18의 설치 없는 첫 묶음은 공통 hardware target/lease/read plan/IO request·수집 manifest 계약과 core inventory/session 모델이다. PC Device ID와 별도 opaque hardware/interface/generation ID를 사용하고 caller/boot/workspace/lease와 IO operation/read plan을 binding한다. 완전한 bounded snapshot만 publish하고 unplug/replug·metadata 교체·알림 연속성 유실 때 기존 target을 거부한다. 단조 lease/IO deadline·pending/bytes/actor quota·stop admission·cancel/unknown cleanup 상태를 검증한다. timely/uncancelled/current-generation completion만 외부 JSON으로 만들 수 없는 수집 receipt를 생성한다.
 
 Windows adapter는 `crates/racp-runtime/src/platform/windows/hardware.rs`에 USB PnP interface 탐색 source와 bounded SDK buffer/UTF-16/Hardware ID decoder를 둔다. opaque interface path는 parse하지 않고 PnP Hardware IDs에서만 VID/PID를 읽는다. 시작/NativeProviders/RPC에 연결하지 않으며 실제 SDK 탐색은 이번 시험에서 실행하지 않는다. HID/WinUSB/vendor open·driver IO·notification continuity 및 preemptible worker는 후속이다. AS17은 receipt에 묶인 bytes·SHA/부분 수집·method/target을 한 JSON artifact로 만들어 기존 OutputSpool/재시도 경로를 재사용하고 host가 verify/extract할 수 있게 한다. emission fence·실제 backend 지원 profile·RPC permission admission과 연결하기 전 원격 USB 사용 가능이라고 선언하지 않는다. descriptor fixture를 실제 firmware dump 인수로 기록하지 않는다.
+
+Windows PnP 탐색의 후속 경계는 고정 `hardware-discovery-worker`다. parent는 현재 Agent EXE만 Job containment/256 MiB 제한 아래 실행하고 timeout/cancel에 owned tree 종료와 parent signal을 확인한다. child 입력은 128 bytes/timeout 1–30000 ms만 허용하며 raw path/driver/action/실행 파일 선택은 받지 않는다. stdout은 private snapshot에 한해 4 MiB, stderr와 기존 worker output은 16 KiB 제한을 유지한다. snapshot은 최대 256개/중복/locators/unknown fields를 검증한 후만 core에 전달한다. parent deadline을 지났거나 종료 증명이 불확실하면 데이터 성공을 보고하지 않는다. 이 worker는 명시 CLI 내부 mode이며 startup/NativeProviders/Gateway RPC에는 미연결이다. 이번에는 decoder/model/인수만 시험하고 실제 worker 탐색을 실행하지 않는다.
 
 <a id="section-05"></a>
 

@@ -13,7 +13,11 @@ use std::path::PathBuf;
 fn arguments(args: &[String]) -> Result<Option<PathBuf>, RacpError> {
     let action = args.first().map(String::as_str).unwrap_or("");
     let flags: &[&str] = match action {
-        "collection-worker" | "image-preview-worker" | "diagnostic-worker" | "trash-worker" => &[],
+        "collection-worker"
+        | "image-preview-worker"
+        | "diagnostic-worker"
+        | "trash-worker"
+        | "hardware-discovery-worker" => &[],
         "broker" | "guardian" => &["--pair-config"],
         "native-service-session" | "native-service-control" => &["--service-control"],
         "native-setup-host" => &["--setup-root", "--input-sha256"],
@@ -68,6 +72,7 @@ fn framed(action: &str) -> bool {
             | "image-preview-worker"
             | "diagnostic-worker"
             | "trash-worker"
+            | "hardware-discovery-worker"
             | "plugin-gdb"
             | "native-run"
             | "native-service"
@@ -76,6 +81,24 @@ fn framed(action: &str) -> bool {
             | "native-service-control"
             | "native-setup-host"
     )
+}
+#[cfg(test)]
+mod hardware_worker_arguments_tests {
+    #[test]
+    fn fixed_hardware_worker_mode_rejects_state_path_driver_and_executable_overrides() {
+        assert!(super::arguments(&["hardware-discovery-worker".into()])
+            .unwrap()
+            .is_none());
+        assert!(super::framed("hardware-discovery-worker"));
+        for key in ["--state-dir", "--device-path", "--driver", "--executable"] {
+            assert!(super::arguments(&[
+                "hardware-discovery-worker".into(),
+                key.into(),
+                "fixture".into()
+            ])
+            .is_err());
+        }
+    }
 }
 async fn input() -> Result<Vec<u8>, RacpError> {
     use tokio::io::{AsyncBufReadExt, AsyncReadExt};
@@ -191,6 +214,11 @@ async fn main() {
                 return Ok(Value::Null);
             }
             _ => (),
+        }
+        #[cfg(windows)]
+        if action == "hardware-discovery-worker" {
+            racp_runtime::platform::windows::hardware::worker::run()?;
+            return Ok(Value::Null);
         }
         #[cfg(windows)]
         if action == "trash-worker" {

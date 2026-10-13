@@ -25,6 +25,22 @@ pub struct HardwareInventory {
     boot: String,
     interfaces: BTreeMap<(String, String), HardwareInterface>,
 }
+pub fn validate_observations(observations: &[ObservedInterface]) -> Result<(), RacpError> {
+    let mut seen = BTreeSet::new();
+    if observations.len() > MAX_HARDWARE_INTERFACES {
+        return Err(RacpError::new("RESOURCE_EXHAUSTED"));
+    }
+    for row in observations {
+        if [&row.device_key, &row.interface_key]
+            .into_iter()
+            .any(|s| s.is_empty() || s.len() > 8192 || s.chars().any(char::is_control))
+            || !seen.insert((&row.device_key, &row.interface_key))
+        {
+            return Err(RacpError::new("HARDWARE_SNAPSHOT_INVALID"));
+        }
+    }
+    Ok(())
+}
 impl HardwareInventory {
     pub fn new(agent: &str, boot: &str) -> Result<Self, RacpError> {
         if !identifier(agent) || !identifier(boot) {
@@ -42,19 +58,7 @@ impl HardwareInventory {
         &mut self,
         observations: Vec<ObservedInterface>,
     ) -> Result<Vec<HardwareInterface>, RacpError> {
-        let mut seen = BTreeSet::new();
-        if observations.len() > MAX_HARDWARE_INTERFACES {
-            return Err(RacpError::new("RESOURCE_EXHAUSTED"));
-        }
-        for row in &observations {
-            if [&row.device_key, &row.interface_key]
-                .into_iter()
-                .any(|s| s.is_empty() || s.len() > 8192 || s.chars().any(char::is_control))
-                || !seen.insert((&row.device_key, &row.interface_key))
-            {
-                return Err(RacpError::new("HARDWARE_SNAPSHOT_INVALID"));
-            }
-        }
+        validate_observations(&observations)?;
         let changed: BTreeSet<_> = observations
             .iter()
             .filter(|row| {
