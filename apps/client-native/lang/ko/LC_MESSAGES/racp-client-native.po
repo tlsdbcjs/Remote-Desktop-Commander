@@ -1,0 +1,508 @@
+msgid ""
+msgstr ""
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "Agent status"
+msgstr "Agent 상태"
+
+msgid "Agent Online"
+msgstr "Agent 온라인"
+
+msgid "Agent Connecting"
+msgstr "Agent 연결 중"
+
+msgid "Agent Stopped"
+msgstr "Agent 중지됨"
+
+msgid "Agent Offline"
+msgstr "Agent 오프라인"
+
+msgid "Not registered"
+msgstr "미등록"
+
+msgid "Path:"
+msgstr "경로:"
+
+msgid "Role:"
+msgstr "권한:"
+
+msgid "Controller"
+msgstr "제어"
+
+msgid "Observer"
+msgstr "조회 전용"
+
+msgid "Standby"
+msgstr "대기"
+
+msgid "RACP Native Client"
+msgstr "RACP Native Client"
+
+msgid "RACP Service Control"
+msgstr "RACP 서비스 제어"
+
+msgid "Enterprise Agent"
+msgstr "Enterprise Agent"
+
+msgid "Emergency Stop"
+msgstr "긴급 정지"
+
+msgid "Minimize to tray"
+msgstr "트레이로 숨기기"
+
+msgid "Quit app"
+msgstr "앱 종료"
+
+msgid "Stop Agent and quit"
+msgstr "Agent 정리 후 앱 종료"
+
+msgid "Navigation"
+msgstr "탐색"
+
+msgid "Status"
+msgstr "상태"
+
+msgid "Permissions"
+msgstr "권한"
+
+msgid "Approvals"
+msgstr "승인"
+
+msgid "Optional runtimes"
+msgstr "선택 런타임"
+
+msgid "Settings"
+msgstr "설정"
+
+msgid "Device Identity"
+msgstr "장치 식별"
+
+msgid "DEVICE IDENTITY"
+msgstr "장치 식별"
+
+msgid "Enforced"
+msgstr "적용됨"
+
+msgid "Quit without cleanup"
+msgstr "정리 요청 없이 앱만 종료"
+
+msgid "A cancel receipt is not task termination. Check the task state and cleanup result separately."
+msgstr "취소 접수와 작업 종료는 별개입니다. 작업 상태와 정리 결과를 각각 확인하세요."
+
+msgid "A previous registration result is uncertain. A new registration is not retried until the pending state is checked."
+msgstr "이전 등록 결과가 불확실합니다. 기존 pending 상태를 확인하기 전에는 새 등록을 재시도하지 않습니다."
+
+msgid "Active control tasks"
+msgstr "활성 제어 작업"
+
+msgid "Agent process"
+msgstr "Agent 프로세스"
+
+msgid "Audit log"
+msgstr "감사 로그"
+
+msgid "Cancel local request"
+msgstr "로컬 요청 취소"
+
+msgid "Cancel task"
+msgstr "작업 취소"
+
+msgid "Cancellation receipts appear in the audit log."
+msgstr "취소 결과는 감사 로그에 표시됩니다."
+
+msgid "Changes are saved against this revision."
+msgstr "변경은 이 revision을 기준으로 저장됩니다."
+
+msgid "Clear log"
+msgstr "로그 비우기"
+
+msgid "Connect current desktop"
+msgstr "현재 화면 연결"
+
+msgid "Connected to the Agent over authenticated local IPC."
+msgstr "인증된 로컬 IPC로 Agent에 연결되어 있습니다."
+
+msgid "Connection file SHA-256 (filled by verification)"
+msgstr "연결 파일 SHA-256 (확인 시 자동 입력)"
+
+msgid "Connection file path (.racp)"
+msgstr "연결 파일 경로 (.racp)"
+
+msgid "Connection file verified. Only the Gateway, expiry and public CA hash are shown."
+msgstr "연결 파일을 확인했습니다. Gateway, 만료 시각, 공개 CA hash만 표시합니다."
+
+msgid "Connects the desktop of the signed-in user. Permission policy and per-request approval still apply, and the shared service keeps running after this app closes."
+msgstr "현재 로그인한 사용자의 화면을 연결합니다. 권한 정책과 요청별 승인은 그대로 적용되며, 앱을 종료해도 공유 서비스는 계속 실행됩니다."
+
+msgid "Control receipts (audit log)"
+msgstr "제어 결과 기록 (감사 로그)"
+
+msgid "Default workspace folder"
+msgstr "기본 작업 폴더"
+
+msgid "Disconnect current desktop"
+msgstr "현재 화면 연결 해제"
+
+msgid "Endpoint control status"
+msgstr "엔드포인트 제어 상태"
+
+msgid "Execution profile"
+msgstr "실행 프로필"
+
+msgid "Existing client settings and credentials are never imported. Verify the distributed connection file (.racp) first."
+msgstr "기존 Client 설정과 credential은 자동으로 가져오지 않습니다. 배포된 연결 파일(.racp)을 먼저 확인하세요."
+
+msgid "Expires"
+msgstr "만료"
+
+msgid "In-flight remote operations"
+msgstr "실행 중인 원격 작업"
+
+msgid "Last known operations (connection lost)"
+msgstr "마지막으로 확인한 작업 (연결 끊김)"
+
+msgid "No control receipts in this Agent session yet."
+msgstr "이 Agent 세션에는 아직 제어 결과 기록이 없습니다."
+
+msgid "Not online"
+msgstr "오프라인"
+
+msgid "Online"
+msgstr "온라인"
+
+msgid "Open approvals"
+msgstr "승인 화면 열기"
+
+msgid "Pending approval requests"
+msgstr "대기 중인 승인 요청"
+
+msgid "Policy revision"
+msgstr "정책 revision"
+
+msgid "Refresh local status"
+msgstr "로컬 상태 새로고침"
+
+msgid "Register this PC with a connection file (.racp) to start."
+msgstr "연결 파일(.racp)로 이 PC를 등록하면 시작할 수 있습니다."
+
+msgid "Register this PC"
+msgstr "이 PC 등록"
+
+msgid "Registration uses the current Permissions selection. The initial selection denies everything."
+msgstr "등록에는 권한 탭의 현재 선택을 사용합니다. 초기 선택은 모두 거부입니다."
+
+msgid "Service control path"
+msgstr "서비스 제어 경로"
+
+msgid "Service control role: Controller"
+msgstr "서비스 제어 권한: 제어"
+
+msgid "Service control role: Observer (read-only)"
+msgstr "서비스 제어 권한: 조회 전용 (변경 불가)"
+
+msgid "Shows up to 16 recent receipts. A lost connection, Agent restart or missing record does not mean cleanup succeeded."
+msgstr "최근 최대 16개를 표시합니다. 연결 끊김, Agent 재시작, 기록 누락은 정리 성공을 뜻하지 않습니다."
+
+msgid "Start Agent"
+msgstr "Agent 시작"
+
+msgid "State path"
+msgstr "상태 저장 경로"
+
+msgid "Stop Agent"
+msgstr "Agent 정지"
+
+msgid "Submit new registration"
+msgstr "새 등록 제출"
+
+msgid "The Agent is not connected. Start the Agent to connect."
+msgstr "Agent가 연결되어 있지 않습니다. Agent를 시작하면 연결됩니다."
+
+msgid "Verify file"
+msgstr "연결 파일 확인"
+
+msgid "Waiting for the service connection."
+msgstr "서비스 연결을 기다리는 중입니다."
+
+msgid "All allowed"
+msgstr "모두 허용"
+
+msgid "All denied"
+msgstr "모두 거부"
+
+msgid "All require approval"
+msgstr "모두 승인 필요"
+
+msgid "Allow"
+msgstr "허용"
+
+msgid "Allow all (Developer opt-in)"
+msgstr "전체 허용 (개발자 선택)"
+
+msgid "Allowed workspace IDs"
+msgstr "허용 작업 폴더 ID"
+
+msgid "Apply a quick preset to the whole policy:"
+msgstr "전체 정책에 빠른 프리셋 적용:"
+
+msgid "Batch allow"
+msgstr "일괄 허용"
+
+msgid "Batch approve"
+msgstr "일괄 승인 필요"
+
+msgid "Batch deny"
+msgstr "일괄 거부"
+
+msgid "Batch require approval"
+msgstr "일괄 승인 필요"
+
+msgid "Capability category tree & security policy matrix"
+msgstr "기능 카테고리 트리와 보안 정책 매트릭스"
+
+msgid "Category off"
+msgstr "카테고리 꺼짐"
+
+msgid "Commit policy revision (CAS)"
+msgstr "정책 revision 저장 (CAS)"
+
+msgid "Deny"
+msgstr "거부"
+
+msgid "Deny all (Default Deny)"
+msgstr "전체 거부 (기본 거부)"
+
+msgid "Executable allowlist"
+msgstr "실행 파일 허용 목록"
+
+msgid "Executable denylist"
+msgstr "실행 파일 차단 목록"
+
+msgid "Execution constraints"
+msgstr "실행 제약"
+
+msgid "Expand a category to fine-tune each capability. Changes are saved against policy revision {}."
+msgstr "카테고리를 펼쳐 기능별로 조정할 수 있습니다. 변경은 정책 revision {} 기준으로 저장됩니다."
+
+msgid "Max output (bytes)"
+msgstr "최대 출력 (bytes)"
+
+msgid "Max timeout (ms)"
+msgstr "최대 실행 시간 (ms)"
+
+msgid "Mixed"
+msgstr "혼합"
+
+msgid "Not connected to the Agent. The selection here is used for a new registration; saving needs a connected Agent."
+msgstr "Agent에 연결되어 있지 않습니다. 여기서 고른 내용은 새 등록에 사용되며, 저장하려면 Agent 연결이 필요합니다."
+
+msgid "One entry per line. Executables use absolute paths. The Agent validates the draft when it is saved."
+msgstr "한 줄에 하나씩 입력합니다. 실행 파일은 절대 경로를 사용합니다. 저장할 때 Agent가 초안을 검증합니다."
+
+msgid "Reload constraints"
+msgstr "제약 다시 불러오기"
+
+msgid "Require approval"
+msgstr "승인 필요"
+
+msgid "Require approval for all (Zero-Trust)"
+msgstr "전체 승인 필요 (Zero-Trust)"
+
+msgid "Strict OS isolation: off"
+msgstr "엄격한 OS 격리: 꺼짐"
+
+msgid "Strict OS isolation: on"
+msgstr "엄격한 OS 격리: 켜짐"
+
+msgid "Turn category off"
+msgstr "카테고리 끄기"
+
+msgid "Turn category on"
+msgstr "카테고리 켜기"
+
+msgid "Uncommitted changes"
+msgstr "저장하지 않은 변경"
+
+msgid "Expanded"
+msgstr "펼침"
+
+msgid "Collapsed"
+msgstr "접힘"
+
+msgid "A local hash agreement is not verification by an official signed trust catalog."
+msgstr "로컬 hash 동의는 공식 서명 trust catalog의 검증이 아닙니다."
+
+msgid "Absolute path"
+msgstr "절대 경로"
+
+msgid "Add workspace"
+msgstr "작업 폴더 추가"
+
+msgid "Admit a runtime bundle"
+msgstr "런타임 번들 승인"
+
+msgid "Admit runtime"
+msgstr "런타임 승인"
+
+msgid "Allowed browser origins (one per line)"
+msgstr "허용 브라우저 origin (한 줄에 하나)"
+
+msgid "Analysis host"
+msgstr "분석 host"
+
+msgid "Approve this request once"
+msgstr "이번 요청만 승인"
+
+msgid "Available after this PC is registered."
+msgstr "이 PC를 등록한 뒤 사용할 수 있습니다."
+
+msgid "Browser origins"
+msgstr "브라우저 origin"
+
+msgid "Bundle source folder"
+msgstr "번들 원본 폴더"
+
+msgid "Check and settle startup entry"
+msgstr "시작 항목 확인 및 정리"
+
+msgid "Chromium, CDB, GDB and the analysis host are separate bundles. Each is admitted by manifest hash, size, OS and architecture, and pinned while it runs."
+msgstr "Chromium, CDB, GDB, 분석 host는 별도 번들입니다. 각각 manifest hash·크기·OS·아키텍처로 승인되며 실행 동안 파일이 고정됩니다."
+
+msgid "Deny request"
+msgstr "요청 거절"
+
+msgid "Do not start after sign-in"
+msgstr "로그인 후 시작 안 함"
+
+msgid "Each request waits for a one-time decision on this PC. Approving allows only this request; it does not change the policy."
+msgstr "각 요청은 이 PC에서 한 번의 결정을 기다립니다. 승인은 이번 요청만 허용하며 정책을 바꾸지 않습니다."
+
+msgid "Enter the manifest hash of an admitted bundle. Leave a field empty to use none. Applies from the next Agent start."
+msgstr "승인된 번들의 manifest hash를 입력합니다. 비워 두면 사용하지 않습니다. 다음 Agent 시작부터 적용됩니다."
+
+msgid "Expires at {}"
+msgstr "만료 {}"
+
+msgid "External CDP attach: allowed"
+msgstr "외부 CDP 연결: 허용"
+
+msgid "External CDP attach: not allowed"
+msgstr "외부 CDP 연결: 허용 안 함"
+
+msgid "Interface language"
+msgstr "화면 언어"
+
+msgid "Language for this window, the folders this PC exposes, and starting the Agent after Windows sign-in."
+msgstr "이 창의 언어, 이 PC가 공개하는 폴더, Windows 로그인 후 Agent 시작을 설정합니다."
+
+msgid "Local state is not loaded yet."
+msgstr "로컬 상태를 아직 불러오지 않았습니다."
+
+msgid "Manifest SHA-256"
+msgstr "Manifest SHA-256"
+
+msgid "Manifest file"
+msgstr "Manifest 파일"
+
+msgid "Named workspaces (ID and absolute path)"
+msgstr "이름 있는 작업 폴더 (ID와 절대 경로)"
+
+msgid "No approval requests are waiting."
+msgstr "대기 중인 승인 요청이 없습니다."
+
+msgid "No named workspaces."
+msgstr "이름 있는 작업 폴더가 없습니다."
+
+msgid "Not connected to the Agent. Approval requests appear here once it connects."
+msgstr "Agent에 연결되어 있지 않습니다. 연결되면 승인 요청이 여기에 표시됩니다."
+
+msgid "Register this PC first. The default workspace for a new registration is set on the Status page."
+msgstr "먼저 이 PC를 등록하세요. 새 등록의 기본 작업 폴더는 상태 화면에서 정합니다."
+
+msgid "Registers only this Client path and fixed arguments for the current user. Tokens and Gateway addresses are never written to the startup entry. Off by default."
+msgstr "현재 사용자에 이 Client 경로와 고정 인자만 등록합니다. 토큰과 Gateway 주소는 시작 항목에 기록하지 않습니다. 기본값은 꺼짐입니다."
+
+msgid "Reload saved settings"
+msgstr "저장된 설정 다시 불러오기"
+
+msgid "Remote operations can reach only these folders. Up to 15 named folders besides the default. Changes apply from the next Agent start (settings revision {})."
+msgstr "원격 작업은 이 폴더들에만 접근할 수 있습니다. 기본 폴더 외에 최대 15개입니다. 변경은 다음 Agent 시작부터 적용됩니다 (설정 revision {})."
+
+msgid "Remove workspace {}"
+msgstr "작업 폴더 {} 삭제"
+
+msgid "Runtime selection"
+msgstr "런타임 선택"
+
+msgid "Save runtime selection"
+msgstr "런타임 선택 저장"
+
+msgid "Save settings"
+msgstr "설정 저장"
+
+msgid "Saved selection"
+msgstr "저장된 선택"
+
+msgid "Start after Windows sign-in"
+msgstr "Windows 로그인 후 시작"
+
+msgid "Start after sign-in"
+msgstr "로그인 후 시작"
+
+msgid "Startup entry: not registered"
+msgstr "시작 항목: 등록 안 됨"
+
+msgid "Startup entry: registered"
+msgstr "시작 항목: 등록됨"
+
+msgid "Startup state is not available."
+msgstr "시작 항목 상태를 확인할 수 없습니다."
+
+msgid "Stop the Agent completely before admitting a runtime or saving the selection."
+msgstr "런타임을 승인하거나 선택을 저장하기 전에 Agent를 완전히 종료하세요."
+
+msgid "Stop the Agent completely before saving settings. Running work is not stopped automatically."
+msgstr "설정을 저장하기 전에 Agent를 완전히 종료하세요. 실행 중인 작업은 자동으로 중지되지 않습니다."
+
+msgid "Switches this window immediately. The choice is not saved yet; the next start follows the Windows display language."
+msgstr "이 창의 언어를 바로 바꿉니다. 선택은 아직 저장되지 않으며, 다음 시작 때는 Windows 표시 언어를 따릅니다."
+
+msgid "Target digest"
+msgstr "대상 digest"
+
+msgid "This connection is read-only. Decide on a controller connection."
+msgstr "이 연결은 조회 전용입니다. 제어 권한이 있는 연결에서 결정하세요."
+
+msgid "Update startup entry"
+msgstr "시작 항목 갱신"
+
+msgid "Workspace ID"
+msgstr "작업 폴더 ID"
+
+msgid "Workspaces"
+msgstr "작업 폴더"
+
+msgid "Zero-trust approval queue"
+msgstr "제로 트러스트 승인 대기열"
+
+msgid "allowed"
+msgstr "허용"
+
+msgid "not allowed"
+msgstr "허용 안 함"
+
+msgid "not owned by this Client"
+msgstr "이 Client 소유 아님"
+
+msgid "not selected"
+msgstr "선택 안 함"
+
+msgid "owned by this Client"
+msgstr "이 Client 소유"
+
+msgid "unconfirmed change"
+msgstr "미확정 변경"

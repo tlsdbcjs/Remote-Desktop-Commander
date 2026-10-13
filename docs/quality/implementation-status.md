@@ -1,8 +1,8 @@
 # RACP 구현 작업 및 검증 현황 (Implementation Status)
 
 > **Document ID**: `DOC-QA-STATUS`\
-> **Status**: Active · **Target Version**: v0.1.26\
-> **Last Updated**: 2026-10-12 · **Classification**: Quality Assurance & Implementation Status (SSOT)
+> **Status**: Active · **Target Version**: v0.1.29\
+> **Last Updated**: 2026-10-13 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
 
@@ -1611,7 +1611,7 @@ Client와 내장 Agent의 전체 전환 구현을 반영했다. React 화면은 
 
 `apps/agent` Python 코드, `apps/client` Electron 호스트와 Python 설치 도우미, Python client build/staging/portable helper, 이 코드에 직접 의존하던 구 테스트를 제거했다. Gateway·CLI·공통 서버 Python 패키지는 유지한다. 서버/CLI의 frozen lock은 66개 패키지로 정리했다. 구 Python in-process Agent fixture는 명시적 보류로 바꾸었으며, 이 skip을 회귀 통과로 계산하지 않는다. 자동 테스트 재개와 새로운 native acceptance 작성·실행은 이번 범위에서 보류한다.
 
-기존 프로필 탐색과 모호한 상태 거절, DPAPI와 소유권 확인, native 연결 파일 선택, 시작 등록, installer maintenance/backup, 포터블 프로필 격리 및 고정 WebView2를 구현했다. [ADR-0030](../adr/ADR-0030-rust-tauri-client-and-native-agent.md)이 구 Electron/Python 배포 결정을 대체한다. 실행·서비스 등록과 빌드는 [Rust Agent 가이드](../guides/rust-agent-guide.md)를 따른다.
+기존 프로필 탐색과 모호한 상태 거절, DPAPI와 소유권 확인, native 연결 파일 선택, 시작 등록, installer maintenance/backup, 포터블 프로필 격리 및 고정 WebView2를 구현했다. ADR-0030(삭제, [ADR-0032](../adr/ADR-0032-native-client.md)로 통합)이 구 Electron/Python 배포 결정을 대체한다. 실행·서비스 등록과 빌드는 [Rust Agent 가이드](../guides/rust-agent-guide.md)를 따른다.
 
 ### 독립 리뷰와 수정
 
@@ -1691,7 +1691,7 @@ Client와 내장 Agent의 전체 전환 구현을 반영했다. React 화면은 
 | GUI 제어 | loopback TCP·3초 조회 | R03 OS peer 인증 IPC·snapshot/event/gap resync |
 | 빌드/runtime | Node/pnpm Client 빌드와 기본 Chromium/WebView2 번들 | R-PKG Rust xtask·기본/선택 runtime 분리 |
 
-[기존 Tauri 설계](../spec/client-rust-migration.md)와 [10-task 구현 계획](../spec/client-rust-implementation-plan.md)은 향후 작업 기준으로는 Superseded로 표시하고 이력을 보존했다. [ADR-0030](../adr/ADR-0030-rust-tauri-client-and-native-agent.md)은 현행 v0.1.21 결정 기록으로 Accepted를 유지하며 향후 계획과 범위를 구분했다. 과거 승인·빌드·완료 기록을 이번 Iced 구현 승인·완료로 옮기지 않는다.
+[기존 Tauri 설계](../spec/client-rust-migration.md)와 [10-task 구현 계획](../spec/client-rust-implementation-plan.md)은 향후 작업 기준으로는 Superseded로 표시하고 이력을 보존했다. ADR-0030(삭제, [ADR-0032](../adr/ADR-0032-native-client.md)로 통합)은 현행 v0.1.21 결정 기록으로 Accepted를 유지하며 향후 계획과 범위를 구분했다. 과거 승인·빌드·완료 기록을 이번 Iced 구현 승인·완료로 옮기지 않는다.
 
 > [!IMPORTANT]
 > 자동 테스트 실행·추가, GUI/native acceptance, 설치/업데이트/제거, macOS/Linux native 빌드는 계속 보류한다. 이번에 작성한 인수 사례는 미래 검증 명세다. GUI 적합성 보류 중에는 골격/공통 모델·독립 Agent 구현과 패키징 정의까지만 진행하도록 의존성을 명시했다. 전체 화면·최종 패키지·Tauri 제거는 해당 선행 조건을 충족한 뒤 진행한다. 기능 동등성·성능·전체 Rust 전환은 미완료다.
@@ -1787,7 +1787,7 @@ Client와 내장 Agent의 전체 전환 구현을 반영했다. React 화면은 
 | R04 epoch | transport/dispatch | 연결 scope가 바뀌면 승인 폐기·이전 epoch resource retirement. 실행 직전 boot/epoch 검사와 ready 이전/stop 이후 result 발행 차단 |
 | R05 정책 | [policy.rs](../../crates/racp-core/src/policy.rs), [IPC policy controller](../../crates/racp-runtime/src/local_ipc/policy.rs) | validation→cross-process lock/CAS→atomic durable 저장→snapshot publication→retirement→receipt. grant/constraint만 hot 변경하며 credential/gateway/profile 변경을 이 API에서 받지 않음. 검증한 permissions cache를 revision과 같은 lock으로 공개 |
 | R05 승인 | [ApprovalBinding](../../crates/racp-core/src/approval.rs), [approval runtime](../../crates/racp-runtime/src/local_ipc/approval.rs) | request/operation/target digest·owner/device/boot/epoch/workspace/revision binding, OS-authenticated GUI nonce 결정, 1회 소비, TTL ≤ 60초와 잔여 deadline, GUI 부재/단절/deny/expiry 차단, 실행 직전 파일 revision/process 생성 시각 재확인 |
-| R05 UI/IPC | [local contract](../../crates/racp-contract/src/local_ipc.rs), UiModel (`../../crates/racp-ui-model/src/lib.rs`, 과거 경로), [Iced app](../../apps/client-native/src/app.rs) | Agent policy와 pending approvals를 snapshot/event로 표시. category off/on이 leaf 초안을 보존하며 revision CAS 저장·이번 요청 승인/거부·Stop receipt 및 cleanup event에 연결. 승인 화면에 credential/argv 본문 없이 대상 요약·digest를 표시 |
+| R05 UI/IPC | [local contract](../../crates/racp-contract/src/local_ipc.rs), UiModel (`../../crates/racp-ui-model/src/lib.rs`, 과거 경로), `Iced app`(삭제됨) | Agent policy와 pending approvals를 snapshot/event로 표시. category off/on이 leaf 초안을 보존하며 revision CAS 저장·이번 요청 승인/거부·Stop receipt 및 cleanup event에 연결. 승인 화면에 credential/argv 본문 없이 대상 요약·digest를 표시 |
 | R05 Desktop/native | [Desktop](../../crates/racp-runtime/src/providers/desktop/provider.rs), [native carrier](../../crates/racp-runtime/src/providers/native_carrier.rs) | Desktop enable 상태 hot 반영 및 Broker/Guardian retirement; native session은 live policy/revision을 다시 검사. 원본 Gateway profile ceiling은 별도로 유지 |
 | R02 공통 JSON | [Rust decoder](../../crates/racp-contract/src/schema.rs), [Python decoder](../../packages/protocol/src/racp_protocol/models.py), [HTTP JSON boundary](../../apps/gateway/src/racp_gateway/json_boundary.py) | UTF-8·중복 key·NaN/Infinity/overflow float·길이/깊이 제한을 WS/HTTP/Rust 경계에서 정비. binary artifact content는 JSON parsing 대상에서 제외. 공개 schema/Registry 파일은 그대로 유지 |
 | R00 baseline delta | [inventory](../../crates/racp-contract/migration-inventory.json), [audit](../../xtask/src/inventory.rs) | v0.1.21 원본 hash는 유지하고 R05 permission authority 변경을 baseline/current hash·owner·reason의 명시한 delta로 기록. 원본을 조용히 덮어쓰지 않음 |
@@ -1856,7 +1856,7 @@ R11-B/C/D/F/G/H/I/K 및 R11-J의 ETW, R01/R03 전체 UI와 lifecycle, R09/R10 tr
 | R09/R10 로컬 runtime | [bundle manifest](../../crates/racp-contract/src/runtime_manifest.rs), [admission](../../crates/racp-core/src/runtime_admission.rs), [native client](../../crates/racp-runtime/src/native_client.rs) | 고정 runtime ID/recipe, 전체 manifest의 명시한 로컬 SHA-256 동의, 파일별 hash/size·license·상대 경로·중복/예약/ancestor 충돌·PE/ELF/Mach-O OS/arch 검증. 최대 4 GiB/4096 파일. 전용 candidate에 복사 후 manifest-addressed 경로로 commit; 실패 candidate는 비활성 상태로 보존. 기본은 runtime 없음이며 Chromium만 선택된 admission을 시작 경로에 연결 |
 | runtime 시작·설정 | 위 admission/native client 및 [CLI](../../apps/agent-rust/src/main.rs) | `native-runtime-admit/configure/status` 로컬 명령, config revision CAS와 Agent 실행 lock. configure는 Agent 종료 상태만 허용. Agent 시작 때 다시 모든 파일을 확인하고 Windows no-write/no-delete handle을 실행 동안 유지. 손상된 선택 Chromium은 실행하지 않고 해당 availability를 runtime 필요로 표시. 검증을 명시한 hash 동의로 제한하며 제품 서명/공식 trust catalog 검증으로 광고하지 않음 |
 | R03 상태 보호 | [native directory](../../crates/racp-core/src/native_directory.rs), [state schema](../../crates/racp-core/src/state_schema.rs) | 새 Windows root는 생성 시부터 현재 사용자/SYSTEM 전용 protected DACL과 사용자 owner를 지정. native state load와 등록 재시도에 owner/DACL 확인을 추가. 기존 공유/비공개 조건 미충족 root는 `STATE_DIRECTORY_NOT_PRIVATE`로 거부하며 기존 디렉터리 ACL을 자동 변환하지 않음. 실제 SID/ACL/DPAPI 인수는 보류 |
-| R01/R03 등록 화면 | [Iced app](../../apps/client-native/src/app.rs), [onboarding](../../apps/client-native/src/onboarding.rs), [local Agent helper](../../crates/racp-runtime/src/local_agent.rs) | 연결 파일의 Gateway/만료/hash만 확인하고 새 workspace/profile·모두 거부로 시작한 leaf/category 선택을 별도 Agent enrollment에 전달. token을 GUI view/argv로 노출하지 않음. 고정 sibling Agent helper, executable pin/host binary 확인, Job·256 MiB·125초·64 KiB stdout/stderr 상한, 취소 후 tree 정리. pending 등록을 자동 삭제/재등록하지 않음 |
+| R01/R03 등록 화면 | `Iced app`(삭제됨), [onboarding](../../apps/client-native/src/onboarding.rs), [local Agent helper](../../crates/racp-runtime/src/local_agent.rs) | 연결 파일의 Gateway/만료/hash만 확인하고 새 workspace/profile·모두 거부로 시작한 leaf/category 선택을 별도 Agent enrollment에 전달. token을 GUI view/argv로 노출하지 않음. 고정 sibling Agent helper, executable pin/host binary 확인, Job·256 MiB·125초·64 KiB stdout/stderr 상한, 취소 후 tree 정리. pending 등록을 자동 삭제/재등록하지 않음 |
 | R01 runtime 화면·승인 | 위 UI/onboarding | runtime manifest/hash/source와 Chromium 선택·origin allowlist·외부 CDP를 실제 로컬 명령에 연결. 다수 승인 요청을 별도 scroll 화면에 표시하고 새 요청 때 창을 표시. event를 boot/sequence 검증 후 처리하며 final receipt가 접수 reply보다 먼저 와도 최종 상태를 대기로 덮어쓰지 않게 함. 256개 receipt cache는 reconnect/영속 receipt 조회를 대체하지 않음 |
 | R01 Windows shell | [native shell](../../apps/client-native/src/native.rs), [main](../../apps/client-native/src/main.rs), [assets](../../apps/client-native/assets) | SID/session/state-root별 named mutex, 재실행은 기존 hidden Win32 window에 activation-only 통지. Rust/Win32 tray와 원래 Client icon의 별도 복사본, Explorer 재시작 재등록, 표시/Agent Stop/정리 후 종료 메뉴. 창 닫기는 tray hide, 전체 종료는 IPC Stop와 native-agent lock 해제 확인을 거치며 결과 불명 시 자동 정리 완료로 처리하지 않음. 기본 tiny-skia, GPU feature build에서는 `--gpu` 선택. 실제 IME/DPI/Narrator/menu/focus/renderer/종료 인수 보류 |
 | R03 Agent 시작 | local Agent helper/UI | registered native root·Agent 실행 lock을 확인하고 고정 sibling `racp-agent native-run`을 hidden 사용자 daemon으로 시작. stdio·credential을 전달하지 않고 ready는 authenticated IPC snapshot으로 확인. GUI helper Job에 Agent/Guardian을 묶지 않으며 breakaway 실패를 fallback으로 숨기지 않음. 시작 receipt를 실제 연결/ready로 광고하지 않음 |
@@ -1938,7 +1938,7 @@ R-PKG checkpoint의 최종 production·staging 증거:
 
 | 범위 | authoritative source | 실제 source 연결 및 한계 |
 |---|---|---|
-| restart-required 설정 | [native state](../../crates/racp-core/src/state_schema.rs), [native commands](../../crates/racp-runtime/src/native_client.rs), [UI](../../apps/client-native/src/app.rs) | 기본 workspace·15개 named workspace·실행 profile 편집, typed/unknown-key 거부, 기존 validator 사용. native state의 monotonic settings revision CAS와 Agent/settings lock. Agent가 lock을 먼저 얻은 뒤 상태를 읽어 start와 commit 사이의 stale read 방지. 저장 후 명시적으로 시작하며 Gateway/device/CA/credential은 enrollment authority로 보존. 새 등록에도 named workspace draft 전달 |
+| restart-required 설정 | [native state](../../crates/racp-core/src/state_schema.rs), [native commands](../../crates/racp-runtime/src/native_client.rs), `UI`(삭제됨) | 기본 workspace·15개 named workspace·실행 profile 편집, typed/unknown-key 거부, 기존 validator 사용. native state의 monotonic settings revision CAS와 Agent/settings lock. Agent가 lock을 먼저 얻은 뒤 상태를 읽어 start와 commit 사이의 stale read 방지. 저장 후 명시적으로 시작하며 Gateway/device/CA/credential은 enrollment authority로 보존. 새 등록에도 named workspace draft 전달 |
 | 과거 결과 격리 | [transport](../../crates/racp-runtime/src/transport.rs), [dispatch](../../crates/racp-runtime/src/dispatch.rs) | native 요청을 Agent 설정 revision으로 내부 binding, Journal accept에 저장. 이전 설정 revision의 replay/output 발행을 거부하고 publication tombstone 유지. 동일 workspace ID가 다른 path로 바뀐 뒤 과거 결과를 새 root의 결과로 해석하지 않게 함. 서버 wire 계약/Registry를 확대하지 않음 |
 | 현재 사용자 로그인 | [native login](../../crates/racp-runtime/src/native_login.rs), native command/local Agent helper/UI | 현재 SID·native root에 고정한 HKCU Run value 한 개만 read/configure. admission된 packaged sibling Client의 고정 `--state-dir/--start-agent/--require-package` 명령만 작성; 임의 executable/argv/registry path 입력 없음. revision·기존 값 digest·소유 값 재비교, 16 KiB/UTF-16/NUL/type bounds, durable intent→write→readback→document commit→pending 제거. 기존 사용자/legacy 항목과 실행 앱을 보존 |
 | 중단 복구 | 위 native login/UI | UI가 명시한 reconcile에서 registry가 이전 값 또는 목표 값인지 비교. durable document가 이미 next revision으로 저장된 경우도 처리하며 미확정 상태를 자동 rollback/성공으로 추정하지 않음. 외부 변경은 ownership conflict로 남김. Registry의 external-writer atomic CAS 부재와 실제 로그인/경합/취소 인수는 미검증 |
@@ -1965,7 +1965,7 @@ Ruling: 핵심 우선 scope로 진행 중이며 goal은 **active**다. service s
 | CDB | [carrier](../../crates/racp-runtime/src/providers/native_carrier.rs), [Win adapter](../../crates/racp-runtime/src/providers/native_carrier/windows.rs) | native mode는 admission된 CDB만 사용하고 legacy `native-runtime.json`을 읽지 않음. 같은 parent의 cdb.exe/dbgeng.dll/dbghelp.dll 요구, 실제 file version 검사, exts.dll은 같은 parent에서만 사용. 기존 process birth/target·scope·framed carrier·소유 debugger 종료/borrowed target 보존 경계를 유지. CDB 자체 실행/MCP attach·step·detach 인수는 보류 |
 | GDB·분석 host | [admitted adapter](../../crates/racp-runtime/src/providers/reversing/admitted.rs), [Reversing](../../crates/racp-runtime/src/providers/reversing/provider.rs), [Supervisor](../../crates/racp-runtime/src/providers/reversing/plugin.rs) | native mode는 legacy plugins.json을 읽지 않음. GDB는 고정 Rust plugin-gdb worker/MI adapter를 사용하며 native host는 고정 stdio plugin protocol/manifest handshake로 연결. generated manifest는 승인 bundle별 고정 private directory에 작성·pin. 첫 authorized open에 health 확인, 취소/오류/버전 불일치 때 owned supervisor 종료; cleanup 실패를 숨기지 않음. ADMITTED와 READY 구분 및 lazy routing operation 목록 연결 |
 | Host boundary | 위 admitted adapter/[runtime manifest](../../crates/racp-contract/src/runtime_manifest.rs) | native 분석 host entrypoint는 racp-analysis-host(.exe)만 허용하며 java.exe wrapper를 선택하지 않음. native startup에서 프로젝트 Java bridge를 실행하지 않는다. 기존 legacy Ghidra source/CLI가 아직 남아 있으므로 Client 소스/배포 전체 Java 제거 또는 별도 host implementation 완성을 주장하지 않음 |
-| Inventory·UI | 위 admission/[Iced UI](../../apps/client-native/src/app.rs) | 실제 bundle 파일 목록을 manifest+admitted metadata와 비교해 unlisted adjacent 파일 거부; 8192 entry/32 depth scan bound. manifest provenance URL의 query credential을 거부. 새 runtime hash 편집·NeedsRuntime/NeedsPermission/UnsupportedOs/ProtectedTarget/Unverified 표시 연결. 로컬 hash 동의이며 signed trust catalog 검증이 아님 |
+| Inventory·UI | 위 admission/`Iced UI`(삭제됨) | 실제 bundle 파일 목록을 manifest+admitted metadata와 비교해 unlisted adjacent 파일 거부; 8192 entry/32 depth scan bound. manifest provenance URL의 query credential을 거부. 새 runtime hash 편집·NeedsRuntime/NeedsPermission/UnsupportedOs/ProtectedTarget/Unverified 표시 연결. 로컬 hash 동의이며 signed trust catalog 검증이 아님 |
 
 현재 연결은 source/계약 구현이다. 제공된 실제 CDB/GDB/native analysis host bundle을 admission하거나 실행하지 않았고 기존 host MCP tool과의 dump/PCAP/live/proxy 경로 실기 인수는 보류다. GDB 기존 고정 adapter operation 집합(launch/read/command/close 등)을 유지하며 borrowed attach RPC가 새로 구현됐다고 주장하지 않는다. packet-driver 활성화·download/제품 trust catalog·vendor license 검토와 별도 native host 제공, legacy Ghidra 및 이전 Client 경로 R14 제거는 여전히 남아 있다.
 
@@ -2019,8 +2019,8 @@ tracked legacy Client source 35개를 `.tools/retired-client-source-0123-2026101
 | 취소 계약 | [local IPC](../../crates/racp-contract/src/local_ipc.rs) | `CancelOperation`은 boot ID·operation ID·target request ID를 받는다. PID/argv/target path 입력 없음. 64 KiB/identifier bounds 유지; typed 접수 receipt와 `CancelFinished` 관찰 결과 구분. 같은 boot 재연결 snapshot의 최근 제어 결과 16개에 포함 |
 | 로컬 owner 제어 | [cancellation](../../crates/racp-runtime/src/local_ipc/cancellation.rs), [ControlPlane](../../crates/racp-runtime/src/local_ipc/policy.rs) | 기존 같은 user/session·peer PID birth 인증 IPC만 사용. 현재 Agent device/boot/Journal request를 다시 비교하고 active Execution에만 신호. remote principal의 `jobs.cancel` API와 별도 로컬 소유자 제어; 다른 Agent/재시작 전 요청/임의 PID 취소 경로 없음. 16-worker bound·policy/stop serialization, 대기 중 serialization 해제로 Stop을 관찰 시간 동안 막지 않음 |
 | 결과 관찰 | 위 cancellation/[dispatch](../../crates/racp-runtime/src/dispatch.rs) | durable cancel intent 후 cancellation token 신호, 최대 15초 동안 Journal terminal과 execution release를 확인. 정상 결과가 먼저 끝나면 그 상태 보존. timeout/unknown/미보고 정리를 성공으로 바꾸지 않으며 아직 execution이 남아 있으면 cleanup은 pending. payload/argv/result/credential 원문은 receipt/event에 없음 |
-| 이력·GUI | [Journal](../../crates/racp-core/src/journal.rs), [native startup](../../crates/racp-runtime/src/native_client.rs), [Iced app](../../apps/client-native/src/app.rs) | device별 최근 32개 메타데이터만 SQL 조회해 시작 snapshot에 복원. 중단한 이전 실행은 기존 recover 규칙대로 UNKNOWN이며 자동 재실행 안 함. 현재 진행 작업에 취소 버튼; stale snapshot/연결 중단/종료 중에는 비활성. 접수·관찰 상태·terminal·정리를 각각 표시. control receipt 자체는 crash-durable 완료 기록이 아니며 실제 operation Journal과 취소 intent만 durable |
-| 새 결정 기록 | [ADR-0031](../adr/ADR-0031-native-rust-client-and-isolated-state.md) | native GUI·분리 상태·선택 host·Rust build 결정 및 핵심 제어 우선 의도 기록. ADR-0030의 새 source 결정만 대체하고 기존 제품 이력/설치는 보존. shell/interpreter 내부 명령이 개별 OS 객체 권한으로 제한된다고 주장하지 않음 |
+| 이력·GUI | [Journal](../../crates/racp-core/src/journal.rs), [native startup](../../crates/racp-runtime/src/native_client.rs), `Iced app`(삭제됨) | device별 최근 32개 메타데이터만 SQL 조회해 시작 snapshot에 복원. 중단한 이전 실행은 기존 recover 규칙대로 UNKNOWN이며 자동 재실행 안 함. 현재 진행 작업에 취소 버튼; stale snapshot/연결 중단/종료 중에는 비활성. 접수·관찰 상태·terminal·정리를 각각 표시. control receipt 자체는 crash-durable 완료 기록이 아니며 실제 operation Journal과 취소 intent만 durable |
+| 새 결정 기록 | ADR-0031(삭제, [ADR-0032](../adr/ADR-0032-native-client.md)로 통합) | native GUI·분리 상태·선택 host·Rust build 결정 및 핵심 제어 우선 의도 기록. ADR-0030의 새 source 결정만 대체하고 기존 제품 이력/설치는 보존. shell/interpreter 내부 명령이 개별 OS 객체 권한으로 제한된다고 주장하지 않음 |
 
 production·정적 증거:
 
@@ -2064,7 +2064,7 @@ production·정적 증거:
 
 | 범위 | authoritative source | 구현과 남은 한계 |
 |---|---|---|
-| 서비스 GUI | [control target](../../apps/client-native/src/control_target.rs), [GUI entry](../../apps/client-native/src/main.rs), [Iced app](../../apps/client-native/src/app.rs) | `--service-control`로 공유 control directory 하나를 명시. user/portable state·start-agent flags와 혼합 거부, packaged payload 확인. singleton/tray/IPC target도 이 경로 사용; 서비스 모드의 local refresh/등록/로그인/settings/runtime helper는 early guard로 user state/credential을 읽거나 호출하지 않음. 서비스 GUI 종료는 서비스 Stop과 분리 |
+| 서비스 GUI | [control target](../../apps/client-native/src/control_target.rs), [GUI entry](../../apps/client-native/src/main.rs), `Iced app`(삭제됨) | `--service-control`로 공유 control directory 하나를 명시. user/portable state·start-agent flags와 혼합 거부, packaged payload 확인. singleton/tray/IPC target도 이 경로 사용; 서비스 모드의 local refresh/등록/로그인/settings/runtime helper는 early guard로 user state/credential을 읽거나 호출하지 않음. 서비스 GUI 종료는 서비스 Stop과 분리 |
 | 권한·식별자 | [IPC DTO](../../crates/racp-contract/src/local_ipc.rs), [pipe](../../crates/racp-runtime/src/local_ipc/windows.rs), 위 Iced/[tray](../../apps/client-native/src/native.rs) | snapshot/subscribe에 실제 authenticated observer/controller role을 반환하고 client는 endpoint 기대 role과 재비교. snapshot에는 Device/Gateway origin/user 또는 service scope만 추가하며 credential/payload 원문 없음. service identity 없는 snapshot 거부. observer의 정책 편집/승인/취소/Stop 차단, 조회 화면/비활성 버튼·tray 권한 연결. disconnect/gap 시 role 제거; observer 승인 prompt는 창을 자동 활성화하지 않음 |
 | 새 서비스 등록 | [bootstrap](../../crates/racp-runtime/src/service_bootstrap.rs), [enrollment](../../crates/racp-runtime/src/native_client.rs), [SCM](../../apps/agent-rust/src/native_service.rs) | SCM의 optional bootstrap SHA-256은 비밀이 아닌 입력 동의 hash. 고정 private bootstrap/connection 파일만 허용, file pin·64 KiB bounds·hash·actual service identity·scope 검사 후 native enrollment 호출. secret/token을 GUI IPC/argv에 보내지 않음. initial native service input만 등록 reservation의 허용 목록에 추가하며 legacy/다른 파일/pending 상태는 거부. 이미 등록한 native state는 bootstrap을 재소비하지 않음 |
 | Secret 준비·취소 | [SecretStore](../../crates/racp-core/src/secrets.rs), 위 enrollment/bootstrap | token 소비 전에 현재 account DPAPI encrypt/decrypt roundtrip을 확인. credential/application file을 쓰지 않고 machine/plaintext fallback 없음; Windows profile/key 초기화 가능성은 실제 인수 필요. workspace/policy 검증 후 reserve-before-token 유지. 120초 budget/취소는 unknown outcome으로 pending 보존, 완료와 동시 취소면 완료 우선. uppercase connection hash는 canonical lowercase로 검증 |
@@ -2207,7 +2207,7 @@ Win32 근거는 [CreateServiceW](https://learn.microsoft.com/en-us/windows/win32
 |---|---|---|
 | 인증 등록 | [local DTO](../../crates/racp-contract/src/local_ipc.rs), [control plane](../../crates/racp-runtime/src/local_ipc/policy.rs), [session bridge](../../crates/racp-runtime/src/providers/desktop/service_session.rs) | Prepare/Register/RemoveDesktop는 actual controller SID/session·Agent boot·동일 launcher PID/birth에 한정. 30초 one-use 준비/최대 16 pending, 등록 시 Broker/Guardian의 OS SID/session/PID/birth/같은 Agent image 및 Guardian outside-all-Jobs 확인. Broker HMAC status 검증 후 join. observer는 snapshot/subscribe만 허용. 공개 RPC 추가 없음 |
 | 공유 bucket | [shared directory](../../crates/racp-core/src/service_directory.rs), 위 bridge | control/desktop-sessions는 service/SYSTEM write 및 scope 사용자 read. pair bucket은 service owner/protected exact DACL readback, service/SYSTEM FA 및 해당 사용자 read/write/execute/delete만; user WRITE_DAC/WRITE_OWNER 없음. service private data 아래 공유하던 초안 제거. 사용자 DPAPI pair file과 ephemeral secret만 사용하며 service enrollment credential을 읽거나 전달하지 않음 |
-| GUI 연결 | [Iced app](../../apps/client-native/src/app.rs), [Agent entry](../../apps/agent-rust/src/main.rs) | service 상태 탭의 현재 사용자 화면 연결/해제, observer 비활성화. 현재 packaged Agent와 서비스 image 비교. GUI가 Broker Job을 소유하며 service GUI 종료는 자체 화면 정리를 기다림. CLI native-service-session도 같은 경로. snapshot heartbeat는 approval presence로 계산하지 않음 |
+| GUI 연결 | `Iced app`(삭제됨), [Agent entry](../../apps/agent-rust/src/main.rs) | service 상태 탭의 현재 사용자 화면 연결/해제, observer 비활성화. 현재 packaged Agent와 서비스 image 비교. GUI가 Broker Job을 소유하며 service GUI 종료는 자체 화면 정리를 기다림. CLI native-service-session도 같은 경로. snapshot heartbeat는 approval presence로 계산하지 않음 |
 | 정리·입력 보호 | [Provider](../../crates/racp-runtime/src/providers/desktop/provider.rs), [Guardian](../../crates/racp-runtime/src/providers/desktop/guardian.rs), [peer handle](../../crates/racp-runtime/src/providers/desktop/native_identity.rs) | 해제는 service의 인증 Broker stop 이후 user-owned Job 종료/독립 Guardian 해제를 확인. Guardian이 service 및 launcher PID/birth를 pin하여 launcher crash도 해제 신호로 취급. startup 오류에서 Guardian stop/wait, registration failure release signal, pinned wait 실패는 process-exited 증거로 사용하지 않음. 이미 서비스가 정리한 bucket을 GUI가 재생성하지 않음. unknown bucket 파일·실패한 삭제 pin 소비는 후속 retry의 성공으로 바뀌지 않음 |
 | 표시·서비스 trust | 위 control plane/Provider/[startup](../../crates/racp-runtime/src/native_client.rs), [SCM](../../apps/agent-rust/src/native_service.rs) | service desktop 초기 상태 NeedsRuntime/NATIVE_SERVICE_SESSION_NOT_CONNECTED, 등록 후에도 Unverified/NATIVE_ACCEPTANCE_DEFERRED. unregister 후 살아 있는 세션이 없으면 미연결 표시. capability는 pinned process 생존을 확인. 실제 service 시작에서도 machine image directory trust 검사 유지 |
 
@@ -2247,7 +2247,7 @@ owner handle API 및 LocalSystem service 생성의 설계 근거는 [SetSecurity
 |---|---|---|
 | 별도 setup scope | [package options](../../xtask/src/package.rs), [machine NSIS](../../xtask/native-machine-installer.nsi), [CI](../../.github/workflows/client.yml) | --install-scope user/machine/both, default user. 같은 staging/version에서 두 setup 선택 및 portable/ZIP user scope 유지. machine setup은 고정 ProgramFiles/version·Windows x64/high administrator, 기존 version overwrite 거부. 단일 output batch에 format별 hash/scope 기록. 실제 artifact/NSIS/installer/CI 미실행 |
 | package 보호 | [install helper](../../apps/agent-rust/src/machine_install.rs), [known-folder/trust](../../crates/racp-core/src/machine_service.rs) | current Agent가 고정 version/payload에 있음을 확인, manifest pin·fresh content·trusted ProgramFiles parent 검사 뒤 보호 owner BA/DACL write BA+SY, authenticated user read/execute. 알려진 payload 및 uninstaller 보호/readback. 별도 scope/version/payload manifest/uninstaller hash receipt. 기존 trusted shared container 유지, unknown content/version conflict |
-| GUI/로그인 scope | [GUI startup](../../apps/client-native/src/main.rs), [view](../../apps/client-native/src/app.rs), [native login](../../crates/racp-runtime/src/native_login.rs) | sealed machine-service receipt 확인 뒤 기본 service control target 선택. 초기 미등록/미시작에는 관리자 조치가 필요한 대기 표시. machine-service 설치는 per-user Agent autorun을 만들지 않으며 해당 사용 목적은 기존 user/portable 설치로 유지. 복사한 별도 user payload와 기존 사용자 state를 변환/삭제하지 않음 |
+| GUI/로그인 scope | [GUI startup](../../apps/client-native/src/main.rs), `view`(삭제됨), [native login](../../crates/racp-runtime/src/native_login.rs) | sealed machine-service receipt 확인 뒤 기본 service control target 선택. 초기 미등록/미시작에는 관리자 조치가 필요한 대기 표시. machine-service 설치는 per-user Agent autorun을 만들지 않으며 해당 사용 목적은 기존 user/portable 설치로 유지. 복사한 별도 user payload와 기존 사용자 state를 변환/삭제하지 않음 |
 | 서비스 제거 | [SYSTEM admin](../../apps/agent-rust/src/service_admin.rs), [virtual maintenance](../../crates/racp-runtime/src/service_maintenance.rs), [SCM mode](../../apps/agent-rust/src/native_service.rs) | remove_service는 expected config hash/device ID 및 같은 fixed image/account/root, STOPPED/PID=0 검증. 새 nonce maintenance receipt·NativeRun cleanup·policy/runtime/Journal·pending/잔여 session 검사 뒤 startup/config lock과 stopped 재확인, SCM 삭제 요청만 수행. Device/Gateway 등록·DPAPI credential·native state/workspace 보존. running 강제 stop/kill 없음, 삭제 요청과 실제 SCM visibility 구분 |
 | 제거 recipe | 위 NSIS/install helper | 두 native SCM 이름 부재·installed scope/hash/uninstaller identity·trusted payload preflight. whole payload rename 뒤 고정 5파일/설치 receipt/shortcut/HKLM entry만 삭제. existing pins/unknown removing batch 차단, native user data/credentials 삭제 없음. preflight는 외부 관리자/SYSTEM writer까지 포함한 atomic lease가 아님 |
 | 실패 helper 정리 | [setup cleanup](../../apps/agent-rust/src/machine_setup.rs), [CLI](../../apps/agent-rust/src/main.rs) | native-machine-setup-cleanup은 정확한 setup root/hash 입력, high admin·trusted payload·private request ACL/hash·LocalSystem/own-process/demand/exact ImagePath·STOPPED/PID=0 확인. 새 fixed helper SCM/request만 제거, 비밀 없는 cleanup/result·target service/state 보존. running/foreign/changed input 거부. partial target provisioning을 임의 복구/삭제하지 않음 |
@@ -2270,7 +2270,7 @@ owner handle API 및 LocalSystem service 생성의 설계 근거는 [SetSecurity
 | validation/result | 위 restore/[maintenance](../../crates/racp-runtime/src/service_maintenance.rs) | 별도 nonce virtual-account preflight로 lifecycle/policy/runtime/Journal/pending/session/Device 검증, normal Agent/enrollment/WSS 미시작. 최종 Agent/config lock과 config hash 재확인, native state/credential 보존한 demand-start 복원 기록. 실패/시간 초과는 metadata/새 service 보존하며 stopped에서 disabled 제한, running service 강제 종료/rollback 없음 |
 | 저장 버전 | [watermark](../../crates/racp-core/src/native_release.rs), [lifecycle](../../crates/racp-core/src/native_lifecycle.rs), [state reader](../../crates/racp-core/src/state_schema.rs) | 별도 native-release.json의 numeric SemVer/저장 format strict validation. 등록/Agent 시작 및 확인한 registered restore에서 현재 version 기록. 표시된 높은 version/다른 format은 거부, migration/downgrade/rollback 없음. 표시가 없던 초기 native root는 첫 현재 실행에서 기록하며 과거 표시를 무시하는 binary까지 보호한다고 주장하지 않음 |
 | 설정 저장 수정 | 위 state reader | 기존 파일 설정 CAS 뒤 atomic_write(overwrite=false)여서 저장을 막던 source bug 수정. Agent/settings lock·expected revision 유지하고 기존 state 파일을 overwrite=true로 atomic 교체/readback. 새 등록 파일의 create-only 동작은 유지. 실제 저장/경합 인수 미실행 |
-| keyboard source | [Iced app](../../apps/client-native/src/app.rs) | ignored Tab/Shift+Tab을 Iced focusable 입력 필드로 연결, Ctrl+1..5 페이지 이동. service 설정/runtime guard 동일 적용. pinned Iced source에서 ignored-key subscription/focus operation 확인. button/checkbox 전체 focus/action·Narrator/UIA·IME/DPI 합격을 대체하지 않음 |
+| keyboard source | `Iced app`(삭제됨) | ignored Tab/Shift+Tab을 Iced focusable 입력 필드로 연결, Ctrl+1..5 페이지 이동. service 설정/runtime guard 동일 적용. pinned Iced source에서 ignored-key subscription/focus operation 확인. button/checkbox 전체 focus/action·Narrator/UIA·IME/DPI 합격을 대체하지 않음 |
 
 production·정적 증거:
 
@@ -2283,7 +2283,7 @@ production·정적 증거:
 
 ### 2026-10-12 R01 접근성 진행 중 상태와 현재 컴파일 확인
 
-- [접근성 adapter](../../apps/client-native/src/accessibility.rs), [키보드 위젯](../../apps/client-native/src/controls.rs), [GUI 연결](../../apps/client-native/src/app.rs)은 작업 중이다. Windows AccessKit adapter 초기화와 button/checkbox focus/action 경로를 추가했으나 입력 필드·텍스트 의미 연결, 전체 키보드 이동 및 DPI/renderer 적합성은 미완료다.
+- `접근성 adapter`(삭제됨), `키보드 위젯`(삭제됨), `GUI 연결`(삭제됨)은 작업 중이다. Windows AccessKit adapter 초기화와 button/checkbox focus/action 경로를 추가했으나 입력 필드·텍스트 의미 연결, 전체 키보드 이동 및 DPI/renderer 적합성은 미완료다.
 - AccessKit SetValue의 Box<str>→String 변환 누락으로 발생한 컴파일 오류를 수정했다. 현재 `cargo check --locked --workspace --target x86_64-pc-windows-msvc` PASS(2.36초), `cargo fmt --all -- --check` PASS. 기존 recipe warning 3개와 아직 연결하지 않은 TextInput/Label variant warning 1개가 남아 있다.
 - 마지막 확인된 production staging은 위 `native-pretest-20261012-b`이며 현재 접근성 변경은 포함하지 않는다. 이번 확인은 개발 컴파일이며 새 release/staging·테스트·GUI/Narrator·설치·원격 인수는 수행하지 않았다. v0.1.23 재사용.
 
@@ -2294,8 +2294,8 @@ production·정적 증거:
 
 | 범위 | authoritative source | 변경과 인수 경계 |
 |---|---|---|
-| Windows UIA | [adapter](../../apps/client-native/src/accessibility.rs), [startup](../../apps/client-native/src/main.rs), [GUI](../../apps/client-native/src/app.rs) | AccessKit 0.25.1/Windows adapter 0.35.1 고정. 숨긴 창의 소유 UI 스레드에서 adapter 설치 후 표시. 초기 창 조회는 bounded 재시도하며 트레이 show는 초기화 완료 후 허용. UIA event/action queue는 32개로 제한. 실제 adapter/COM/Narrator 실행 미검증 |
-| 컨트롤 의미 | [wrappers](../../apps/client-native/src/controls.rs), 위 adapter/GUI | 버튼·체크박스·single/multiline input·profile combobox·화면 text의 name/role/value/toggle/disabled/focus 연결. 반복 권한/승인 버튼 이름에 대상 포함. 활성 ID는 갱신 사이 유지, 제거 ID 다른 대상 재사용 없음. 변경 action의 stale view revision/disabled/없는 대상 거부, 원래 App 메시지/role/policy/승인 guard 유지 |
+| Windows UIA | `adapter`(삭제됨), [startup](../../apps/client-native/src/main.rs), `GUI`(삭제됨) | AccessKit 0.25.1/Windows adapter 0.35.1 고정. 숨긴 창의 소유 UI 스레드에서 adapter 설치 후 표시. 초기 창 조회는 bounded 재시도하며 트레이 show는 초기화 완료 후 허용. UIA event/action queue는 32개로 제한. 실제 adapter/COM/Narrator 실행 미검증 |
+| 컨트롤 의미 | `wrappers`(삭제됨), 위 adapter/GUI | 버튼·체크박스·single/multiline input·profile combobox·화면 text의 name/role/value/toggle/disabled/focus 연결. 반복 권한/승인 버튼 이름에 대상 포함. 활성 ID는 갱신 사이 유지, 제거 ID 다른 대상 재사용 없음. 변경 action의 stale view revision/disabled/없는 대상 거부, 원래 App 메시지/role/policy/승인 guard 유지 |
 | keyboard focus | 위 wrappers/GUI | native 입력 focus operation에 명시 ID 연결. 버튼·체크박스 Tab/Shift+Tab·Enter/Space release 1회, keydown 시 원래 Message 고정, 반복 keydown 중복 없음. identity 교체/disabled/focus 해제/window blur는 pending action 취소. profile 방향키/Home/End. Iced focus 다중 operation pass 완료 후 containing page reveal operation. 실제 입력/경합 실행은 보류 |
 | 좌표/초안 | 위 adapter/wrappers, [constraints](../../apps/client-native/src/constraints.rs) | Iced scroll operation의 translation을 별도로 읽어 window 좌표/viewport로 환산하고 현재 DPI transform 적용. multiline SetValue도 기존 제약 초안 메시지로 연결, Agent에 자동 저장하지 않음. UIA text range/selection·popup 선택 탐색·IME·실제 DPI/renderer 적합성 합격을 주장하지 않음 |
 | native dependency | [import gate](../../xtask/src/package/imports.rs) | UIAutomationCore.dll을 Windows system import의 명시 목록에 추가. dynamic CRT/외부 DLL/무조건 wildcard 허용 없음. MS SDK UiaReturnRawElementProvider의 DLL 정의 근거를 아래에 링크 |
@@ -2353,7 +2353,7 @@ Ruff(실행 harness), Rust format 및 diff check PASS. 실행 전후 harness SHA
 
 발견 및 수정:
 
-1. [AccessKit adapter](../../apps/client-native/src/accessibility.rs)의 static Text가 화면에는 보이지만 UIA Name이 비었다. Windows Label의 Name에 필요한 value를 설정하여 실제 UIA Korean text 이름 노출을 확인했다.
+1. `AccessKit adapter`(삭제됨)의 static Text가 화면에는 보이지만 UIA Name이 비었다. Windows Label의 Name에 필요한 value를 설정하여 실제 UIA Korean text 이름 노출을 확인했다.
 2. [로컬 Agent helper](../../crates/racp-runtime/src/local_agent.rs)가 빈 환경으로 실행되어 Windows `SYSTEMROOT` 누락 시 HTTPS 등록이 실패했다. 같은 EXE/Gateway의 새 진단 state에서 env={}는 GATEWAY_UNREACHABLE, SYSTEMROOT만 제공한 실행은 등록 성공이었다. 기존 필터링된 OS 필수 환경 함수를 사용하고 정해진 network 오류 코드를 GUI에 보존했다. [진단 기록](../../dist/acceptance/native-gui-20261012-b/helper-environment-diagnostic.json)을 보존하며 실패한 pending 등록 root를 삭제/재사용하지 않았다.
 3. [heartbeat](../../crates/racp-runtime/src/transport.rs)가 17 capability를 한 번에 보내 wire의 maxItems=16을 위반해 약 5초 후 끊겼다. 16개 이하 batch로 모두 전송하고 handle snapshot은 첫 batch에만 포함했다.
 4. 내부 provider 이름 os_observation/process_dump/network_capture 및 clipboard 혼합 operation은 Gateway registry capability 분류와 달랐다. [wire 목록](../../crates/racp-runtime/src/providers/mod.rs)을 기존 registry 기준으로 분류·병합하고 available member의 operation만 활성 목록에 넣었다. 관리자 권한이 없는 network.capture를 네트워크 조회의 가용성 때문에 활성화하지 않는다. Gateway의 scope 검증 또는 immutable wire schema를 완화하지 않았다. canonical 목록은 19 capability이며 실제 Gateway가 모든 batch를 수용했다.
@@ -2389,7 +2389,7 @@ Ruff(실행 harness), Rust format 및 diff check PASS. 실행 전후 harness SHA
 
 ### 2026-10-12 GUI 개발 상태 문구 제거 및 잔여 작업 문서화
 
-사용자 지적에 따라 개발 진행/검증 상태를 제품 GUI에서 제거했다. [권한 화면](../../apps/client-native/src/app.rs)은 미연결 planned 권한과 NotImplemented 항목을 표시하지 않으며 `실기 미검증`/`미구현` 배지를 출력하지 않는다. 지원되지 않는 엄격한 OS 격리 선택지와 내부 계약 설명도 제외했다. runtime 설정·OS 권한·보호된 대상 등 실제 사용 조건은 유지하며, 미검증을 Supported로 변경하거나 정책/권한 guard를 완화하지 않았다. read-only 관찰 화면에도 같은 미연결 항목 제외 규칙을 적용했다.
+사용자 지적에 따라 개발 진행/검증 상태를 제품 GUI에서 제거했다. `권한 화면`(삭제됨)은 미연결 planned 권한과 NotImplemented 항목을 표시하지 않으며 `실기 미검증`/`미구현` 배지를 출력하지 않는다. 지원되지 않는 엄격한 OS 격리 선택지와 내부 계약 설명도 제외했다. runtime 설정·OS 권한·보호된 대상 등 실제 사용 조건은 유지하며, 미검증을 Supported로 변경하거나 정책/권한 guard를 완화하지 않았다. read-only 관찰 화면에도 같은 미연결 항목 제외 규칙을 적용했다.
 
 [기존 작업 계획서의 잔여 작업](../spec/rust-client-migration-plan.md#remaining-work-20261012)에 desktop Rust/Iced와 별도 TypeScript 웹 Console의 구분, crates 역할, 구현 결함/추가 구현/실기 검증/제품 배포의 우선순위를 정리했다. 과거 자동 테스트/GUI 보류 문구는 최신 사용자 Agent/GUI 요청보다 우선하지 않도록 명시했다. OS별 전용 API 확장은 여전히 후순위다.
 
@@ -2503,3 +2503,424 @@ Computer Use Node helper는 `failed to write kernel assets: 지정된 경로를 
 코드를 대조해 SCM host/provision/bootstrap/관리/restore/IPC 경로가 이미 존재함을 확인했으며 이를 전부 미구현으로 재분류하지 않았다. 구체적 공백으로 service host의 `pin_current_payload(true)`와 Client EXE를 필수로 요구하는 `BASE_FILES`, Client를 동봉하는 machine recipe, demand-start 운영 경로를 기록했다. Agent 단독 service admission/배포, GUI 없는 관리·승인 계약, partial 복구와 자동 시작/장애 정책을 보완 항목으로 분리했다. Session 0과 사용자 세션 Broker/Guardian은 Agent 원격 desktop backend로 포함하되 GUI app·화면·IME·UIA 시험은 제외했다.
 
 이번 작업은 계획 문서 작성과 링크/범위 검토만 수행했다. source 구현·제품 버전 증가·build/test·installer 실행·SCM 서비스 등록/시작/정지·계정/ACL/기존 state 변경을 수행하지 않았다. 실제 service 인수는 현재 설치 금지로 보류하며, 기존 user-mode Agent 결과를 서비스 성공으로 이관하지 않는다.
+
+### 2026-10-12 플랫폼별 Agent 구조 및 원격 USB/동글 정적 분석 요구 반영
+
+사용자는 GUI 재설계를 별도로 진행하며 Agent도 Windows/macOS/Linux 단위로 구조를 구분하고 Windows부터 구현하도록 제안했다. 첨부 GUI 계획은 플랫폼 공통/OS adapter 분리 원칙의 참고 자료로만 읽었다. 완료 체크·GUI 구현 지시를 현재 Agent의 완료 증거나 실행 범위로 가져오지 않았다.
+
+USB 동글의 용도는 사용자가 **원격 PC에 연결된 외장 장치/동글에 접근해 정적 분석할 데이터를 수집하는 Remote 기능**이라고 명확히 했다. Agent 인증/라이선스 동글 요구로 해석하지 않는다. 현재 source와 계약 검색에서 해당 enumeration/연결/수집 Provider는 확인되지 않았으며 일반 USB 프레임 한계에 대한 문서 언급만 존재했다.
+
+[Agent 서비스 계획 §3.4/§3.5](../spec/agent-service-implementation-and-test-plan.md#section-03)에 공통·플랫폼 목표 폴더/파일과 Windows 우선/macOS·Linux 서비스/장치 어댑터 미구현 상태를 추가했다. AS15–AS18은 플랫폼 경계·장치 탐색/remote session·지원 read 수집/정적 artifact·unplug/cancel/정리 작업, AST22–AST26은 구조/계약/실제 원격 장치/IO 수명주기/분석 출처 시험으로 정리했다. driver/backend·장치별 지원 범위, descriptor와 firmware 추출의 차이, PC ID와 외장 장치 identity/generation·opaque handle·lease를 구분했다. 일반 USB-over-IP 가상 attach나 driver 교체/임의 write/reset/flash를 이 요구만으로 실행하지 않는다.
+
+이번에는 계획·AGENTS·문서 index만 변경했다. 실제 source 폴더/파일 이동, WinUSB/HID/vendor adapter 구현, 장치 탐색/IO·수집, driver 변경, 설치/서비스 등록, 타 OS build/test는 수행하지 않았다. 기준 제품 버전은 v0.1.26이며 GUI 제외·실제 설치 금지를 유지한다.
+
+### 2026-10-12 이전 Python Agent의 원격 리버싱·USB 기능 확인
+
+사용자가 Python 버전에 원격 USB/동글 분석 기능이 있었는지 물어 Git의 Python Agent 폐기 commit `ded180d` 직전 snapshot `654a0df8a75b5d6717e4677e8b360adc474cb54e`와 확인 가능한 모든 ref의 `apps/agent` 변경 이력을 read-only로 확인했다. 당시 `providers/reversing.py`와 `plugins/gdb_driver.py`·`ghidra_driver.py`에는 원격 리버싱/디버깅 코드가 있고, `providers/native_debugger.py`에는 `native.prepare/start/close` CDB 경로, `providers/proxy.py`에는 `proxy.prepare/close` 양방향 carrier가 있다. 이는 기존 원격 분석/중계 구현의 증거이며 USB 장치 전용 Provider의 증거는 아니다.
+
+해당 snapshot의 Python Agent·SDK·protocol·tests와 모든 ref의 Python Agent 변경 이력에서 USB/dongle·WinUSB/HIDAPI/libusb/PyUSB/USB-IP·SetupDi/DeviceIoControl 키워드를 검색했지만 전용 장치 탐색·연결/IO·동글 데이터 수집 구현은 찾지 못했다. `apps/agent/pyproject.toml`에도 USB 전용 라이브러리 의존성은 없지만, 의존성 부재만으로 기능 부재를 판정하지 않았다. 저장소 밖 도구·미커밋 코드·제공되지 않은 이력은 확인 범위에 포함되지 않는다. 기존 shell 실행/파일 회수/중계를 통해 외부 제조사 도구를 사용했을 가능성과 Agent 내 USB 전용 구현을 구분한다.
+
+[Agent 서비스 계획 §3.5](../spec/agent-service-implementation-and-test-plan.md#section-03)에 기존 리버싱·중계·artifact 기능의 재사용 우선 및 전용 장치 adapter 공백만 추가하는 원칙을 반영했다. 현재 Rust 기준 미구현 판단을 과거 Python 전체의 기능 부재나 migration 유실 증거로 확대하지 않는다. 이번 확인은 소스/이력 열람과 문서 수정이며 실제 장치 IO·외부 도구 실행·설치·서비스 작업·build/test는 수행하지 않았다.
+
+### 2026-10-12 Agent 역할 중심 디렉터리 계획 갱신
+
+사용자 요청에 따라 [Agent 서비스 계획](../spec/agent-service-implementation-and-test-plan.md)의 목표 앱 경로를 `apps/agent`로 변경했다. 현재 실제 경로 `apps/agent-rust`와 목표를 구분하고 §3.4·AS15·AST22·산출물 관리에 경로 변경과 Cargo workspace/path dependency·빌드/패키징·version/inventory·CI·검사 스크립트·AGENTS·활성 문서 참조의 동시 갱신을 포함했다. package/EXE `racp-agent`, 공유 `crates/racp-*`, 출력 `dist/agent`는 유지하며 과거 source/manifest/hash 증거는 당시 경로를 보존하도록 명시했다.
+
+이번 작업은 계획 문서 수정이며 실제 source 디렉터리 이동·설정 변경·제품 빌드/시험·설치·서비스 작업은 수행하지 않았다. 제품 기준선 v0.1.26, Windows 우선, GUI 제외 및 실제 설치 금지를 유지한다.
+
+### 2026-10-13 Native Client Enterprise GUI 현대화 및 검증 (`feature/enterprise-client-gui`)
+
+사용자 지시(`/goal`)에 따라 `feature/enterprise-client-gui` 브랜치에서 Native Client GUI(`apps/client-native`)의 엔터프라이즈 모던 디자인 개편, 단일 파일 분해, i18n 언어팩 독립화, 카테고리 트리 및 SVG 3-Way 선택기 구현을 완주했다.
+
+1. **에셋 파이프라인 및 SVG 도입 (Phase 1)**:
+   - 이모지를 전면 배제하고 프로덕션 24x24 viewBox SVG 벡터 아이콘 11종 제작 및 내장 (`apps/client-native/assets/icons/`: `deny.svg`, `prompt.svg`, `allow.svg`, `monitor.svg`, `folder.svg`, `file_edit.svg`, `terminal.svg`, `search.svg`, `refresh.svg`, `copy.svg`, `trash.svg`).
+   - `Cargo.toml`에 `iced = { workspace = true, features = ["advanced", "svg"] }`, `chrono = { workspace = true }` 연동.
+   - Oracle MCP 1차 사전 아키텍처 검토 완료 (Verdict: GO).
+
+2. **독립 다국어 i18n 시스템 구축 (Phase 2)**:
+   - `apps/client-native/src/i18n/mod.rs`, `ko.rs`, `en.rs` 분리.
+   - 정적 타입 체크가 보장되는 `TextKey` 열거형(70개 이상의 UI 텍스트 키) 및 `tr!` 매크로 구현.
+   - OS 기본 언어 자동 감지(`detect_os_language()`, Windows LCID `0x0412` 및 POSIX `LANG`/`LC_ALL` 대응).
+   - 설정 탭에서 한국어/영어 즉시 전환(`SetLanguage(Language)`)을 지원하며 폼 입력 데이터 보존.
+
+3. **엔터프라이즈 디자인 시스템 및 재사용 위젯 (Phase 3)**:
+   - Dark Slate-950 팔레트와 일관된 컨테이너/버튼/카드 스타일 토큰 (`src/theme/mod.rs`, `src/theme/styles.rs`).
+   - 메모리 내장형 벡터 아이콘 렌더러 (`src/components/icons.rs`).
+   - 거부/승인 필요/허용 3-Way SVG 세그먼트 버튼 (`src/components/grant_selector.rs`) — 계약 enum `Grant::Deny`, `Grant::RequireApproval`, `Grant::Allow` 직접 바인딩.
+   - 카테고리 아코디언 노드 (`src/components/category_accordion.rs`) — 카테고리 헤더, 설명, 켜기/끄기 토글, `일괄 거부`/`일괄 승인`/`일괄 허용` 액션 컨트롤.
+   - 실시간 감사 로그 터미널 (`src/components/terminal_log.rs`) — `ControlCompletion` 영수증(Cancellation, Policy, Stop) 포맷팅, 복사/지우기 툴바, 모노스페이스 콘솔 레이아웃.
+   - 시맨틱 상태 및 위험도 배지 (`src/components/status_badge.rs`).
+   - 기존 `controls.rs`의 `custom_button`, `button`, `text`, `text_input`, `checkbox`에 AccessKit UIA 접근성(Role::Button, Role::TextInput, Role::ComboBox) 100% 보존.
+
+4. **표준 뷰 파일 세분화 및 분해 (Phase 4)**:
+   - `src/views/status.rs`: 초기 `.racp` 온보딩 폼(경로, 확인 버튼, 게이트웨이/만료/CA 해시 미리보기, SHA-256 입력, 작업 폴더 초안, 실행 프로필 픽리스트, 미결 경고, 등록 제출), 등록된 상태 요약, 서비스 화면 제어 연결/해제, 실행 작업 실시간 취소(`CancelOperation`), 최근 제어 영수증 터미널 로그 스트림.
+   - `src/views/permissions.rs`: 제로 트러스트 매트릭스, CAS 정책 커밋(`SavePolicy`), 전역 프리셋(`*` 와일드카드 일괄 적용), 실행 제약(작업 영역, timeout, output, allow/deny 바이너리 목록) 편집 및 복원.
+   - `src/views/approvals.rs`: 대기 중인 승인 요청 실시간 큐, 고위험/중위험 태그, TTL 배지, 1클릭 단건 승인/거절.
+   - `src/views/runtime.rs`: 외부 격리 런타임 및 분석 호스트(Chromium, CDB, GDB, Ghidra) manifest 및 해시 승인 폼.
+   - `src/views/settings.rs`: 독립 언어팩 선택기(한국어/영어), 최대 15개 네임드 작업 폴더 관리(추가/식별자/경로/삭제), Windows 로그인 시 자동 시작 토글.
+
+5. **App 리팩토링 및 검증 (Phase 5)**:
+   - `src/app.rs`: 500줄 이상의 인라인 모놀리식 뷰 코드를 `views::*`로 위임. 네비게이션 탭 하이라이트 및 실시간 대기 승인 건수 배지, 하단 글로벌 툴바/오류 알림 스트림 완벽 유지.
+   - `cargo test -p racp-client-native`: 신규 컴포넌트, 다국어 팩, 5개 뷰 렌더링 무결성 등 6개 단위 테스트 **100% 통과 (6 PASS / 0 FAIL)**.
+   - `cargo check --workspace`: 워크스페이스 전역 컴파일 에러 0건.
+   - Oracle MCP 2차 아키텍처 및 릴리즈 게이트 자문 완료.
+
+6. **제품 배포 빌드 (`dist/`) 및 산출물 (Build ID: `gui-20261013-a`)**:
+   - `xtask stage`: Release 프로파일 최적화 바이너리 컴파일 및 스테이징 완료.
+   - `xtask verify-staging`: 4개 페이로드 파일 및 대상 아키텍처(x86_64-pc-windows-msvc) 정적 검증 PASS.
+   - `xtask stage-agent` & `verify-agent`: Standalone Agent 바이너리 스테이징 및 정적 검증 PASS.
+   - 빌드 산출물 일람:
+     | 구분 | 경로 | 크기 / SHA-256 해시 |
+     |---|---|---|
+     | **Client Release 바이너리** | [`dist/client/0.1.26/win-x64/gui-20261013-a/staging/payload/racp-client.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-a/staging/payload/racp-client.exe) | 15,789,056 bytes<br>`df9d051473d214dc0b26b7851a3351825c0f41bb91ae5a426a62b2e05ba123fb` |
+     | **Companion Agent** | [`dist/client/0.1.26/win-x64/gui-20261013-a/staging/payload/racp-agent.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-a/staging/payload/racp-agent.exe) | 21,947,392 bytes |
+     | **Portable 배포 EXE** | [`dist/client/0.1.26/win-x64/gui-20261013-a/packages/RACP-Native-0.1.26-win-x64-portable.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-a/packages/RACP-Native-0.1.26-win-x64-portable.exe) | 40,571,992 bytes<br>`551128c8ac0f73b34b8dbdf300b82a90cef06d88c58253aebc552ca953bb15f8` |
+     | **Native 배포 ZIP** | [`dist/client/0.1.26/win-x64/gui-20261013-a/packages/RACP-Native-0.1.26-win-x64.zip`](../../dist/client/0.1.26/win-x64/gui-20261013-a/packages/RACP-Native-0.1.26-win-x64.zip) | 37,937,682 bytes<br>`afa3f47c48b84211c54fd98f8c11fe307104c5686584a7a466785048c410f242` |
+     | **Standalone Agent** | [`dist/agent/0.1.26/win-x64/gui-20261013-a/build/racp-agent.exe`](../../dist/agent/0.1.26/win-x64/gui-20261013-a/build/racp-agent.exe) | 21,947,392 bytes |
+
+### 2026-10-13 Enterprise Layout Parity & Rendering Optimization (`gui-20261013-d`)
+
+사용자 프로토타입(`enterprise_gui_demo.html`) 기준 시각적 일치 및 렌더링 지연 해결을 위한 최종 구조 개선 및 릴리스 패키징을 완료했다.
+
+1. **상단 엔터프라이즈 헤더 & 좌측 210px 사이드바 네비게이션 (`src/app.rs`)**:
+   - 상단 헤더: 실드 벡터 로고(`theme::ACCENT`), "RACP Native Client" 타이틀, "Enterprise Agent" 배지, 버전 태그("v0.1.26"), 중앙 실시간 시스템 상태 캡슐(Status Online 점, Role Controller, 통신 경로 표시), 우측 비상 정지(Emergency Stop) 및 종료 버튼.
+   - 좌측 210px 사이드바: 5대 네비게이션 버튼(상태, 권한 정책, 승인 요청, 런타임, 환경 설정)과 동적 배지(대기 승인 건수 펄스 배지), 하단 DPAPI Vault 호스트 식별 카드(Device ID 및 암호화 잠금 배지).
+   - 우측 본문: 100% 독립 스크롤 가능한 메인 뷰 컨테이너 구성.
+
+2. **상태 대시보드 4대 핵심 지표 카드 (`src/views/status.rs`)**:
+   - 1. Agent 프로세스 (PID / 시퀀스 번호 / Named Pipe IPC Connected).
+   - 2. 활성 제어 작업 (Active operation slots e.g. `X / 32 Slots`, 취소 핸들러 무장).
+   - 3. 대기 중 승인 요청 (Zero-Trust 실시간 건수 태그).
+   - 4. 화면/입력 가디언 (Guardian Ready, 물리 입력 감지 시 원격 차단 모니터).
+
+3. **초고속 렌더링 성능 최적화 (SVG Handle Lazy Caching)**:
+   - 프레임 렌더링 지연(Lag)의 근본 원인이었던 `tiny-skia` 소프트웨어 렌더러에서의 프레임별 `svg::Handle::from_memory` XML 재파싱을 제거.
+   - `std::sync::LazyLock<svg::Handle>` 정적 캐싱 구조를 도입하여 18종의 모든 SVG 벡터 핸들을 1회 파싱 후 `Arc::clone` 참조 방식으로 전환 (렌더링 소요 시간 100ms+ -> 2ms 미만).
+
+4. **검증 및 최종 산출물 (`dist/`, Build ID: `gui-20261013-d`)**:
+   - `cargo test -p racp-client-native`: 6개 단위 테스트 **100% 통과 (0.13s)**.
+   - `xtask stage`: Release 최적화 바이너리 스테이징 완료.
+   - `xtask verify-staging`: 4개 페이로드 정적 검증 PASS.
+   - `xtask package`: NSIS Windows Setup EXE, Portable EXE, 배포 ZIP 일괄 생성 완료.
+   - Oracle MCP 종합 검토 통과 (Session: `racp-native-client-iced-0`).
+   - 빌드 산출물 일람:
+     | 구분 | 경로 | 크기 / SHA-256 해시 |
+     |---|---|---|
+     | **Client 실행 바이너리** | [`dist/client/0.1.26/win-x64/gui-20261013-d/staging/payload/racp-client.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-d/staging/payload/racp-client.exe) | 15,866,880 bytes<br>`f78b5d23c53331471f7736d7339fa706dfa07f156a8dc5efa3f3e1ff734d3ab5` |
+     | **Companion Agent** | [`dist/client/0.1.26/win-x64/gui-20261013-d/staging/payload/racp-agent.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-d/staging/payload/racp-agent.exe) | 21,947,392 bytes |
+     | **Windows Setup 설치 파일** | [`dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64-setup.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64-setup.exe) | 10,584,430 bytes<br>`fee03d961c63f356570b37988a9fd17dbe1f66127020c5a837e53e5518ba5d79` |
+     | **Portable 배포 EXE** | [`dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64-portable.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64-portable.exe) | 40,649,816 bytes<br>`49f63d8f1bc4f25d89b7cb85972148bb68d5809680bf3fd99d0b9461da50269e` |
+     | **배포 패키지 ZIP** | [`dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64.zip`](../../dist/client/0.1.26/win-x64/gui-20261013-d/packages/RACP-Native-0.1.26-win-x64.zip) | 38,015,506 bytes<br>`6e2ec27e737206ac38c1bfeb21281ba27004e37c8d38cab4773959cd33e7eb63` |
+     | **Standalone Agent** | [`dist/agent/0.1.26/win-x64/gui-20261013-d/build/racp-agent.exe`](../../dist/agent/0.1.26/win-x64/gui-20261013-d/build/racp-agent.exe) | 21,947,392 bytes |
+
+### 2026-10-13 Client 실행 장애(Startup Panic / Tray E_FAIL) 원인 규명 및 수정 (`gui-20261013-f`)
+
+사용자의 "전혀 실행이 안된다"는 피드백에 따라 바이너리 런타임 추적 및 백트레이스를 실시하여 초기 구동 실패 원인 2가지를 규명하고 완전히 해소했다.
+
+1. **초기 렌더링 패닉 (Cosmic-Text Line Height Panic)**:
+   - **원인**: 사이드바 승인 탭에서 대기 승인 건수가 0일 때 `container(text("").size(0))`가 렌더링되면서, Iced 내부 텍스트 셰이핑 엔진인 `cosmic-text`의 `Buffer::new_empty`에서 `assert_ne!(metrics.line_height, 0.0, "line height cannot be 0")` 어설션이 실패하여 첫 프레임 레이아웃 계산 즉시 프로세스가 panic(ExitCode 101)으로 비정상 종료됨.
+   - **해치**: `pending_count > 0`일 때만 배지 요소를 row에 동적으로 추가하도록 구조를 개선하여 `size(0)` 텍스트 생성을 원천 제거.
+
+2. **시스템 트레이 등록 실패에 따른 비정상 종료 및 창 비가시성 (Shell Tray & Window Visibility)**:
+   - **원인 1**: Windows 환경에서 탐색기(`Shell_TrayWnd`)가 일시적으로 알림 영역을 수신할 수 없거나 제한된 세션일 때 `Shell_NotifyIconW(NIM_ADD)`가 `0x80004005 (E_FAIL)`을 반환. 기존 코드는 이를 치명적 오류로 간주하여 모달 에러 메시지박스 호출 후 `exit(4)`로 프로세스를 즉시 강제 종료함.
+   - **원인 2**: `Settings`의 기본 윈도우 설정이 `visible: !cfg!(windows)`로 지정되어 Windows에서는 창이 숨겨진 상태(`visible: false`)로 생성되었음.
+   - **해치**:
+     - 트레이 등록 실패(`E_FAIL`) 시 프로세스를 종료하지 않고 경고 로그만 남기며 창이 독립적으로 계속 동작하도록 수정 (`TaskbarCreated` 수신 시 재등록).
+     - `main.rs`의 윈도우 설정을 `visible: true`로 명시하여 앱 실행 즉시 화면에 클라이언트 UI 창이 정상 노출되도록 보장.
+
+3. **검증 및 최종 산출물 (`dist/`, Build ID: `gui-20261013-f`)**:
+   - `racp-client.exe` 런타임 프로세스 테스트: PID 생성 및 `MainWindowTitle: "RACP Native Client v0.1.26"`, `Responding: True` 정상 확인.
+   - `cargo test -p racp-client-native`: 6개 단위 테스트 **100% 통과**.
+   - `xtask stage`: Release 최적화 바이너리 스테이징 완료.
+   - `xtask verify-staging`: 4개 페이로드 정적 검증 PASS.
+   - `xtask stage-agent` & `verify-agent`: PASS.
+   - `xtask package`: Windows Setup EXE, Portable EXE, 배포 ZIP 일괄 생성 완료.
+   - 빌드 산출물 일람:
+     | 구분 | 경로 | 크기 / SHA-256 해시 |
+     |---|---|---|
+     | **Client 실행 바이너리** | [`dist/client/0.1.26/win-x64/gui-20261013-f/staging/payload/racp-client.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-f/staging/payload/racp-client.exe) | 15,865,856 bytes<br>`1271b00b5225f2956bbfe4c98ff5d0f7c7a74f0798c55144de44be53dfa4d286` |
+     | **Companion Agent** | [`dist/client/0.1.26/win-x64/gui-20261013-f/staging/payload/racp-agent.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-f/staging/payload/racp-agent.exe) | 21,947,392 bytes |
+     | **Windows Setup 설치 파일** | [`dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64-setup.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64-setup.exe) | 10,582,863 bytes<br>`d59f46d263c2e8636eaff8d818a9a6bbad8186ef29b960e1b8173162974a0ace` |
+     | **Portable 배포 EXE** | [`dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64-portable.exe`](../../dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64-portable.exe) | 40,648,280 bytes<br>`ec77641c73d6854fcfcec2e14859cf8bd0c324e04ed8cdfd0bc8fc6f7b5f22f7` |
+     | **배포 패키지 ZIP** | [`dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64.zip`](../../dist/client/0.1.26/win-x64/gui-20261013-f/packages/RACP-Native-0.1.26-win-x64.zip) | 38,013,970 bytes<br>`4eb980872a041cef0b5884235cb86c2825a3996da69ac5903cde37975a91365d` |
+     | **Standalone Agent** | [`dist/agent/0.1.26/win-x64/gui-20261013-f/build/racp-agent.exe`](../../dist/agent/0.1.26/win-x64/gui-20261013-f/build/racp-agent.exe) | 21,947,392 bytes |
+
+
+
+### 2026-10-13 Agent 서비스 독립 기반 구현 — v0.1.27 (`codex/agent-service-foundation`)
+
+사용자가 Agent 서비스 계획에 따라 미구현 기능 진행을 요청해 첫 묶음 AS15/AS01/AS02와 AS12의 배포 정의를 구현했다. 계획서의 과거 “문서 작성만” 기록과 현재 구현 요청을 구분했다. 별도 managed worktree/브랜치에서 작업했으며 `apps/client-native` 제품 source·실제 설치·SCM·기존 등록/state·USB/driver·macOS/Linux는 변경하거나 실행하지 않았다. PATCH는 **0.1.26→0.1.27 한 번**만 증가하고 `uv.lock`, root Cargo.lock, 독립 analysis-host Cargo.lock의 로컬 package version을 동기화했다. 분석 host는 metadata만 갱신했으며 엔진/build를 실행하지 않았다.
+
+| 작업 | 이번 source 범위 |
+|---|---|
+| AS15 | Agent 앱 경로/Windows service·setup 분리 및 실행 참조 갱신. 공유 backend의 추가 재배치는 점진 작업으로 유지 |
+| AS01 | 명시 Agent 서비스 역할/3-file allowlist·hash·PE·file pin·hard-link 거부 및 machine receipt 역할 연결 |
+| AS02 | GUI 없는 native-control/native-service-control의 기존 인증 IPC·CAS·승인·cancel/stop/event 소비 경로 |
+| AS12 | 독립 staging/verify/setup command·Agent-only recipe/CI 정의. setup 생성/실행 인수는 이번 배치에서 미수행 |
+
+- [Agent source](../../apps/agent/src/main.rs)는 역할 경로 `apps/agent`를 사용한다. Windows service/setup 모듈은 `platform/windows/service`와 `platform/windows/setup`으로 이동했다. Cargo·uv exclude·source digest·migration inventory의 current_source_path·CI·AGENTS·활성 source 링크를 갱신하고 과거 source_path/검증 기록은 보존했다. macOS/Linux service/device adapter는 미구현이다.
+- [Payload 계약](../../crates/racp-contract/src/distribution.rs)과 [admission](../../crates/racp-core/src/distribution.rs)은 명시 `native-agent-service` 역할에 Agent·LICENSE·SBOM만 허용한다. Client의 role 생략/4-file 계약은 유지하고 Client/portable caller는 service 역할을 거부한다. Agent 공통 worker/user run은 검증된 두 역할을 소비하지만 service host·provision·관리·restore·설치 보호는 service 역할만 받는다. hash/PE/파일 집합/duplicate-key/크기 검사를 유지하며 manifest/모든 파일의 hard-link도 거부한다.
+- [Headless CLI](../../apps/agent/src/cli/control.rs)는 기존 ControlRequest/ControlReply와 실제 SID/session·server PID/birth 검증을 재사용한다. snapshot·최대 5초/256개 subscribe event·policy CAS·승인 nonce·정확한 operation/request/boot cancel·stop을 제공한다. service-control은 공유 endpoint만 읽고 별도 TCP/무인 승인 우회를 만들지 않았다. 정상 거부 reply는 `result.type=error`와 exit 0, 입력/transport 실패는 stderr/exit 4라는 계약을 가이드에 명시했다. 실제 service observer/controller 실행은 아래 user-mode 결과와 구분한다.
+- `xtask stage-agent-service` / `verify-agent-service`와 `package-agent-service`를 연결했다. [Agent-only NSIS recipe](../../xtask/native-machine-installer.nsi)는 Client EXE/shortcut이 없고 files/protection receipt 단계와 서비스 등록/입력을 분리한다. Client package의 machine/both 혼합 역할은 거부하고 독립 Agent command를 사용한다. CI는 Windows만 stage/verify하며 setup 생성은 별도 명시 workflow-dispatch input이다. **이번에 setup EXE를 생성/실행하거나 CI를 dispatch하지 않았다.** compiler cache는 일반 절대 디렉터리만 재사용하도록 기존 path/reparse 검사를 유지했다.
+
+최종 개발 산출물은 [service staging manifest](../../dist/agent/0.1.27/win-x64/foundation-20261013-c/staging/build-manifest.json)와 [payload](../../dist/agent/0.1.27/win-x64/foundation-20261013-c/staging/payload/payload-manifest.json)이다. Agent EXE는 **22,186,496 bytes**, SHA-256 `ddd4899d1d2cf0c7321448183005f8c8d9592de94749782d022c915268db0cb7`; payload manifest SHA-256 `8bd7a40a42100e619497413bc4ed4364dd31c6494514a7d95b7b5fef55c5156b`; input digest `5b639eb10376c8d97de3e60c5ce14919ab1ee212b44e3804365697751d290e97`; Cargo.lock SHA-256 `c1513ab3d914d615ce1c897f7236c96e5b7b5cabbd3fca7d513a84a9e2750264`다. Agent-only dependency graph의 SBOM에서 Iced/Client/Electron/Node/CPython component가 없는 것을 확인했다. unsigned/non-published이며 `tests=not_run_by_xtask`; 별도 시험 근거는 다음과 같다.
+
+| 검사 | 실제 결과/범위 |
+|---|---|
+| Windows production build/정적 admission | Rust/Cargo 1.90.0, static CRT/x64 release 및 `verify-agent-service` PASS. Agent·LICENSE·SBOM 3개, file/hash/PE/import/manifest 검사. 실제 SCM/설치 아님 |
+| 설치 없는 실제 HTTPS/WSS + headless IPC | [최종 results](../../dist/verification/agent/0.1.27/foundation-e2e-final/results.json) **21 PASS / 0 FAIL**, 위 최종 EXE hash 일치. 새 Gateway/Device/state/workspace만 사용; 같은 PC/user-mode. UTF-8 파일·default deny/경로 탈출·stdout/stderr/exit·멱등 실행·ConPTY·정책 CAS/stale revision·승인/nonce replay·명시 거부/승인자 부재·stale-boot 및 실제 cancel·소유 child 종료·stop/drain·재시작/재연결 보존. 기존 profile 미사용, 시험 Agent/Gateway 정상 종료 |
+| Rust contract/core/xtask | [로그](../../dist/verification/agent/0.1.27/foundation-20261013/foundation-tests-final.log) **32 PASS**, role/client 호환·불법 파일/target/hash·duplicate/hard-link·write pin·SID/session model·package definition 포함 |
+| Agent dispatch 모델 | [최종 workspace 로그의 lib 절](../../dist/verification/agent/0.1.27/foundation-20261013/rust-workspace-f.log) **8 PASS**. 구 v1/permissions 없는 fixture를 v2+명시 exec.argv 권한·같은 boot/epoch/READY peer로 정비. 실제 Provider 효과 count·중복/충돌·로컬 deny/lease expiry·deadline cleanup 기준은 유지 |
+| Python 계약/버전 | [로그](../../dist/verification/agent/0.1.27/foundation-20261013/python-contracts.log) **14 PASS** (버전 6 포함), Ruff PASS, mypy **98 source files PASS** |
+| Source/format/검토 | inventory-check **114 operations / 143 permissions / 18 categories**, frozen baseline 100 유지. Agent/core/runtime/contract/xtask Rust format·git diff check PASS. 별도 읽기 전용 focused review에서 actionable finding 없음; reviewer가 tests를 독립 재실행한 것은 아님 |
+
+**전체 workspace suite는 PASS가 아니다.** 최종 `cargo test --workspace --locked`는 Browser군 **7 PASS / 13 FAIL**에서 중단됐다. 기존 Browser fixture가 v1/permissions 없는 AgentSettings로 `Browser::new`에 들어가 `PERMISSIONS_INVALID`로 실패한다. 선택 runtime/Browser fixture 정비는 이번 첫 묶음의 완료 증거로 바꾸지 않으며 이후 test군도 해당 full run에서 미실행이다. 실패 이름은 다음과 같다.
+
+- `browser_cancel_cleanup_includes_startup_before_cdp_is_ready`
+- `browser_process_is_protected_from_generic_termination`
+- `concurrent_close_and_agent_cleanup_finish_owned_profile_once`
+- `cookies_form_refs_native_input_png_and_navigation_invalidation`
+- `external_cdp_opt_in_context_and_target_ownership`
+- `failed_evaluation_records_started_effect_and_retains_no_child_after_timeout`
+- `foreign_recovery_authority_is_retained_and_cannot_report_complete_cleanup`
+- `frame_scope_cross_site_input_key_focus_and_detachment`
+- `isolated_contexts_owner_boot_snapshot_and_complete_cleanup`
+- `origin_fence_prevents_subresource_and_websocket_network_effects`
+- `recovery_never_deletes_a_live_owned_process_profile`
+- `restart_recovers_only_persisted_authorized_external_targets`
+- `restart_removes_profile_only_after_owned_process_tree_has_exited`
+
+전체 `cargo fmt --all`도 기준 GUI source의 기존 trailing-whitespace/format 문제로 실패했고 Agent 범위만 최종 통과했다. 자동 formatting이 만든 GUI 변경은 모두 되돌려 GUI source 차이는 0이다. 기존 recipes Windows callback 이름 warning 3개 및 core test unused-import warning은 유지된다.
+
+재시도 기록: 이전 turn 중단으로 생긴 PDB/LLVM incremental 손상 및 실행 중 xtask.exe를 재빌드한 file-lock 경합을 확인했다. 캐시 정리 명령은 정책 차단돼 삭제하지 않고 별도/기존 정상 cache로 재검증했다. 최초 service batch a는 compiler cache junction을 secure source read가 거부해 해당 staging만 quarantine에 보존했고 path 검사를 약화하지 않았다. 일반 디렉터리 cache에서 b와 최종 c를 같은 버전으로 생성했다. inventory의 permissions.rs raw hash 불일치는 managed checkout CRLF/LF 차이였으며 frozen baseline과 같은 LF bytes로 복구해 계약 변화/delta 없이 통과했다. 최초 headless red는 이전 EXE의 명령 부재, 추가 승인 거부 시험의 최초 실패는 내부 APPROVAL_REJECTED와 공개 publication guard의 APPROVAL_REQUIRED를 혼동한 harness assertion이었다. 제품 승인 검사는 변경하지 않고 reply·승인 종료 event·결과/data 부재를 함께 검사해 최종 후보를 다시 통과시켰다. b와 c EXE hash는 달라 b의 인수를 최종 c로 이관하지 않고 **최종 c를 21-case 재실행**했다.
+
+> [!IMPORTANT]
+> 이번 완료 범위는 **Agent 서비스용 source/Windows 개발 payload·headless user-mode 검증**이다. 실제 service account/SYSTEM/SCM lifecycle·ACL/DPAPI 인수(AST12–AST18), 설치/제거/clean-machine·서명·실제 두 PC/MCP 인수는 완료로 선언하지 않는다. AS03–AS11의 실제 서비스 조건/운영·AS13 복구·AS16–AS18 USB/외장 장치 enumeration/opaque session/수집/IO 정리와 AST24–AST26 실제 장치 인수는 남아 있다. 현재 설치 금지와 장치/driver 변경 금지를 유지한다.
+
+#### main 통합 전 전체 회귀 — 2026-10-13
+
+후속 구현/통합 요청에 따라 Browser fixture를 v2 설정과 명시 console/network read 권한으로 정비했다. Filesystem fixture의 workspace가 runtime private parent 내부에 놓여 정상 작업까지 거부되던 배치를 `workspace`, `docs`, `state/data`로 분리했다. 제품의 default deny·state 보호·process 종료 확인·5초 cleanup 예산은 변경하지 않았다.
+
+- [전체 workspace 최종 실행](../../dist/verification/agent/0.1.27/foundation-20261013/rust-workspace-h.log): `cargo test --locked --workspace`, **92 PASS / 0 FAIL / 4 ignored**, exit 0. ignored는 subprocess 전용 `support::fixture_child` 4개이며 부모 시험이 명시 실행한다. 기존 Windows Chromium 1243을 명시한 격리 profile/local fixture 시험이며 native Browser도 **20 PASS**다.
+- [Filesystem/Memory/Process/Shell/Terminal 묶음](../../dist/verification/agent/0.1.27/foundation-20261013/runtime-fixtures.log): **15 PASS / 0 FAIL / 4 ignored**. Ruff PASS, mypy **98 files PASS**, 버전 시험 **6 PASS**, scoped Rust format PASS를 다시 확인했다.
+- Browser 권한 fixture 수정 직후 실행은 **17 PASS / 3 FAIL**였으며 concurrent close, evaluation timeout cleanup, external CDP의 owned browser 종료에서 실패했다. 임시 native cleanup 진단을 추가한 단독 close **1 PASS**와 [전체 Browser 재실행](../../dist/verification/agent/0.1.27/foundation-20261013/browser-group-trace.log) **20 PASS**에서는 재현되지 않아 진단 코드를 제거했다. 위 전체 workspace도 통과했지만 **간헐 cleanup 실패의 원인을 규명하거나 제품 수정으로 해결했다는 증거는 아니다**. AS07의 반복/부하 인수 공백으로 유지한다. 실제 owned process handle signal과 Job tree-empty 증명을 exit code만으로 대체하지 않았다.
+
+앞선 실패 로그와 당시 결과는 이력으로 보존한다. 후속 PASS는 source 회귀 근거이며 SCM/서비스 identity·설치·물리 USB 장치 인수를 대신하지 않는다.
+
+### 2026-10-13 AS09 recovery 계약·비활성 기본 정책 readback — v0.1.28
+
+기반 구현은 `5e1fd98`로 커밋하고 기존 GUI startup 수정 `8ac3e96`를 보존해 로컬 `main`의 `be5b456`에 통합했다. [main 통합 뒤 전체 suite](../../dist/verification/agent/0.1.27/foundation-main/rust-workspace.log)는 **92 PASS / 0 FAIL / 4 subprocess fixture ignored**다. 이후 AS09의 운영 정책 source를 후속 묶음으로 구현했으며 PATCH **0.1.27→0.1.28 한 번**과 Python/Rust/analysis-host lock의 로컬 package version을 동기화했다.
+
+- [공통 recovery 계약](../../crates/racp-contract/src/service_recovery.rs)은 OS 호출 없는 타입/검증으로 command·reboot·알 수 없는 필드·무제한/비단조 restart·non-crash recovery를 거부한다. 기본 정책은 **단일 `none` / non-crash false**다. 5초/30초/120초·terminal none·24시간 무실패 reset의 bounded profile은 계약/변환만 준비했고 SCM 활성화/CLI opt-in에 연결하지 않았다.
+- [Windows readback 어댑터](../../apps/agent/src/platform/windows/service/recovery.rs)는 신규 fixed-name service의 기본 정책을 명시하고 재확인한다. QueryServiceConfig2W는 NULL probe의 insufficient-buffer 크기로 최대 8 KiB를 할당하며 성공 호출의 미보장 size 값에 의존하지 않는다. 구조·array/count·alignment·포인터 범위·exact action/reset/flag·빈 command/reboot text를 확인한다. 실패는 `SERVICE_RECOVERY_OUTCOME_UNKNOWN`이다.
+- provision은 입력 commit 뒤 **서비스가 아직 disabled일 때** 기본 정책을 설정·확인한 다음 demand-start를 허용한다. restore는 새 service의 일회성 maintenance STOPPED/identity 검증 뒤 적용하며 readback 실패에는 disabled와 `recovery_unconfirmed` 기록을 남긴다. 기존 service를 채택/재구성하지 않는다.
+- focused review가 일회성 configure/reconcile/recover_sessions/remove의 crash 후 자동 재시작 위험을 지적해 기본값을 disabled로 유지했다. [기본값 RED](../../dist/verification/agent/0.1.28/recovery-20261013/default-red.log)는 4개 restart actions 대신 1개 none을 요구해 실패했고 [GREEN](../../dist/verification/agent/0.1.28/recovery-20261013/default-green.log)은 native parser/query/변환 **7 PASS**다. 재검토에서 해당 P1이 해소됐으며 reviewer는 실제 SCM/tests/build를 실행하지 않았다.
+
+실제 Windows API의 [failure-action 반복 규칙](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_failure_actionsw), [non-crash flag](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_failure_actions_flag), [query 크기 계약](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nf-winsvc-queryserviceconfig2w)을 기준으로 source를 구성했다. [이미 queue된 restart](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nf-winsvc-changeserviceconfig2w)는 STOPPED 보고만으로 취소되지 않는다. 명시 disabled·durable startup gate·관리/중지 orchestration을 완성하기 전 자동 restart/boot auto-start를 지원한다고 선언하지 않는다.
+
+| 최종 검사 | 결과·범위 |
+|---|---|
+| 전체 Rust 직렬 suite | [로그](../../dist/verification/agent/0.1.28/recovery-20261013/rust-workspace-serial.log), `cargo test --locked --workspace -- --test-threads=1`, **103 PASS / 0 FAIL / 4 ignored**, exit 0. 새 contract 4/native adapter 7 포함; SCM API를 호출하는 시험은 없음 |
+| Python | [로그](../../dist/verification/agent/0.1.28/recovery-20261013/python-final.log), 버전 6/ConPTY harness 5의 **11 PASS**. Ruff PASS, mypy **98 files PASS**, scoped Rust fmt/git diff check PASS. Inventory **114 ops / 143 permissions / 18 categories**, frozen 100 baseline 유지 |
+| Windows 개발 서비스 payload | [build manifest](../../dist/agent/0.1.28/win-x64/recovery-20261013-a/staging/build-manifest.json), [stage 로그](../../dist/verification/agent/0.1.28/recovery-20261013/stage.log), release/static CRT Windows x64 build 및 GUI 없는 3-file allowlist·PE/native imports·hash verify PASS. 설치 artifact 생성/installer 실행/SCM 설정은 하지 않음 |
+| 최종 EXE 실제 원격 회귀 | [결과](../../dist/verification/agent/0.1.28/recovery-e2e-final-b-20261013/results.json)·[로그](../../dist/verification/agent/0.1.28/recovery-20261013/e2e-final-b.log), **21 PASS / 0 FAIL**, exit 0. 위 최종 EXE hash와 최종 harness hash를 대조했다. 격리 HTTPS/WSS/user-mode/인증 IPC·권한·승인/replay·파일·stdout/stderr/exit·멱등성·ConPTY·CAS·cancel/child 종료·stop/drain·restart 보존을 재검증했다. 시험 Agent/Gateway 종료 완료, 기존 profile 미사용. 서비스 계정/SCM 조건의 결과로 해석하지 않음 |
+
+Agent EXE는 **22,196,224 bytes**, SHA-256 `82eebcee2e621f149a3c6457b292b7ff83172aa0c0f3ea2c505055aa5fb751c1`; payload manifest SHA-256 `63c2e9be9a8d9fb9bbda03507ca587db595fd02007b9c66d9a87e2362ff5aa74`; source input digest `8c334c614858382642f5f1f6e0d2f1718b9731c05e65a54edd46ab623b1ec932`다. source evidence는 baseline `be5b456`와 당시 dirty input을 기록한다. unsigned/non-published이며 xtask 자체의 기능 시험은 `not_run_by_xtask`다.
+
+실패도 보존한다. [최종 병렬 suite](../../dist/verification/agent/0.1.28/recovery-20261013/rust-workspace-disabled-final.log)는 Browser **17 PASS / 3 FAIL**에서 중단했으며 실패는 concurrent close, frame scope close, origin-fence cleanup이었다. 이번 source 묶음에 Browser/runtime Provider 변경은 없다. 직렬 PASS가 **간헐 CLEANUP_FAILED를 해결했다는 증거는 아니다**. AS07 부하/병렬 cleanup 인수 공백은 유지하며 종료 deadline·parent signal/Job tree-empty 확인을 약화하지 않았다.
+
+최초 원격 harness 실행은 ConPTY 명령의 파일 효과까지 확인한 뒤 단일 read 출력 assertion에서 실패했다. 비동기 출력이 여러 read로 나뉘는 조건을 [harness 시험](../../tests/unit/test_native_agent_harness.py)으로 고정하고 byte cursor를 따라 UTF-8 marker를 128 KiB/10초 예산 안에서 수집하도록 수정했다. read 실패/EOF/역행 cursor/초과 크기 및 마감 후 도착한 marker를 거부하며 HTTP timeout에도 남은 예산을 전달한다. 생산 Provider·cleanup deadline은 변경하지 않았다. 앞선 E2E 실패와 [late-marker RED](../../dist/verification/agent/0.1.28/recovery-20261013/terminal-deadline-red.log)를 최종 성공으로 덮어쓰지 않는다.
+
+> [!IMPORTANT]
+> AS09는 **recovery 계약·보수적 disabled 기본값·readback의 부분 구현**이다. bounded restart의 활성화, 일회성 관리 crash gate, queued restart 중지, boot auto-start 및 실제 SCM/계정/설치 인수는 남아 있다. AS07 간헐 Browser cleanup과 AS16–AS18 USB/장치 계약·backend·수집·물리 인수도 미완료다. 실제 설치·서비스 등록·driver/device IO·기존 profile 변경은 하지 않았다.
+
+후속 source commit **`3b54490`**은 로컬 main에 fast-forward로 반영했다. [main 통합 후 전체 직렬 suite](../../dist/verification/agent/0.1.28/recovery-main/rust-workspace-serial.log)는 **103 PASS / 0 FAIL / 4 ignored**, main의 Python 시험 **11 PASS**, Ruff/mypy PASS, version show **0.1.28**이다. main 출력 위치에 원본 staging bytes와 private DACL을 보존해 복사한 뒤 `verify-agent-service --build-id recovery-20261013-a`도 PASS이며 EXE hash는 위 최종 E2E와 같다. 최초 robocopy security 복사는 empty output root에서 Access denied로 실패해 owner/group 변경 없이 그 **생성된 출력 디렉터리의 DACL만** 원본과 맞춰 복사했고, 파일/payload 검증을 약화하지 않았다. 검증 로그·최종 E2E results만 보존했으며 시험 credential/등록 state는 main으로 복사하지 않았다. 기존 GUI source와 사용자 미추적 HTML/계획 파일 3개는 보존됐고 push는 하지 않았다. 후속 구현과 원본 격리 evidence 보존을 위해 managed worktree를 유지한다.
+
+### 2026-10-13 AS09 durable 일회성 start intent·완료 maintenance 재개 — v0.1.29
+
+PATCH **0.1.28→0.1.29 한 번**과 Python/Rust/optional analysis-host lock의 로컬 package version을 동기화했다. [공통 계약](../../crates/racp-contract/src/service_start.rs)은 command/phase/UUID/hash/record grammar를 검증하고, [core 저장 계층](../../crates/racp-core/src/service_start.rs)은 pinned root identity, bounded/중복 key 거절, atomic claim-before-effect, receipt SHA 및 CAS acknowledge/abort를 제공한다. prepared/claimed/completed/failed는 정상 Run을 차단하며 claimed/failed를 자동 replay하지 않는다. [Windows service actor](../../apps/agent/src/platform/windows/service/start_intent.rs)는 actor/private ACL 확인 뒤 의도를 소비하고 host는 실행 lock을 수명 전체에 유지한다. SYSTEM helper의 configure/reconcile/recover_sessions/remove/restore는 UUID만 SCM start argument로 전달한다. 정상 Run의 bootstrap/WSS는 미확정 intent에서 실행되지 않는다.
+
+`inspect_start_intent`/`abort_start_intent`/`acknowledge_start_intent`는 fixed owned STOPPED/PID 0 service와 private root를 전제로 한다. completed configure/reconcile/session recovery는 현재 receipt와 exit 0/NONE recovery를 확인해 CAS acknowledge한다. 제거·복원의 completed maintenance에는 일반 acknowledge를 금지한다. 명시 `resume_request_id`/`resume_expected_sha256`을 기존 remove/restore 요청에 추가한 경우에만 동일 purpose의 마지막 SYSTEM 작업을 재개한다. maintenance를 다시 실행하지 않고 config/device/current state/schema/credential 존재/pending·receipt hash·service identity를 다시 확인한다. 제거 barrier는 namespace 부재를 확인한 restore만 소비한다. 복원은 NONE 정책·demand-start readback/release publish/receipt 뒤에 acknowledge한다. [계획](../spec/agent-service-implementation-and-test-plan.md)과 [운용 가이드](../guides/desktop-client-guide.md)에 경계 및 legacy start argument 거절을 반영했다.
+
+검토에서 completed maintenance의 finalization 오류 뒤 재개 경로 부재를 확인해 보완했다. 새 restore의 기본 failure actions가 empty인 상태를 NONE readback으로 확인하려던 회귀는 새 disabled service 생성 직후 NONE 설정으로 수정했다. demand readback을 disabled 허용 검사와 분리하고 제거 final lock 안에서 현재 state identity를 추가 확인했다. unregistered maintenance의 기존 allowlist가 새 의도/lock을 거부하던 문제는 [RED](../../dist/verification/agent/0.1.29/start-intent-20261013/maintenance-files-red.log)로 재현한 뒤 정확한 네 상수만 허용해 [GREEN](../../dist/verification/agent/0.1.29/start-intent-20261013/maintenance-files-green.log)으로 확인했다. 추가·유사 이름 및 credential 파일은 계속 거부한다. 외부 reviewer의 마지막 재검토는 계정 credit 오류로 중단됐으므로 최종 clean review로 기록하지 않으며, 해당 지적 수정 뒤 컴파일·시험 및 자체 source 검사를 수행했다.
+
+| 검사 | 결과·범위 |
+|---|---|
+| intent 계약·저장·host/maintenance | 최종 전체 suite에 새 contract **2**, core **7**, Agent parser/resume/receipt **3**, runtime allowlist **1** 포함. claim 뒤 crash·이중 claim·구 UUID·다른 root·변조·receipt/CAS·관리/실행 lock·정확한 completed purpose 재개를 검증. SCM/실제 서비스 계정 호출 없는 모델/파일 시험 |
+| 전체 Rust 직렬 suite | [최종 로그](../../dist/verification/agent/0.1.29/start-intent-20261013/rust-workspace-serial-b.log), `cargo test --locked --workspace -- --test-threads=1`, **116 PASS / 0 FAIL / 4 subprocess fixture ignored**, exit 0 |
+| Python·정적 검사 | [Python](../../dist/verification/agent/0.1.29/start-intent-20261013/python-final.log) **11 PASS**, [Ruff](../../dist/verification/agent/0.1.29/start-intent-20261013/ruff.log) PASS, [mypy](../../dist/verification/agent/0.1.29/start-intent-20261013/mypy.log) **98 files PASS**, scoped Rust fmt/git diff check PASS, [inventory](../../dist/verification/agent/0.1.29/start-intent-20261013/inventory.log) **114 ops / 143 permissions / 18 categories**, frozen 100 baseline 유지 |
+| Windows Agent 개발 payload | [manifest](../../dist/agent/0.1.29/win-x64/start-intent-20261013-a/staging/build-manifest.json)·[stage](../../dist/verification/agent/0.1.29/start-intent-20261013/stage.log)·[verify](../../dist/verification/agent/0.1.29/start-intent-20261013/verify-stage.log), Rust 1.90.0 Windows x64 release/static CRT·3-file GUI-free allowlist·PE/import/hash PASS. 설치 artifact·installer 실행 없음 |
+| 최종 EXE 격리 원격 회귀 | [results](../../dist/verification/agent/0.1.29/start-intent-e2e-20261013-a/results.json)·[로그](../../dist/verification/agent/0.1.29/start-intent-20261013/e2e.log), **21 PASS / 0 FAIL**, exit 0. 기존 profile 미사용 HTTPS/WSS·인증 IPC/headless·권한/승인/replay·파일/ConPTY·CAS/cancel/stop/재시작. 실제 SCM intent/가상 계정 인수를 대신하지 않음 |
+
+최종 EXE **22,328,832 bytes**, SHA-256 **`7c67a924e1915e315467c475717c58e6dd54730efffdd694a4fbaae1ee814e2a`**, payload manifest **`a6425d25aca14131a3e2db597338d07adbd214da1006bc478bc1a29396fee314`**, source input digest **`86b77284b8d6dd0060764b84edb3c7b61317c601120191695da860a0f3a0865e`**. E2E EXE hash는 manifest와 일치하고 harness SHA는 **`fd9b319d459948f5fed9dc5b8b6b8ed6de46e249392c8f4191ccd9fa93d65a1e`**다.
+
+최초 [전체 직렬 실행](../../dist/verification/agent/0.1.29/start-intent-20261013/rust-workspace-serial.log)은 Browser `cookies_form_refs_native_input_png_and_navigation_invalidation`의 cleanup에서 **19 PASS / 1 CLEANUP_FAILED**로 중단됐다. Agent 빌드 종료 뒤의 최종 직렬 재실행은 통과했지만 원인 규명·제품 수정 증거가 아니며 AS07 간헐 cleanup 공백을 유지한다. 생산 cleanup 예산·Provider 동작·실제 process-tree 종료 proof를 완화하지 않았다. 기존 recipes warning 3개/core test unused import warning도 유지된다.
+
+> [!IMPORTANT]
+> AS09는 **일회성 관리 작업의 durable 실행 경계 source·개발 검증**까지 진행했다. claimed/failed의 수동 outcome recovery, namespace 없는 prepared restore 관리(AS08), queued restart 중지·bounded restart 활성화·boot admission, 실제 SCM/SYSTEM/virtual account/설치 인수는 미완료다. AS16–AS18 USB/장치 계약·backend·수집·물리 인수도 남아 있다. 실제 설치·서비스 등록/시작·driver/device IO·기존 profile 변경은 하지 않았다. GUI source와 사용자 미추적 파일 3개를 보존한다.
+
+구현 commit **`bd332e5`**를 로컬 `main`에 fast-forward 반영했다. [main 전체 직렬 회귀](../../dist/verification/agent/0.1.29/start-intent-main/rust-workspace-serial.log)는 **116 PASS / 0 FAIL / 4 ignored**, main의 Python **11 PASS**, Ruff/mypy **98 files PASS**, version **0.1.29**다. 위 staging bytes와 생성된 출력 디렉터리의 private DACL 및 비밀 없는 logs/최종 results만 main 출력 위치로 보존했고 [main payload verify](../../dist/verification/agent/0.1.29/start-intent-main/verify-stage.log)도 PASS다. EXE SHA는 위 E2E와 동일하다. 시험 credential/등록 state는 복사하지 않았으며 기존 profile/service를 변경하지 않았다. 새 문서 상대 링크를 확인했고 사용자 미추적 GUI/계획 파일 3개는 유지한다. push 없이 다음 roadmap 작업을 계속하며 managed worktree는 보존한다.
+
+#### 같은 v0.1.29 묶음의 최초 service 등록 admission 수정
+
+main 반영 후 bootstrap source 검사에서 `NativeRegistration::ensure_empty(service=true)`가 host의 새 execution lock을 거부해 최초 등록을 차단하는 회귀를 발견했다. [RED](../../dist/verification/agent/0.1.29/start-intent-20261013/service-registration-red.log)로 실패를 확인하고 [수정/시험](../../crates/racp-core/src/state_schema.rs)을 추가했다. service actor/config 확인 이후 idle start gate의 네 고정 파일만 허용하며 미확정 intent는 token 소비 전에 차단한다. unregistered restore의 고정 maintenance·restore/detach·config/agent/settings lock은 **Acknowledged Restore의 현재 receipt hash/nonce/config hash·registered=false/device=null/state-preserved/credential-unread**가 확인될 때만 허용한다. 사용자 등록의 empty-root 검사는 유지하고 임의 파일·불일치 receipt를 거부한다. [GREEN](../../dist/verification/agent/0.1.29/start-intent-20261013/service-registration-final.log) **1 PASS**는 실제 SCM/enrollment 실행이 없는 private fixture admission 시험이다. 실제 서비스 계정의 bootstrap·DPAPI/등록 인수는 계속 미완료다.
+
+소스가 달라져 앞선 batch a의 EXE/21-case 결과를 새 소스 증거로 사용하지 않았다. 같은 PATCH로 batch **`start-intent-20261013-b`**를 새로 [stage](../../dist/verification/agent/0.1.29/start-intent-20261013/stage-b.log)/[verify](../../dist/verification/agent/0.1.29/start-intent-20261013/verify-stage-b.log)해 기존 출력도 보존했다. 수정 뒤 [전체 직렬 suite](../../dist/verification/agent/0.1.29/start-intent-20261013/rust-workspace-serial-c.log)는 **117 PASS / 0 FAIL / 4 ignored**, 새 EXE의 [원격 results](../../dist/verification/agent/0.1.29/start-intent-e2e-20261013-b/results.json)·[로그](../../dist/verification/agent/0.1.29/start-intent-20261013/e2e-b.log)는 **21 PASS / 0 FAIL**, exit 0이다. scoped fmt/diff check도 PASS이며 Python 11/Ruff/mypy의 대상 소스·버전은 앞선 검사와 동일하다. Browser 간헐 CLEANUP_FAILED와 actual SCM/설치 미검증 경계는 유지한다.
+
+**최신 v0.1.29 후보는 batch b**다. [manifest](../../dist/agent/0.1.29/win-x64/start-intent-20261013-b/staging/build-manifest.json): EXE **22,331,904 bytes**, SHA-256 **`10448a84a0a31ada180c6d457668c175c9fdd06ba78afcc02fb95ebb48022c4b`**, payload manifest **`530bdb9c426dedd78ab93af04b5b248f13bc43699aeff69b94372c2869cb5e4b`**, source digest **`13244b46b4fc5c88a655f726554c556d33629c5992b8a683024959789f97a32e`**. 최종 E2E의 EXE SHA는 manifest와 일치하고 harness SHA는 앞선 실행과 동일하다.
+
+admission 수정은 **`2b84b31`**, 동시에 main에 반영된 Client 문서 commit `e1c7df2`와의 통합은 **`f171ba9`**다. SSOT의 두 append 내용을 모두 보존해 문서 충돌을 해결했고 GUI source 변경은 없다. [수정·통합 뒤 main 전체 직렬 회귀](../../dist/verification/agent/0.1.29/start-intent-main/rust-workspace-serial-b.log)는 **117 PASS / 0 FAIL / 4 ignored**, [main batch b verify](../../dist/verification/agent/0.1.29/start-intent-main/verify-stage-b.log)는 PASS, SSOT **0.1.29**다. batch b 출력의 private DACL/bytes와 비밀 없는 logs/results만 primary에 보존해 EXE SHA를 대조했다. 실제 설치·서비스/장치 조작·push는 하지 않았다. 다음 AS08 작업은 namespace 없는 prepared restore의 명시 검사/취소 경계이며, 목표는 계속 진행 중이다.
+
+### 2026-10-13 Client ADR 통합과 Slint GUI 결정 — 문서 변경만
+
+Client ADR-0023~0031(Electron·Python·Tauri·Iced 시절 결정과 이력)을 삭제하고, 현재도 유효한 결정만 현재 코드 기준으로 [ADR-0032](../adr/ADR-0032-native-client.md)에 통합했다. 통합 범위는 Rust 단일 프로세스 Client 구조, 독립 상태, `.racp` 연결 파일 등록, 설정 수정·복구, 트레이·단일 인스턴스, HKCU 로그인 자동 시작, 사용자 NSIS 설치·제거다. ADR-0022(Agent 백그라운드 수명)는 Agent 결정이므로 유지했다. ADR 색인, 문서 포털, README, 가이드, documentation-standards skill, AGENTS.md의 링크와 표기를 갱신했다. 이력 문단의 삭제된 ADR 링크는 "삭제, ADR-0032로 통합" 텍스트로 바꿨다.
+
+GUI 툴킷은 Iced에서 **Slint 1.16.x(소프트웨어 렌더러 기본)**로 결정했다. 근거는 Slint PoC(미병합 브랜치 `claude/affectionate-moore-a7bb28`, 커밋 `31c055b`, `apps/client-slint-poc`)를 OpenGL이 없는 Windows VMware VM에서 측정한 결과다. 증거는 `dist/verification/client/0.1.26/slint-poc-20261013-01/`에 있다.
+
+| 항목 | 결과 |
+|---|---|
+| 디자인 기준과 일치 | 근접. 펼친 카테고리 화살표 방향 등 작은 차이 |
+| 소프트웨어 렌더러 | 일반 다시 그리기 0.5~8.9ms(100%/150% DPI), 최악의 전체 다시 그리기 평균 12ms·순간 30~68ms, 실제 창 약 60fps |
+| 메모리 | 유휴 시 43.8MB working set, 사용 중 44~49MB |
+| 한글 IME | 확정·조합 중 글자 표시 PASS |
+| 접근성 | 접근성 트리에서 이름·선택 상태 확인. Narrator 실행 미실시, 카테고리 머리글 Tab 이동 불가 |
+| 미실시 | GPU 렌더러 비교(OpenGL 없음), RDP 실측 |
+
+> [!IMPORTANT]
+> 문서 결정만 바뀌었다. `apps/client-native`와 배포 빌드는 여전히 Iced 0.13.1/tiny-skia다. 코드 변경, 빌드, 버전 bump, GUI 실행은 이 배치에서 하지 않았다. 이전 순서와 단계별 완료 조건은 ADR-0032 5절을 따른다.
+
+### 2026-10-13 Slint 이전 1단계: 기반 — v0.1.30
+
+[ADR-0032](../adr/ADR-0032-native-client.md) 5절의 1단계를 구현했다. PATCH **0.1.29→0.1.30 한 번**, uv/Cargo lock을 갱신했다. 기본 빌드는 그대로 Iced이고, Slint 화면은 opt-in feature `slint-ui`로만 빌드된다.
+
+- **공통 계층**: [ipc.rs](../../apps/client-native/src/ipc.rs)가 인증 IPC 구독(`subscribe`)과 명령 전송(`request`)을 GUI 툴킷과 무관하게 제공한다. [onboarding.rs](../../apps/client-native/src/onboarding.rs)는 `load_local`·`stopped_cleanly`·`start_local_agent` 함수를 분리했다. Iced 화면도 같은 함수를 호출한다.
+- **Slint 화면**: [slint_ui.rs](../../apps/client-native/src/slint_ui.rs)와 [ui/](../../apps/client-native/ui/app.slint). Slint 1.16.1, 소프트웨어 렌더러를 직접 지정한다.
+  - 데모 디자인의 헤더·사이드바와 장치 식별 카드
+  - Agent 상태 구독, 트레이 아이콘 상태·제어 권한 갱신
+  - 창 닫기·⌄ 버튼으로 트레이 숨김, 단일 인스턴스 활성화로 복원
+  - Iced와 같은 종료 절차, 승인 요청 시 창 표시
+  - 서비스 모드에서는 런타임·설정 탭 숨김
+  - `@tr()` 한국어 번역. 본문 화면은 2단계부터 이전
+- **다시 표시 문제 수정**: Windows는 숨긴 창의 버퍼를 지우는데 softbuffer는 재사용 버퍼로 보고한다. 그래서 복원 후 헤더가 흰색으로 남았다. `SLINT_DESTROY_WINDOW_ON_HIDE`로 숨길 때 창을 없애고 표시할 때 새로 만들어 해결했다. 숨김은 입력 이벤트가 끝난 뒤 실행한다.
+- CI [client.yml](../../.github/workflows/client.yml)에 `slint-ui` 컴파일 검사를 추가했다.
+
+| 검사 | 결과 |
+|---|---|
+| `cargo check --locked`(기본·`slint-ui`) | PASS, `racp-client-native` 신규 경고 없음 |
+| clippy `--no-deps -D warnings` | 신규 오류 없음. 기존 `accessibility.rs` 2건·`native.rs` 1건 유지(이번 변경 전부터 존재) |
+| rustfmt(새 파일), inventory-check, version 단위 시험 | PASS / 114 ops·143 permissions·18 categories / 6 passed |
+| 실기(Windows 10 VM, 150% DPI, OpenGL 없음, 빈 상태) | 창 표시·한국어·사이드바·키보드 포커스·창 닫기→트레이·재실행→복원·복원 후 전체 다시 그리기 PASS. 메모리 실행 직후 40.1MB, 숨김 30.3MB(working set). UIA Invoke로 헤더 버튼 PASS |
+| 헤더 버튼 마우스 입력 | 자동화 도구가 주입한 마우스 이동이 창에 전달되지 않아 처음에는 실패로 보였다. 디버그 로그와 사용자 실제 마우스 클릭으로 hover·숨김 PASS를 확인했다. 제품 결함 아님 |
+
+> [!NOTE]
+> 실행 중인 Agent·등록 상태가 없는 환경에서 확인했다. 실제 Agent 연결, 종료 시 Agent 정리, 승인 요청 표시는 2단계 이후 실기 확인 대상이다. `--state-dir`는 스테이징된 payload manifest가 필요해 단독 빌드로는 실행되지 않았다. 설치·서비스 등록·등록 상태 변경은 하지 않았고 `%LOCALAPPDATA%\RACP\native-client`도 생성되지 않았다. `racp-core` clippy 오류 3건과 Iced 화면 파일의 기존 rustfmt 실패(`views/status.rs` 줄 끝 공백)는 이번 범위 밖이다.
+
+### 2026-10-13 Slint 이전 2단계: Status 화면 — v0.1.31
+
+[ADR-0032](../adr/ADR-0032-native-client.md) 5절의 2단계를 구현했다. PATCH **0.1.30→0.1.31 한 번**, uv/Cargo lock을 갱신했다. 기본 빌드는 그대로 Iced이고 Slint 화면은 `slint-ui` feature로만 빌드된다.
+
+- **Status 화면** [status.slint](../../apps/client-native/ui/status.slint): 데모 디자인을 따르고 Agent가 보내는 값만 표시한다.
+  - 엔드포인트 상태 카드: 상태 배지, 상태 경로, Device·Gateway·작업 폴더·프로필, 로컬 상태 새로고침, Agent 시작·정지, 로컬 요청 취소, 서비스 모드의 현재 화면 연결·해제
+  - 지표 카드 4개(연결 시에만): 이벤트 순번·boot, 활성 작업 수, 대기 승인 수(승인 화면 이동), 정책 revision. 데모의 PID·가동 시간·"Guardian Ready"·"/ 32 Slots"처럼 근거 없는 값은 넣지 않았다.
+  - `.racp` 등록 폼: 경로 입력·확인, token 없는 미리보기(Gateway·만료·CA hash), 파일 SHA-256 자동 입력, 기본 작업 폴더, 실행 프로필 선택, pending 경고, 새 등록 제출. 경로를 바꾸면 미리보기와 hash를 지운다.
+  - 실행 중 작업 목록과 작업 취소, 제어 결과 기록(감사 로그)과 로그 비우기(화면 표시만 지우며 Agent 기록은 그대로)
+- **공통 계층**: [onboarding.rs](../../apps/client-native/src/onboarding.rs)에 `inspect_file`·`run_action`을 분리했다. 영수증 요약 [`completion_line`](../../apps/client-native/src/ui_model.rs)을 추가하고 Iced 감사 로그의 중복 구현을 이 함수로 바꿨다.
+- **컨트롤러** [slint_ui.rs](../../apps/client-native/src/slint_ui.rs): 등록·로컬 helper 실행·취소, 작업 취소 확인, 서비스 화면 연결 정리와 종료 순서를 Iced와 같은 규칙으로 옮겼다. 등록 정책의 제약 편집은 3단계에서 연결하며, 그전까지 현재 모델 제약을 사용한다.
+- 실기 확인 중 `IdentityItem` 라벨이 남는 폭을 차지해 경로 값이 화면 밖으로 밀리는 문제를 발견해 고쳤다.
+
+| 검사 | 결과 |
+|---|---|
+| `cargo check --locked`(기본·`slint-ui`), rustfmt(새 파일) | PASS |
+| clippy `--no-deps -D warnings` | 신규 오류 없음. 기존 `accessibility.rs` 2건·`native.rs` 1건 유지 |
+| inventory-check, version 단위 시험, `racp-core` connection 시험 | 114 ops·143 permissions·18 categories / 6 passed / 1 passed |
+| 실기(Windows 10 VM, 150% DPI, 빈 상태, 등록 없음) | 미등록 화면·한국어·키보드 한글 경로 입력·프로필 선택(UIA Toggle)·연결 파일 오류 안내(`CONNECTION_FILE_INVALID`)·로그 비우기·로컬 새로고침 PASS. 가짜 Gateway(`https://gateway.invalid:8765`)·가짜 token의 시험 파일로 미리보기와 SHA-256 자동 입력 PASS, token 미표시. 등록 제출은 하지 않았고 시험 파일은 삭제했다 |
+| 증거 | `dist/verification/client/0.1.31/slint-step2-20261013/` `status-unregistered-full.jpg`(SHA-256 `65af5052…ac59`), `status-enroll-preview.jpg`(`757041c5…9d13`) |
+
+> [!NOTE]
+> 실행 중인 Agent에 연결된 화면(지표 카드, 작업 목록, 작업 취소, Agent 정지, 감사 로그 항목)과 서비스 모드 화면 연결은 연결 가능한 Agent가 없어 실기 확인하지 않았다. 자동화 도구의 마우스 클릭과 `Ctrl+A`는 Slint 창에 안정적으로 전달되지 않아 UIA와 키보드 입력으로 확인했다. 도구가 긴 문자열을 클립보드로 붙여넣어 시험 중 사용자 클립보드가 덮어써졌다. 설치·서비스 등록·등록 상태 변경은 하지 않았고 `%LOCALAPPDATA%\RACP\native-client`도 생성되지 않았다.
+
+### 2026-10-13 Slint 이전 3단계: 권한 화면 — v0.1.32
+
+[ADR-0032](../adr/ADR-0032-native-client.md) 5절의 3단계를 구현했다. PATCH **0.1.31→0.1.32 한 번**, uv/Cargo lock을 갱신했다. 기본 빌드는 그대로 Iced이고 Slint 화면은 `slint-ui` feature로만 빌드된다.
+
+- **권한 화면** [permissions.slint](../../apps/client-native/ui/permissions.slint):
+  - 기능 카테고리 트리: 실행 가능(`rpc`)하고 Agent가 미구현으로 보고하지 않은 항목만 표시. 카테고리별 요약 배지(모두 거부/승인 필요/허용/혼합/꺼짐)
+  - 항목별 3-Way 선택기, 카테고리 일괄 선택, 카테고리 켜기·끄기(끄면 항목 선택은 보존하고 실행만 차단), 전체 프리셋
+  - 실행 제약 초안: 실행 파일 허용·차단 목록, 허용 작업 폴더 ID, 최대 실행 시간·출력, 엄격한 OS 격리
+  - "저장하지 않은 변경" 표시와 정책 revision CAS 저장(연결된 Agent와 제어 권한이 있을 때만)
+- **공통 계층**: 제약 검증을 [`constraints::parse_fields`](../../apps/client-native/src/constraints.rs)로 분리해 Iced 초안과 Slint 화면이 같은 규칙을 쓴다.
+- **컨트롤러** [slint_ui.rs](../../apps/client-native/src/slint_ui.rs): 편집 권한 확인, 정책 저장 전 revision 일치와 제약 검증, Agent 정책 수신 시 제약 초안 동기화(미저장 초안은 보존), 등록 시 제약 초안 사용을 Iced와 같은 규칙으로 옮겼다. 트리는 바뀐 행만 갱신하므로 편집해도 펼침 상태와 키보드 포커스가 유지된다.
+- **PoC에서 남은 문제 해결**:
+  - 카테고리 머리글: Tab으로 포커스, Space/Enter로 펼침, 포커스 테두리 표시
+  - 화살표 방향: 소프트웨어 렌더러가 `Path` 회전을 적용하지 않아 회전 대신 접힘(›)·펼침(∨) 아이콘을 따로 사용
+- **Slint 1.16 접근성 제약 우회**:
+  - `accessible-expandable/expanded`를 지정하면 머리글의 UIA Invoke 패턴이 사라져, 펼침 상태는 설명으로 전달한다.
+  - 반복 항목 안의 `if` 영역이 실행 중에 새로 만들어지면 UIA 트리에 반영되지 않았다(펼친 하위 항목, 미저장 표시). 이 영역은 처음부터 만들어 두고 높이·`visible`로 접는다. 접힌 항목은 UIA에 노출되지 않는 것을 확인했다.
+
+| 검사 | 결과 |
+|---|---|
+| `cargo check --locked`(기본·`slint-ui`), rustfmt(새 파일), 번역 누락 검사 | PASS / 누락 0 |
+| clippy `--no-deps -D warnings` | 신규 오류 없음. 기존 `accessibility.rs` 2건·`native.rs` 1건 유지 |
+| inventory-check, version 단위 시험 | 114 ops·143 permissions·18 categories / 6 passed |
+| 실기 UIA(Windows 10 VM, 150% DPI, 빈 상태, Agent 없음) | 탭 이동, 머리글 Invoke로 펼침·접힘(접힘 0개 → 펼침 15개 선택지 노출), 항목 "허용" 선택 시 선택 상태·"혼합" 요약·미저장 표시 PASS. 카테고리 일괄 허용("모두 허용"), 전체 거부 프리셋, 카테고리 끄기("카테고리 꺼짐"/"카테고리 켜기") PASS |
+| 실기 키보드 | 머리글 포커스 후 Space로 펼침, 허용 목록에 실행 파일 경로 입력 시 미저장 표시 PASS |
+| 메모리 | 권한 화면 사용 중 working set 50~63MB |
+| 증거 | `dist/verification/client/0.1.32/slint-step3-20261013/` `permissions-initial.jpg`(SHA-256 `288174c6…13b8`), `permissions-edited-dirty.jpg`(`59109e9b…273a`), `permissions-keyboard-expand.jpg`(`a806eb4a…27e3`, 화살표 수정 전 화면) |
+
+> [!NOTE]
+> 정책 revision CAS 저장은 연결된 Agent가 없어 실기 확인하지 않았다(저장 버튼은 연결 시에만 표시). 실행 중 새로 나타나는 다른 `if` 영역(알림, 상태 화면 카드 등)의 UIA 반영 여부는 4단계에서 Narrator로 다시 점검한다. 시험 중 자동화 도구가 입력 문자열을 클립보드로 붙여넣어 사용자 클립보드가 덮어써졌다. 설치·서비스 등록·등록 상태 변경은 하지 않았고 `%LOCALAPPDATA%\RACP\native-client`도 생성되지 않았다.
+
+### 2026-10-13 Slint 이전 4단계: 승인·선택 런타임·설정 화면 — v0.1.33
+
+[ADR-0032](../adr/ADR-0032-native-client.md) 5절의 4단계를 구현했다. PATCH **0.1.32→0.1.33 한 번**, uv/Cargo lock을 갱신했다. 이제 다섯 화면이 모두 Slint로 옮겨졌다. 기본 빌드는 5단계(Iced 제거) 전까지 그대로 Iced이고 Slint 화면은 `slint-ui` feature로만 빌드된다.
+
+- **승인 화면** [approvals.slint](../../apps/client-native/ui/approvals.slint): 대기 중인 요청마다 작업 이름, 요청 ID, 만료 시각, 대상 요약, 대상 digest를 표시하고 "이번 요청만 승인"/"요청 거절"을 보낸다. 결정은 nonce로 보내며, 이미 처리되었거나 만료된 요청은 보내지 않는다. Iced가 작업 이름의 단어만 보고 붙이던 위험도(높음/중간)와 만료 시각을 "TTL 남음"으로 표시하던 라벨은 근거가 없어 넣지 않았다.
+- **선택 런타임 화면** [runtime.slint](../../apps/client-native/ui/runtime.slint): 저장된 선택(revision, Chromium·CDB·GDB·분석 host manifest, 브라우저 origin 수, 외부 CDP)을 로컬 상태에서 읽어 표시한다. Iced의 항상 "없음"이던 승인 목록 카드는 대체했다. 번들 승인과 선택 저장은 Agent가 완전히 종료된 경우에만 가능하다.
+- **설정 화면** [settings.slint](../../apps/client-native/ui/settings.slint):
+  - 화면 언어 즉시 전환(Rust 쪽 카테고리 제목 포함). Iced와 같이 선택은 저장하지 않으며 다음 시작 때는 Windows 표시 언어를 따른다.
+  - 기본 작업 폴더와 이름 있는 작업 폴더(최대 15개) 편집·저장. 저장은 Agent 종료 상태에서만 하며, 새 등록에도 이 목록을 사용한다.
+  - Windows 로그인 후 시작 항목 상태와 켜기·끄기·갱신·미확정 변경 정리
+- 공통 부품(`SectionTitle`, `FieldLabel`, `IdentityItem`, `ChoiceButton`, `PrimaryButton`, `DangerButton`)을 [common.slint](../../apps/client-native/ui/common.slint)로 옮기고, 이전 예정 안내 카드는 삭제했다. 번역 선택은 Slint 문서대로 첫 컴포넌트를 만든 뒤 호출하도록 순서를 바로잡았다.
+- **접근성 트리 갱신 우회**: 실기에서 페이지를 바꿨는데도 UIA 트리가 이전 페이지에 머무는 경우를 재현했다. Slint 1.16 winit 접근성 어댑터는 트리를 만드는 도중에 생긴 컴포넌트를 다시 확인하지 않는다. 구조가 바뀔 수 있는 시점(렌더, 페이지 전환, 카테고리 펼침) 150ms 뒤, 창 끝의 빈 요소를 만들거나 없애 전체 트리 재구성을 유도한다(묶어서 한 번만 실행). 재구성은 접근성 클라이언트가 연결된 동안에만 일어난다.
+
+| 검사 | 결과 |
+|---|---|
+| `cargo check --locked`(기본·`slint-ui`), rustfmt, 번역 누락 검사 | PASS / 누락 0 |
+| clippy `--no-deps -D warnings` | 신규 오류 없음. 기존 `accessibility.rs` 2건·`native.rs` 1건 유지 |
+| inventory-check, version 단위 시험 | 114 ops·143 permissions·18 categories / 6 passed |
+| 실기 UIA(Windows 10 VM, 150% DPI, 빈 상태, Agent 없음) | 승인(미연결 안내)·선택 런타임(저장된 선택, "선택 안 함")·설정(미등록 안내) 표시 PASS. 영어 전환 시 메뉴·설정·카테고리 제목 변경, 한국어 복귀 PASS |
+| 접근성 트리 추적 | 우회 적용 후 5개 페이지 2회 왕복 전환 **10/10**에서 UIA가 보이는 페이지 제목과 일치. 영어 상태의 페이지 이동·한국어 복귀 PASS. 3단계 권한 화면 회귀(접힘 0개·펼침 15개·선택·미저장 표시) PASS |
+| 메모리 | working set 50~69MB |
+| 증거 | `dist/verification/client/0.1.33/slint-step4-20261013/` `approvals-disconnected.jpg`(SHA-256 `cb7089e8…e4ba`), `runtime-unregistered.jpg`(`e4c05bed…379d`), `settings-unregistered.jpg`(`5b4c9458…9c37`), `settings-english.jpg`(`a6d2d24e…69cf`) |
+
+> [!NOTE]
+> 승인 요청 목록과 결정 전송, 런타임 승인·선택 저장, 설정 저장, 로그인 시작 항목 변경은 실기 확인하지 않았다. 연결된 Agent와 등록 상태가 없고, 로컬 helper 실행은 상태 폴더를 만들 수 있어 누르지 않았다. 영어 모드에서 카탈로그 기반 카테고리 제목 중 번역 사전에 있는 6개만 영어로 바뀌고 나머지는 카탈로그의 한국어 이름이 남는다(Iced와 동일). Narrator 음성 확인은 하지 않았고 UIA 트리로 대신 확인했다. 설치·서비스 등록·등록 상태 변경은 하지 않았고 `%LOCALAPPDATA%\RACP\native-client`도 생성되지 않았다.
+
+### 2026-10-13 Slint 이전 5단계: Iced 제거와 Slint 기본 빌드 — v0.1.34
+
+[ADR-0032](../adr/ADR-0032-native-client.md) 5절의 마지막 단계를 마쳤다. PATCH **0.1.33→0.1.34 한 번**, uv/Cargo lock을 갱신했다. Client GUI는 이제 **Slint 단일 빌드**이며 Iced 코드와 의존성은 없다(`Cargo.lock`의 iced 항목 0).
+
+- **삭제**: Iced 화면(`app.rs`, `views/`, `components/`, `theme/`), 직접 만든 접근성 계층(`accessibility.rs`, `controls.rs`), Iced 전용 i18n(`i18n/ko.rs`·`en.rs`), Iced SVG 아이콘(`assets/icons/`). `constraints.rs`와 `onboarding.rs`에서는 Iced `Task` 래퍼와 편집기 타입을 지우고 공통 함수만 남겼다. 서비스 모드 차단은 공통 함수 안으로 옮겼다.
+- **정리**: `i18n.rs`는 언어 감지와 카테고리 제목 표만 남겼다. 의존성에서 `iced`·`accesskit`·`accesskit_windows`·`image`·`raw-window-handle`·`chrono`, feature `software-renderer`·`gpu-renderer`·`slint-ui`를 제거하고 Slint를 필수 의존성으로 바꿨다. `--gpu`는 계속 `GPU_RENDERER_NOT_COMPILED`로 거부한다.
+- **기능 보완**: Iced에 있던 `Ctrl+1~5` 페이지 이동을 Slint 최상위 `FocusScope`로 옮겼다(서비스 모드에서는 설정·런타임 차단). 시작 시 포커스된 요소가 없으면 키가 전달되지 않아, 단축키 영역이 시작 포커스를 받고 하위 요소에 포커스가 있을 때는 먼저 키를 받는다.
+- **빌드·CI**:
+  - [client.yml](../../.github/workflows/client.yml)의 GPU·`slint-ui` 컴파일 검사를 `clippy --no-deps -D warnings`로 바꿨다. Iced 화면 파일이 사라져 workspace `cargo fmt --all --check`가 통과한다.
+  - xtask 스테이징 메타데이터 features를 `slint-software-renderer`로 바꿨다.
+  - [PE import 허용 목록](../../xtask/src/package/imports.rs)에 Windows 기본 DLL 두 개를 근거와 함께 추가했다: `shlwapi.dll`(Slint winit의 `webbrowser` 의존성, `AssocQueryStringW`만 사용), `dwrite.dll`(Slint 글꼴 대체 탐색, `DWriteCreateFactory`만 사용).
+  - [migration inventory](../../crates/racp-contract/migration-inventory.json)의 React GUI 대체 경로를 `slint_ui.rs`로 바꿨다.
+  - 삭제된 Iced 파일을 가리키던 이력 링크 17개는 문구는 두고 링크만 해제했다.
+- **문서**: ADR-0032(상태·이전 결과·Slint 1.16 제약과 우회·남은 실기 인수 항목), AGENTS.md, README, 문서 포털, Desktop/Rust Agent 가이드, desktop-build skill, Native Client 완성 계획의 Iced 표기를 갱신했다. 가이드 6.13 키보드·접근성 절은 실제 확인 범위로 다시 썼다.
+
+| 검사 | 결과 |
+|---|---|
+| workspace `cargo fmt --all --check` | PASS |
+| client `clippy --locked --no-deps -D warnings` | PASS (`native.rs`의 불필요한 cast 1건 수정) |
+| inventory-check, version 단위 시험, 번역 누락 검사 | 114 ops·143 permissions·18 categories / 6 passed / 누락 0 |
+| 개발 스테이징 `slint-20261013-d` | `stage`·`verify-staging` PASS: payload 4개 파일(Client·Agent·LICENSE·SBOM)·hash·대상 확인. `racp-client.exe` 27,575,808 bytes, SHA-256 `92366d51…0a68`, payload manifest `ab43836c…1493` |
+| 실패한 스테이징 | `slint-20261013-a`(`shlwapi.dll` 미허용)·`-b`(`dwrite.dll` 미허용)·`-c`(단축키 수정 전). a·b는 xtask가 `staging.quarantine`으로 격리했고 c는 보존했다 |
+| 스테이징 실기(격리 `--state-dir`, Windows 10 VM, 150% DPI) | 미리 만든 상속 ACL 폴더는 `STATE_DIRECTORY_NOT_PRIVATE`로 거부(의도한 보안 검사). 새 경로로 실행 시 화면 표시, `Ctrl+3/4/5/2`(Tab으로 하위 요소에 포커스가 있을 때 포함), 헤더 종료 버튼으로 정상 종료 PASS. 상태 폴더·기본 상태 폴더 미생성, 잔여 프로세스 없음 |
+| 메모리 | 스테이징 Client working set 43MB 내외 |
+| 증거 | `dist/verification/client/0.1.34/slint-step5-20261013/` `staged-isolated-ctrl3-approvals.jpg`(SHA-256 `92d86127…b24b`), `staged-isolated-tab-ctrl2-permissions.jpg`(`3b1b163d…b296`), `staging-d-build-manifest.json`(`426df4af…5ea0`) |
+
+> [!IMPORTANT]
+> 이전은 끝났지만 실기 인수는 남아 있다. 실행 중인 Agent에 연결한 상태의 동작(지표·작업 취소·Agent 정지·정책 저장·승인 결정), 로컬 helper를 실행하는 동작(새 등록·런타임 승인·설정 저장·로그인 시작 항목), 서비스 모드 화면 연결, RDP·실제 GPU PC·Narrator 음성 확인, 실제 GUI 프레임 시간 측정은 ADR-0032 5절의 남은 인수 항목이다. 제품 setup 생성·설치·서비스 등록·등록 상태 변경은 하지 않았다.

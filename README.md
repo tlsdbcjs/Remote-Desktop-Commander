@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.12-3776AB.svg?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
 [![Rust](https://img.shields.io/badge/Rust-1.90-orange.svg?style=flat-square&logo=rust)](Cargo.toml)
-[![Iced](https://img.shields.io/badge/Iced-0.13-blue.svg?style=flat-square)](apps/client-native)
+[![Slint](https://img.shields.io/badge/Slint-1.16-blue.svg?style=flat-square)](apps/client-native)
 [![Protocol](https://img.shields.io/badge/protocol-MCP%20%7C%20WSS-purple.svg?style=flat-square)](docs/protocol)
 [![Platform](https://img.shields.io/badge/platform-Windows%20(Build)%20%7C%20Linux%20%7C%20macOS-222222.svg?style=flat-square)](docs/quality/compatibility.md)
 
@@ -37,7 +37,7 @@
 기존 원격 제어 도구와 달리, 인바운드 포트 개방 없이 <strong>역방향 보안 웹소켓(Outbound-only WSS)</strong>을 통해 연결되며, <strong>디렉터리 스코프 격리(Scoped Workspaces)</strong>와 <strong>사전 정책 승인(Approval Gate)</strong>, <strong>전수 감사 추적(Audit Trail)</strong>을 통해 제로 트러스트(Zero-Trust) 수준의 통제력을 제공합니다.
 
 > [!NOTE]
-> 본 프로젝트는 현재 **v0.1.x** 개발 및 검증 단계입니다. 데스크톱 Client는 Rust/Iced, Agent는 Rust이며 별도 웹 Console만 React/TypeScript를 사용합니다. Windows Agent와 핵심 GUI 실동작 결과 및 남은 작업은 [구현 현황](docs/quality/implementation-status.md)과 [작업 계획](docs/spec/rust-client-migration-plan.md#remaining-work-20261012)에서 확인합니다. 제품 설치·전체 기능·타 OS 인수 완료를 뜻하지 않습니다.
+> 본 프로젝트는 현재 **v0.1.x** 개발 및 검증 단계입니다. 데스크톱 Client는 Rust/Slint, Agent는 Rust이며 별도 웹 Console만 React/TypeScript를 사용합니다. Windows Agent와 핵심 GUI 실동작 결과 및 남은 작업은 [구현 현황](docs/quality/implementation-status.md)과 [작업 계획](docs/spec/rust-client-migration-plan.md#remaining-work-20261012)에서 확인합니다. 제품 설치·전체 기능·타 OS 인수 완료를 뜻하지 않습니다.
 
 ---
 
@@ -72,7 +72,7 @@ flowchart LR
     end
 
     subgraph TargetPlane["대상 머신 (Managed Host)"]
-        GUI["RACP Native Client<br/>(Rust / Iced)"]
+        GUI["RACP Native Client<br/>(Rust / Slint)"]
         AGT["RACP Agent (Daemon)<br/>• Outbound WSS Client<br/>• Scoped Sandbox"]
         PTY["ConPTY Persistent Terminal"]
         FS["Scoped Workspaces (FS)"]
@@ -108,7 +108,7 @@ Remote-Desktop-Commander/
 ├── apps/
 │   ├── gateway/         # 중앙 오케스트레이션 및 정책 게이트웨이 (FastAPI, MCP Server)
 │   ├── agent-rust/      # 대상 PC 네이티브 Agent/Broker/Guardian (Rust, Win32)
-│   ├── client-native/   # 데스크톱 UI·트레이·권한 편집·로컬 제어 (Rust, Iced)
+│   ├── client-native/   # 데스크톱 UI·트레이·권한 편집·로컬 제어 (Rust, Slint)
 │   ├── analysis-host/   # 선택 분석 host, 독립 opt-in Cargo workspace
 │   ├── console/         # 디바이스 관리 및 실시간 승인 웹 콘솔 (React 19, TanStack Query)
 │   └── cli/             # 관리자용 통합 커맨드라인 인터페이스 (racp)
@@ -245,7 +245,7 @@ RACP는 시스템 손상 및 비인가 접근을 차단하기 위해 3단계 실
 - **2-PC 실증 가이드**: [물리 2-PC 테스트 랩 구축 매뉴얼](docs/guides/two-pc-lab-guide.md)
 - **구현 현황 (SSOT)**: [단계별 개발 현황 및 테스트 검증 매트릭스](docs/quality/implementation-status.md)
 - **품질 및 호환성**: [OS 및 플랫폼 호환성 보고서](docs/quality/compatibility.md) · [Windows 릴리스 인수 게이트](docs/quality/windows-release-gates.md)
-- **아키텍처 결정 레코드**: [ADR 총람 (ADR-0001 ~ ADR-0029)](docs/adr/README.md)
+- **아키텍처 결정 레코드**: [ADR 총람 (ADR-0001 ~ ADR-0022, ADR-0032)](docs/adr/README.md)
 
 
 ---
@@ -254,7 +254,7 @@ RACP는 시스템 손상 및 비인가 접근을 차단하기 위해 3단계 실
 
 | 영역 | 상태 | 검증 내용 |
 |---|:---:|---|
-| **Windows 10/11 x64** | **Development** | Rust/Iced Client·Rust Agent 빌드 및 핵심 실동작 확인. 제품 installer·clean-PC 인수는 별도 |
+| **Windows 10/11 x64** | **Development** | Rust/Slint Client·Rust Agent 빌드 및 핵심 실동작 확인. 제품 installer·clean-PC 인수는 별도 |
 | **Outbound WSS / TLS** | **Core verified** | HTTPS/WSS 등록·일회용 token·Agent 재연결 확인. 조건과 실제 artifact는 구현 현황 참조 |
 | **MCP Integration** | **Server scope** | Gateway의 MCP/API 제공. 현재 Rust 전환 및 서버 회귀의 실행 범위는 구현 현황 참조 |
 | **Linux (Ubuntu)** | *Deferred* | 서버/CLI Python 유지; Rust 데스크톱 네이티브 빌드 보류 |

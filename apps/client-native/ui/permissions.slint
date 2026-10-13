@@ -1,0 +1,567 @@
+// Permissions view (ADR-0032 migration step 3). Presentation only; Rust owns policy state.
+import { Theme } from "theme.slint";
+import { Icon, Icons } from "icons.slint";
+import { Tag, Card, Button, GrantSelector, TextField, TextArea } from "widgets.slint";
+
+export struct LeafRow {
+    id: string,
+    label: string,
+    // 0 deny, 1 require approval, 2 allow
+    grant: int,
+}
+
+export struct CategoryRow {
+    id: string,
+    title: string,
+    description: string,
+    // tile icon: 0 monitor, 1 folder, 2 pencil, 3 terminal, 4 globe, 5 chip
+    icon: int,
+    expanded: bool,
+    // false when the category is switched off; leaf choices are kept
+    enabled: bool,
+    // 0 all deny, 1 all require approval, 2 all allow, 3 mixed
+    summary: int,
+    leaves: [LeafRow],
+}
+
+export struct PolicyModel {
+    // Leaf and category edits allowed for this connection.
+    can-edit: bool,
+    // Commit needs a live Agent connection and controller rights.
+    can-commit: bool,
+    dirty: bool,
+    revision: string,
+    connected: bool,
+}
+
+component CategoryCard inherits Card {
+    in property <CategoryRow> category;
+    in property <int> index;
+    in property <bool> can-edit;
+    callback toggle(int);
+    callback set-enabled(int, bool);
+    callback batch(int, int);
+    callback leaf(int, int, int);
+    clip: true;
+
+    pure function tile-color(i: int) -> color {
+        i == 0 ? Theme.blue-400 : i == 1 ? Theme.emerald-400 : i == 2 ? Theme.rose-400 : i == 3 ? Theme.amber-400 : i == 4 ? Theme.sky-400 : Theme.indigo-400
+    }
+    pure function tile-icon(i: int) -> string {
+        i == 0 ? Icons.monitor : i == 1 ? Icons.folder : i == 2 ? Icons.pencil : i == 3 ? Icons.terminal : i == 4 ? Icons.globe : Icons.chip
+    }
+
+    VerticalLayout {
+        // Category header
+        Rectangle {
+            background: Theme.inset-strong;
+            HorizontalLayout {
+                padding: 14px;
+                spacing: 12px;
+                head := Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: Theme.r-md;
+                    border-width: head-fs.has-focus ? 2px : 0px;
+                    border-color: Theme.indigo-500;
+                    accessible-role: button;
+                    accessible-label: category.title;
+                    // Expandable/expanded hid the UIA Invoke pattern on Windows (Slint 1.16), so
+                    // the state is announced through the description instead.
+                    accessible-description: category.expanded ? @tr("Expanded") : @tr("Collapsed");
+                    accessible-action-default => { root.toggle(index); }
+                    forward-focus: head-fs;
+                    // Keyboard reachable: Tab focuses the header, Space/Enter expands it.
+                    head-fs := FocusScope {
+                        key-pressed(e) => {
+                            if (e.text == " " || e.text == "\n") {
+                                root.toggle(index);
+                                return accept;
+                            }
+                            reject
+                        }
+                    }
+                    head-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            head-fs.focus();
+                            root.toggle(index);
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 12px;
+                        padding-left: 4px;
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 24px;
+                                height: 24px;
+                                // Collapsed points right, expanded points down. Separate paths:
+                                // the software renderer does not rotate Path elements.
+                                Icon {
+                                    data: category.expanded ? Icons.chevron-down : Icons.chevron-right;
+                                    tint: head-ta.has-hover ? white : Theme.text-400;
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 32px;
+                                height: 32px;
+                                border-radius: Theme.r-lg;
+                                background: tile-color(category.icon).with-alpha(0.1);
+                                border-color: tile-color(category.icon).with-alpha(0.2);
+                                border-width: 1px;
+                                Icon {
+                                    data: tile-icon(category.icon);
+                                    tint: tile-color(category.icon);
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 2px;
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: start;
+                                Text {
+                                    text: category.title;
+                                    font-size: Theme.fs-sm;
+                                    font-weight: 700;
+                                    color: category.enabled ? Theme.text-strong : Theme.text-500;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                    min-width: 48px;
+                                }
+                                Text {
+                                    text: "(" + category.id + ")";
+                                    overflow: elide;
+                                    min-width: 24px;
+                                    font-family: Theme.mono;
+                                    font-size: Theme.fs-xs;
+                                    color: Theme.text-400;
+                                    vertical-alignment: center;
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    Tag {
+                                        pill: true;
+                                        size: Theme.fs-10;
+                                        pad-x: 8px;
+                                        text: !category.enabled ? @tr("Category off")
+                                            : category.summary == 0 ? @tr("All denied")
+                                            : category.summary == 1 ? @tr("All require approval")
+                                            : category.summary == 2 ? @tr("All allowed")
+                                            : @tr("Mixed");
+                                        fg: !category.enabled ? Theme.text-400
+                                            : category.summary == 0 ? Theme.rose-400
+                                            : category.summary == 1 ? Theme.amber-400
+                                            : category.summary == 2 ? Theme.emerald-400
+                                            : Theme.indigo-400;
+                                        outline: self.fg.with-alpha(0.2);
+                                    }
+                                }
+                            }
+                            if category.description != "": Text {
+                                text: category.description;
+                                font-size: Theme.fs-11;
+                                color: Theme.text-400;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    GrantSelector {
+                        labelled: true;
+                        icon-size: 14px;
+                        enabled: can-edit && category.enabled;
+                        subject: category.title;
+                        chosen(g) => { root.batch(index, g); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        text: category.enabled ? @tr("Turn category off") : @tr("Turn category on");
+                        fg: category.enabled ? Theme.text-300 : Theme.emerald-400;
+                        radius: Theme.r-sm;
+                        pad-x: 10px;
+                        pad-y: 5px;
+                        clicked => {
+                            if (can-edit) {
+                                root.set-enabled(index, !category.enabled);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            height: category.expanded ? 1px : 0px;
+            background: Theme.line;
+        }
+        // Leaves are always instantiated and collapsed by height. Slint 1.16 does not add items
+        // created later by a nested `if` to the accessibility tree, so screen readers would
+        // miss rows expanded at runtime.
+        Rectangle {
+            background: #0f172a4d;
+            visible: category.expanded;
+            height: category.expanded ? leaf-list.preferred-height : 0px;
+            clip: true;
+            leaf-list := VerticalLayout {
+                for leaf[j] in category.leaves: Rectangle {
+                    background: row-ta.has-hover ? #1e293b33 : transparent;
+                    animate background { duration: Theme.t-fast; }
+                    row-ta := TouchArea { }
+                    Rectangle {
+                        visible: j > 0;
+                        y: 0;
+                        height: 1px;
+                        background: #1e293b99;
+                    }
+                    HorizontalLayout {
+                        padding-left: 16px + 32px;
+                        padding-right: 16px;
+                        padding-top: 12px;
+                        padding-bottom: 12px;
+                        spacing: 10px;
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 6px;
+                                height: 6px;
+                                border-radius: 3px;
+                                background: tile-color(category.icon);
+                            }
+                        }
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            spacing: 2px;
+                            Text {
+                                text: leaf.id;
+                                font-family: Theme.mono;
+                                font-size: Theme.fs-xs;
+                                font-weight: 600;
+                                color: Theme.text-200;
+                            }
+                            Text {
+                                text: leaf.label;
+                                font-size: Theme.fs-11;
+                                color: Theme.text-400;
+                                overflow: elide;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            GrantSelector {
+                                grant: leaf.grant;
+                                enabled: can-edit && category.enabled;
+                                subject: leaf.id;
+                                chosen(g) => { root.leaf(index, j, g); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component Label inherits Text {
+    font-size: Theme.fs-xs;
+    font-weight: 500;
+    color: Theme.text-400;
+}
+
+export component PermissionsView inherits VerticalLayout {
+    in property <[CategoryRow]> categories;
+    in property <PolicyModel> policy;
+    in-out property <string> allow-list;
+    in-out property <string> deny-list;
+    in-out property <string> workspace-ids;
+    in-out property <string> max-timeout;
+    in-out property <string> max-output;
+    in-out property <bool> strict-isolation;
+    callback toggle(int);
+    callback set-enabled(int, bool);
+    callback batch(int, int);
+    callback leaf(int, int, int);
+    callback preset(int);
+    callback commit();
+    callback reload-constraints();
+    callback constraints-edited();
+    alignment: start;
+    spacing: 20px;
+
+    // Header with revision and CAS commit
+    Card {
+        HorizontalLayout {
+            padding: 16px;
+            spacing: 16px;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 4px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Text {
+                        text: @tr("Capability category tree & security policy matrix");
+                        font-size: Theme.fs-xl;
+                        font-weight: 700;
+                        color: Theme.text-strong;
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Tag {
+                            text: "Zero-Trust Matrix";
+                            size: Theme.fs-xs;
+                            fg: Theme.indigo-300;
+                            fill: Theme.indigo-500.with-alpha(0.2);
+                            outline: Theme.indigo-500.with-alpha(0.3);
+                            pad-x: 8px;
+                        }
+                    }
+                }
+                Text {
+                    text: policy.connected
+                        ? @tr("Expand a category to fine-tune each capability. Changes are saved against policy revision {}.", policy.revision)
+                        : @tr("Not connected to the Agent. The selection here is used for a new registration; saving needs a connected Agent.");
+                    font-size: Theme.fs-xs;
+                    color: Theme.text-400;
+                    wrap: word-wrap;
+                }
+            }
+            // Always instantiated (see the leaf list note) and collapsed when clean.
+            VerticalLayout {
+                alignment: center;
+                visible: policy.dirty;
+                width: policy.dirty ? self.preferred-width : 0px;
+                Tag {
+                    text: @tr("Uncommitted changes");
+                    size: Theme.fs-xs;
+                    weight: 500;
+                    fg: Theme.amber-400;
+                    pad-x: 10px;
+                    pad-y: 4px;
+                }
+            }
+            if policy.can-commit: VerticalLayout {
+                alignment: center;
+                Button {
+                    text: @tr("Commit policy revision (CAS)");
+                    icon: Icons.download;
+                    fg: white;
+                    fill: Theme.indigo-600;
+                    hover-fill: Theme.indigo-500;
+                    glow: Theme.indigo-600.with-alpha(0.3);
+                    font-weight: 600;
+                    pad-x: 16px;
+                    pad-y: 8px;
+                    radius: Theme.r-lg;
+                    clicked => { root.commit(); }
+                }
+            }
+        }
+    }
+
+    // Whole-policy presets
+    if policy.can-edit: Rectangle {
+        background: Theme.inset-strong;
+        border-color: Theme.line;
+        border-width: 1px;
+        border-radius: Theme.r-lg;
+        HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-top: 10px;
+            padding-bottom: 10px;
+            spacing: 8px;
+            HorizontalLayout {
+                spacing: 8px;
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    alignment: center;
+                    Icon {
+                        data: Icons.sliders;
+                        tint: Theme.indigo-400;
+                    }
+                }
+                Text {
+                    text: @tr("Apply a quick preset to the whole policy:");
+                    font-size: Theme.fs-xs;
+                    font-weight: 500;
+                    color: Theme.text-300;
+                    vertical-alignment: center;
+                }
+            }
+            Button {
+                text: @tr("Deny all (Default Deny)");
+                fg: Theme.rose-400;
+                fill: Theme.hover-800;
+                hover-fill: #4c051940;
+                outline: Theme.line-strong;
+                hover-outline: Theme.rose-500.with-alpha(0.4);
+                radius: Theme.r-sm;
+                pad-x: 12px;
+                clicked => { root.preset(0); }
+            }
+            Button {
+                text: @tr("Require approval for all (Zero-Trust)");
+                fg: Theme.amber-400;
+                fill: Theme.hover-800;
+                hover-fill: #451a0340;
+                outline: Theme.line-strong;
+                hover-outline: Theme.amber-500.with-alpha(0.4);
+                radius: Theme.r-sm;
+                pad-x: 12px;
+                clicked => { root.preset(1); }
+            }
+            Button {
+                text: @tr("Allow all (Developer opt-in)");
+                fg: Theme.emerald-400;
+                fill: Theme.hover-800;
+                hover-fill: #02261540;
+                outline: Theme.line-strong;
+                hover-outline: Theme.emerald-500.with-alpha(0.4);
+                radius: Theme.r-sm;
+                pad-x: 12px;
+                clicked => { root.preset(2); }
+            }
+        }
+    }
+
+    // Execution constraints
+    Card {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 10px;
+            HorizontalLayout {
+                spacing: 8px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 2px;
+                    Text {
+                        text: @tr("Execution constraints");
+                        font-size: Theme.fs-sm;
+                        font-weight: 700;
+                        color: Theme.text-strong;
+                    }
+                    Text {
+                        text: @tr("One entry per line. Executables use absolute paths. The Agent validates the draft when it is saved.");
+                        font-size: Theme.fs-xs;
+                        color: Theme.text-400;
+                        wrap: word-wrap;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        text: @tr("Reload constraints");
+                        fg: Theme.text-300;
+                        radius: Theme.r-sm;
+                        pad-x: 10px;
+                        pad-y: 5px;
+                        clicked => { root.reload-constraints(); }
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 16px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 6px;
+                    Label { text: @tr("Executable allowlist"); }
+                    TextArea {
+                        label: @tr("Executable allowlist");
+                        text <=> root.allow-list;
+                        enabled: policy.can-edit;
+                        edited => { root.constraints-edited(); }
+                    }
+                }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 6px;
+                    Label { text: @tr("Executable denylist"); }
+                    TextArea {
+                        label: @tr("Executable denylist");
+                        text <=> root.deny-list;
+                        enabled: policy.can-edit;
+                        edited => { root.constraints-edited(); }
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 16px;
+                VerticalLayout {
+                    horizontal-stretch: 2;
+                    alignment: start;
+                    spacing: 6px;
+                    Label { text: @tr("Allowed workspace IDs"); }
+                    TextArea {
+                        height: 64px;
+                        label: @tr("Allowed workspace IDs");
+                        text <=> root.workspace-ids;
+                        enabled: policy.can-edit;
+                        edited => { root.constraints-edited(); }
+                    }
+                }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 6px;
+                    Label { text: @tr("Max timeout (ms)"); }
+                    TextField {
+                        label: @tr("Max timeout (ms)");
+                        mono: true;
+                        text <=> root.max-timeout;
+                        enabled: policy.can-edit;
+                        edited => { root.constraints-edited(); }
+                    }
+                    Label { text: @tr("Max output (bytes)"); }
+                    TextField {
+                        label: @tr("Max output (bytes)");
+                        mono: true;
+                        text <=> root.max-output;
+                        enabled: policy.can-edit;
+                        edited => { root.constraints-edited(); }
+                    }
+                }
+            }
+            HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: root.strict-isolation ? @tr("Strict OS isolation: on") : @tr("Strict OS isolation: off");
+                    icon: root.strict-isolation ? Icons.allow : Icons.deny;
+                    fg: root.strict-isolation ? Theme.emerald-400 : Theme.text-300;
+                    radius: Theme.r-sm;
+                    pad-x: 10px;
+                    pad-y: 5px;
+                    accessible-checkable: true;
+                    accessible-checked: root.strict-isolation;
+                    clicked => {
+                        if (policy.can-edit) {
+                            root.strict-isolation = !root.strict-isolation;
+                            root.constraints-edited();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Category tree
+    VerticalLayout {
+        spacing: 12px;
+        for cat[i] in categories: CategoryCard {
+            category: cat;
+            index: i;
+            can-edit: policy.can-edit;
+            toggle(x) => { root.toggle(x); }
+            set-enabled(x, on) => { root.set-enabled(x, on); }
+            batch(x, g) => { root.batch(x, g); }
+            leaf(x, j, g) => { root.leaf(x, j, g); }
+        }
+    }
+}

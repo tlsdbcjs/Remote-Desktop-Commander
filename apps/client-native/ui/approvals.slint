@@ -1,0 +1,145 @@
+// Approvals view (ADR-0032 migration step 4). Shows only what the Agent sends with a prompt.
+import { Theme } from "theme.slint";
+import { Icon, Icons } from "icons.slint";
+import { Tag, Card, Button } from "widgets.slint";
+import { SectionTitle, IdentityItem, PrimaryButton, DangerButton } from "common.slint";
+
+export struct ApprovalRow {
+    nonce: string,
+    operation: string,
+    request-id: string,
+    target-summary: string,
+    target-digest: string,
+    expires-at: string,
+}
+
+export component ApprovalsView inherits VerticalLayout {
+    in property <[ApprovalRow]> prompts;
+    in property <bool> can-decide;
+    in property <bool> connected;
+    callback decide(string, bool);
+    alignment: start;
+    spacing: 16px;
+
+    Card {
+        VerticalLayout {
+            padding: 20px;
+            SectionTitle {
+                title: @tr("Zero-trust approval queue");
+                subtitle: @tr("Each request waits for a one-time decision on this PC. Approving allows only this request; it does not change the policy.");
+            }
+        }
+    }
+
+    if prompts.length == 0: Rectangle {
+        background: Theme.inset-bg;
+        border-color: Theme.line;
+        border-width: 1px;
+        border-radius: Theme.r-lg;
+        HorizontalLayout {
+            padding: 24px;
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                Icon {
+                    data: Icons.shield-check;
+                    tint: Theme.emerald-400;
+                }
+            }
+            Text {
+                text: connected ? @tr("No approval requests are waiting.") : @tr("Not connected to the Agent. Approval requests appear here once it connects.");
+                font-size: Theme.fs-sm;
+                color: Theme.text-300;
+                wrap: word-wrap;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    for prompt in prompts: Card {
+        accessible-role: groupbox;
+        accessible-label: prompt.operation;
+        Rectangle {
+            x: 0;
+            width: 4px;
+            background: Theme.amber-500;
+        }
+        VerticalLayout {
+            padding: 20px;
+            spacing: 12px;
+            HorizontalLayout {
+                spacing: 10px;
+                Tag {
+                    text: prompt.operation;
+                    mono: true;
+                    size: Theme.fs-xs;
+                    fg: Theme.amber-400;
+                    pad-x: 8px;
+                }
+                Text {
+                    text: "Req: " + prompt.request-id;
+                    font-family: Theme.mono;
+                    font-size: Theme.fs-xs;
+                    color: Theme.text-400;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+                Text {
+                    text: @tr("Expires at {}", prompt.expires-at);
+                    font-family: Theme.mono;
+                    font-size: Theme.fs-xs;
+                    color: Theme.text-400;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle {
+                background: Theme.inset-bg;
+                border-color: Theme.line;
+                border-width: 1px;
+                border-radius: Theme.r-lg;
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 6px;
+                    Text {
+                        text: prompt.target-summary;
+                        font-size: Theme.fs-sm;
+                        color: Theme.text-200;
+                        wrap: word-wrap;
+                    }
+                    IdentityItem {
+                        name: @tr("Target digest");
+                        value: prompt.target-digest;
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+                if can-decide: DangerButton {
+                    text: @tr("Deny request");
+                    icon: Icons.deny;
+                    accessible-label: @tr("Deny request") + " — " + prompt.operation;
+                    clicked => { root.decide(prompt.nonce, false); }
+                }
+                if can-decide: Button {
+                    text: @tr("Approve this request once");
+                    icon: Icons.allow;
+                    fill: Theme.emerald-600;
+                    hover-fill: Theme.emerald-500;
+                    fg: white;
+                    pad-x: 14px;
+                    pad-y: 7px;
+                    radius: Theme.r-lg;
+                    accessible-label: @tr("Approve this request once") + " — " + prompt.operation;
+                    clicked => { root.decide(prompt.nonce, true); }
+                }
+                if !can-decide: Text {
+                    text: @tr("This connection is read-only. Decide on a controller connection.");
+                    font-size: Theme.fs-xs;
+                    color: Theme.text-400;
+                }
+            }
+        }
+    }
+}

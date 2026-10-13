@@ -2,7 +2,7 @@
 
 > **Document ID**: `DOC-PLAN-RUST-CLIENT`\
 > **Status**: Active · **Target Version**: v0.1.26 구현 기준선 / 전체 전환 릴리스 버전 미정\
-> **Last Updated**: 2026-10-12 · **Classification**: Architecture & Implementation Plan
+> **Last Updated**: 2026-10-13 · **Classification**: Architecture & Implementation Plan
 
 ## 개요
 
@@ -26,7 +26,7 @@
 |---|---|
 | 이 계획 | 향후 전체 Rust 전환의 요구사항·작업·완료 기준 |
 | [기존 Tauri 설계](client-rust-migration.md), [기존 10-task 계획](client-rust-implementation-plan.md) | v0.1.21 이식 이력으로 보존; 향후 실행 계획은 이 문서로 대체 |
-| [ADR-0030](../adr/ADR-0030-rust-tauri-client-and-native-agent.md), [ADR-0031](../adr/ADR-0031-native-rust-client-and-isolated-state.md) | ADR-0030은 v0.1.21 Tauri/React 이력으로 보존. 새 native Client source 결정은 ADR-0031이 대체하며 실기/배포 gate는 보류 |
+| ADR-0030(삭제, [ADR-0032](../adr/ADR-0032-native-client.md)로 통합), ADR-0031(삭제, [ADR-0032](../adr/ADR-0032-native-client.md)로 통합) | ADR-0030은 v0.1.21 Tauri/React 이력으로 보존. 새 native Client source 결정은 ADR-0031이 대체하며 실기/배포 gate는 보류 |
 | [desktop-build skill](../../.agents/skills/desktop-build/SKILL.md), [Desktop Client Guide](../guides/desktop-client-guide.md) | v0.1.23 native 개발 staging/운영 명령으로 갱신. 제품 패키징·설치·업데이트 인수 완료를 뜻하지 않음 |
 
 > [!IMPORTANT]
@@ -136,7 +136,7 @@ operation과 permission은 다대다 관계다. 100과 143을 합산해 기능 �
 
 원 계획의 요구사항 기준선은 v0.1.20이다. 이번 개정의 소스 기준선은 **v0.1.21 / `3b48b0ff11d93c45ba40b0b30943b284a1e5b6fe`**이며 Registry는 **100개 operation**, catalog는 **18개 category / 81 RPC-backed / 62 planned = 143개 권한**이다. operation 등록·권한 연결은 모든 backend의 실제 성공 증거와 다르다. 최신 정적 검토는 [구현 현황의 2026-10-11 기록](../quality/implementation-status.md#rust-plan-update-20261011), 과거 기능 증거는 [§27](../quality/implementation-status.md#agent-permissions-v020)로 구분한다.
 
-현재 Rust `racp-contract`·`racp-core`·`racp-runtime`·`apps/agent-rust`는 재사용 대상이다. Tauri/React GUI, loopback TCP 제어, 3초 상태 조회, 기존 credential 탐색·v1 변환, Node 패키징은 교체 대상이다. 62개 planned 권한, 로컬 승인, hot policy는 추가 구현 대상으로 추적한다. 현재 코드 존재·production 빌드·기능 인수는 각각 다른 상태다.
+현재 Rust `racp-contract`·`racp-core`·`racp-runtime`·`apps/agent`는 재사용 대상이다. Tauri/React GUI, loopback TCP 제어, 3초 상태 조회, 기존 credential 탐색·v1 변환, Node 패키징은 교체 대상이다. 62개 planned 권한, 로컬 승인, hot policy는 추가 구현 대상으로 추적한다. 현재 코드 존재·production 빌드·기능 인수는 각각 다른 상태다.
 
 원 계획이 인용한 과거 핵심 증거는 파일/프로세스/터미널/화면 제어, packet→기존 Wireshark MCP, dump→기존 WinDbg MCP, W11 native live debugger 및 원본 proxy MCP의 HTTP 수집·인터셉트·재전송이다. 서비스/소프트웨어 inventory와 text search/patch는 host/source 검증이 있고 W11 신규 인수는 미완료다. Browser의 별도 source 실패도 해결됐다고 간주하지 않는다.
 
@@ -476,7 +476,7 @@ cargo build --workspace --bins --release --locked --target x86_64-pc-windows-msv
 
 ### 9.5 R03: 새 상태·등록 및 OS 인증 IPC
 
-**수정:** `crates/racp-core/src/{settings,secrets,paths}.rs`, `crates/racp-runtime/src/{enrollment,control,maintenance}.rs`, `apps/agent-rust/src/main.rs`. **신규:** `crates/racp-core/src/state_schema.rs`, `crates/racp-runtime/src/local_ipc/{mod,windows,unix,events}.rs`.
+**수정:** `crates/racp-core/src/{settings,secrets,paths}.rs`, `crates/racp-runtime/src/{enrollment,control,maintenance}.rs`, `apps/agent/src/main.rs`. **신규:** `crates/racp-core/src/state_schema.rs`, `crates/racp-runtime/src/local_ipc/{mod,windows,unix,events}.rs`.
 
 - [ ] **R03-A:** 새 user state를 Windows `%LOCALAPPDATA%/RACP/native-client`, macOS `~/Library/Application Support/RACP/native-client`, Linux `$XDG_STATE_HOME/racp/native-client`(미설정 시 `~/.local/state/racp/native-client`)로 분리한다. service/portable은 별도 명시 root를 사용한다. v1/v2 자동 변환·구 credential 탐색을 새 시작 경로에서 호출하지 않는다.
 - [ ] **R03-B:** secret과 편집 가능한 policy를 별도 파일로 저장하고 새 schema version·atomic commit·지원하지 않는 downgrade 거부를 구현한다. 신규 등록은 새 credential/Device만 생성하며 기존 자료는 보존한다. Rust→Rust upgrade는 별도 변환 명세로 관리한다.
@@ -522,7 +522,7 @@ cargo build --workspace --bins --release --locked --target x86_64-pc-windows-msv
 
 ### 9.9 R08: Desktop Broker·Guardian과 사용자 session
 
-**수정:** `crates/racp-runtime/src/providers/desktop/{broker,guardian,input,automation,clipboard,login,pipe,native_identity,state,watch}.rs`, `apps/agent-rust/src/service.rs`.
+**수정:** `crates/racp-runtime/src/providers/desktop/{broker,guardian,input,automation,clipboard,login,pipe,native_identity,state,watch}.rs`, `apps/agent/src/service.rs`.
 
 - [ ] **R08-A:** 현재 Broker/Guardian을 유지하고 GUI local IPC와 Broker의 고권한 IPC를 별도 endpoint·command scope로 제한한다.
 - [ ] **R08-B:** lock/logoff/session switch·foreground/DPI/observation 변화 시 approval·input lease를 폐기하고 독립 Guardian의 owned key/button ledger를 회수한다.
@@ -576,7 +576,7 @@ cargo build --workspace --bins --release --locked --target x86_64-pc-windows-msv
 
 ### 9.12 R-PKG: Rust 빌드 도구·기본/선택 패키지
 
-**신규:** `xtask/src/{package,manifest}.rs`, `packaging/client/windows/installer.nsi`, `packaging/client/assets/`. **수정:** `apps/agent-rust/src/bin/racp-portable.rs`, `scripts/version.py`, `.github/workflows/client.yml`. **이식 후 제거:** `scripts/build-client.mjs`, `scripts/client-manifest.mjs`, Client 전용 WebView2 staging.
+**신규:** `xtask/src/{package,manifest}.rs`, `packaging/client/windows/installer.nsi`, `packaging/client/assets/`. **수정:** `apps/agent/src/bin/racp-portable.rs`, `scripts/version.py`, `.github/workflows/client.yml`. **이식 후 제거:** `scripts/build-client.mjs`, `scripts/client-manifest.mjs`, Client 전용 WebView2 staging.
 
 - [ ] **R-PKG-A:** `cargo run --locked -p xtask -- package --platform win --arch x64 --dry-run`에서 staging/output·toolchain·native SDK·실행 계획만 출력한다. 실제 생성은 별도 package 실행으로 분리한다.
 - [ ] **R-PKG-B:** 기본 setup/portable EXE/ZIP에는 native GUI·Agent·필수 정적 asset만 넣는다. Chromium/CDB/GDB/분석 runtime은 별도 manifest·선택 패키지로 관리하고 WebView2/React 자산은 제거한다.

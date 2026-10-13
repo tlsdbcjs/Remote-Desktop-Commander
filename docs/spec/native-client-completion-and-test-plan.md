@@ -9,7 +9,7 @@
 > [!IMPORTANT]
 > 사용자가 `client-native` GUI를 재구성할 예정이므로 현재 작업에서 제외하고 Agent 서비스 계획을 별도로 요청했다. 현재 Agent 서비스의 작업·시험·종료 기준은 [Agent 서비스 구현 및 검증 계획](agent-service-implementation-and-test-plan.md)이 대체한다. 이 문서의 GUI/IME/UIA와 통합 작업 목록은 이전 범위의 참조이며 현재 실행 지시나 필수 선행 작업이 아니다.
 
-현재 Rust/Iced Client와 Rust Agent의 후속 작업을 **원격 요청→Gateway→Agent→실제 작업→결과 반환**의 관점으로 정리한다. 연결·실행·권한·요청별 승인·작업 추적·취소·재연결·자원 정리가 최우선이다. GUI는 등록·권한 설정·승인이 이 흐름을 막는 경우에 우선 수정하고, 로컬 입력기의 후보/조합과 화면 편의 시험은 후순위로 둔다. OS별 전용 API 확장과 이미 동작하는 구성의 재구현을 핵심 인수의 선행 조건으로 추가하지 않는다.
+현재 Rust/Slint Client와 Rust Agent의 후속 작업을 **원격 요청→Gateway→Agent→실제 작업→결과 반환**의 관점으로 정리한다. 연결·실행·권한·요청별 승인·작업 추적·취소·재연결·자원 정리가 최우선이다. GUI는 등록·권한 설정·승인이 이 흐름을 막는 경우에 우선 수정하고, 로컬 입력기의 후보/조합과 화면 편의 시험은 후순위로 둔다. OS별 전용 API 확장과 이미 동작하는 구성의 재구현을 핵심 인수의 선행 조건으로 추가하지 않는다.
 
 이 문서는 후속 작업의 우선순위와 완료 조건을 관리한다. 아키텍처와 전환 범위는 [Rust 전환 계획](rust-client-migration-plan.md), 실행 결과·실패·정확한 artifact hash는 [구현 현황](../quality/implementation-status.md)이 각각 SSOT다. 체크박스는 계획 상태이며 테스트 합격 증거가 아니다.
 
@@ -33,7 +33,7 @@
 
 | 영역 | 현재 상태 | 후속 작업의 의미 |
 |---|---|---|
-| Client GUI | Rust + Iced, 앱 내부 UI 모델·트레이·등록·권한·승인 화면 존재 | 원격 등록·권한 저장·승인을 막는 결함부터 수정. 일반 입력/화면 편의는 후순위 |
+| Client GUI | Rust + Slint([ADR-0032](../adr/ADR-0032-native-client.md)), 앱 내부 UI 모델·트레이·등록·권한·승인 화면 존재 | 원격 등록·권한 저장·승인을 막는 결함부터 수정. 일반 입력/화면 편의는 후순위 |
 | Agent | Rust, 등록·WSS·인증된 로컬 IPC·파일·프로세스·터미널·권한·승인·작업 취소의 실행 증거 존재 | 동일 기능을 다시 만들지 않고 실패·재연결·복구·부하 조건을 확대 검증 |
 | 사용자 설치본 | v0.1.26 setup 생성, 지시 이전의 임시 설치·GUI·제거 증거 존재 | 새 설치 실행은 금지. 현재 산출물의 정적 검증과 재현 가능한 빌드 정의 유지 |
 | 단일 portable/ZIP | 완성된 artifact 및 정적 무결성 증거 존재 | packaging stub과 구분. 실제 portable 실행은 아직 별도 검증 필요 |
@@ -97,11 +97,11 @@ flowchart LR
 
 | ID / 우선순위 | 현재 근거 | 작업과 완료 조건 |
 |---|---|---|
-| F01 / P1 | Agent가 ONLINE이 된 뒤에도 하단 시작 안내가 IPC 대기로 남음. [app.rs](../../apps/client-native/src/app.rs)의 요청 메시지와 snapshot 상태를 대조할 필요 | 시작/연결/실패/정지를 구분하고 실제 snapshot 수신 후 대기 안내 해제. 시작→ONLINE→정지→재시작에서 화면과 Agent 상태 일치 |
+| F01 / P1 | Agent가 ONLINE이 된 뒤에도 하단 시작 안내가 IPC 대기로 남음. [slint_ui.rs](../../apps/client-native/src/slint_ui.rs)의 요청 메시지와 snapshot 상태를 대조할 필요(Iced `app.rs`는 v0.1.34에서 삭제) | 시작/연결/실패/정지를 구분하고 실제 snapshot 수신 후 대기 안내 해제. 시작→ONLINE→정지→재시작에서 화면과 Agent 상태 일치 |
 | F02 / P1 | 승인 결과가 끝나도 하단에 최종 결과 대기가 남는 실행 기록 | receipt와 최종 event의 연결·순서·재동기화를 확인. 허용/거부/만료/취소/실패 후 실제 최종 결과를 표시하고 완료된 요청을 대기로 남기지 않음 |
-| F03 / P1 | 일부 UIA Invoke가 반영되지 않음. [accessibility.rs](../../apps/client-native/src/accessibility.rs)에 epoch 불일치 요청을 버리는 경로 존재 | epoch 경합과 무반응의 인과관계를 먼저 재현. 폐기된 컨트롤을 오작동시키지 않으면서 현재 컨트롤의 클릭/키보드/UIA 동작을 일치시킴. queue 유실과 stale 요청을 구분 |
+| F03 / P1 | 일부 UIA Invoke가 반영되지 않음. Iced 시절 `accessibility.rs`의 epoch 경로는 v0.1.34에서 삭제했고 Slint 내장 AccessKit으로 대체 | epoch 경합과 무반응의 인과관계를 먼저 재현. 폐기된 컨트롤을 오작동시키지 않으면서 현재 컨트롤의 클릭/키보드/UIA 동작을 일치시킴. queue 유실과 stale 요청을 구분 |
 | F04 / P2 | UIA focus는 true인데 rectangle이 0이거나 다른 권한 영역으로 scroll 이동한 기록 | semantic ID, view 재생성, focus 대상과 scroll reveal을 대조. 대상 입력/버튼이 실제로 보이고 정확한 항목에 입력되며 권한 저장 후 위치가 예측 가능함 |
-| F05 / P2 | 한국어 IME 조합·candidate 연동 경로가 미완성이고 실제 입력 검증 부족 | pinned Iced/winit 입력 경계의 조합/commit/취소/caret 처리를 확인해 필요한 경로를 보강. 한글 실제 키 입력·조합 수정·후보 선택·포커스 변경이 중복/손실 없이 동작. 직접 Unicode 문자열 주입을 IME 합격으로 간주하지 않음 |
+| F05 / P2 | 한국어 IME 조합·candidate 연동 경로가 미완성이고 실제 입력 검증 부족 | Slint/winit 입력 경계의 조합/commit/취소/caret 처리를 확인해 필요한 경로를 보강(Slint PoC에서 기본 조합·확정은 확인). 한글 실제 키 입력·조합 수정·후보 선택·포커스 변경이 중복/손실 없이 동작. 직접 Unicode 문자열 주입을 IME 합격으로 간주하지 않음 |
 | F06 / P1 | Agent 단독/Client 동반 빌드의 feature 통합 범위와 hash가 다를 수 있음 | 역할별 payload와 SBOM·동반 Agent hash를 명시. 테스트를 실행한 EXE의 hash로만 결과를 연결하며 다른 output의 성공을 자동 이관하지 않음 |
 | F07 / P1 | 현재 GUI 검증 probe는 있으나 흐름별 도구 조작에 의존. Computer Use helper 초기화 오류 기록 존재 | GUI 핵심 회귀를 재실행 가능한 절차/실행기로 정리. target PID·버전·state·payload를 명시하고 실제 UIA 및 Gateway/Agent 결과를 함께 판정. 실행기 오류를 제품 실패와 분리 |
 | F08 / P1 | [Client CI](../../.github/workflows/client.yml)는 NSIS compiler를 재귀 탐색해 정확히 하나만 요구하지만 확보한 archive에는 두 compiler 경로가 존재. 다운로드 challenge 기록도 있음 | 사용할 compiler 경로를 명시하고 버전·archive hash를 검증. 신뢰한 mirror fallback과 실패 진단을 정리. Windows artifact 생성까지만 확인하며 CI에서 설치를 실행하지 않음 |

@@ -38,7 +38,7 @@ pub fn source(root: &Path) -> Result<Value> {
         let allowed = [
             "crates/",
             "apps/client-native/",
-            "apps/agent-rust/",
+            "apps/agent/",
             "xtask/",
             "docs/protocol/",
             "packages/protocol/",

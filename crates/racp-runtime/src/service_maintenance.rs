@@ -3,7 +3,7 @@ use racp_contract::{digest, RacpError};
 use racp_core::{native_service::*, state_schema::*, InstanceLock};
 use serde_json::{json, Value};
 use std::path::Path;
-pub const RESULT_FILE: &str = "native-service-maintenance.json";
+pub const RESULT_FILE: &str = racp_core::service_start::MAINTENANCE_RECEIPT_FILE;
 pub fn inspect(root: &Path, nonce: &str) -> Result<(), RacpError> {
     if !nonce.strip_prefix("maintenance_").is_some_and(|id| {
         id.len() == 32
@@ -45,23 +45,7 @@ pub fn inspect(root: &Path, nonce: &str) -> Result<(), RacpError> {
     } else {
         let guards = racp_core::Workspaces::new(root, &[])?;
         let directory = guards.directory("default", root)?;
-        for name in directory.names()? {
-            if ![
-                CONFIG_FILE,
-                BOOTSTRAP_FILE,
-                CONNECTION_FILE,
-                CONFIG_LOCK,
-                "native-agent.lock",
-                "native-settings.lock",
-                RESULT_FILE,
-                "native-service-detach.json",
-                "native-service-restore.json",
-            ]
-            .contains(&name.as_str())
-            {
-                return Err(RacpError::new("SERVICE_MAINTENANCE_UNCONFIRMED"));
-            }
-        }
+        validate_unregistered_files(&directory.names()?)?;
         None
     };
     let _control = racp_core::service_directory::pin(&config.endpoint_dir, &config.scope)?;
@@ -80,4 +64,55 @@ pub fn inspect(root: &Path, nonce: &str) -> Result<(), RacpError> {
         "config_sha256":digest(racp_core::read_bounded(&root.join(CONFIG_FILE),16384,false)?),
         "device_id":device_id,"registered":registered,"state_preserved":true,"credential_accessed":false});
     racp_core::atomic_write(&root.join(RESULT_FILE), &serde_json::to_vec(&result)?, true)
+}
+
+fn validate_unregistered_files(names: &[String]) -> Result<(), RacpError> {
+    for name in names {
+        if ![
+            CONFIG_FILE,
+            BOOTSTRAP_FILE,
+            CONNECTION_FILE,
+            CONFIG_LOCK,
+            "native-agent.lock",
+            "native-settings.lock",
+            RESULT_FILE,
+            "native-service-detach.json",
+            "native-service-restore.json",
+            racp_core::service_start::INTENT_FILE,
+            racp_core::service_start::INTENT_LOCK,
+            racp_core::service_start::ADMIN_LOCK,
+            racp_core::service_start::EXECUTION_LOCK,
+        ]
+        .contains(&name.as_str())
+        {
+            return Err(RacpError::new("SERVICE_MAINTENANCE_UNCONFIRMED"));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn unregistered_maintenance_accepts_durable_start_artifacts_and_rejects_unknown_files() {
+        let mut names: Vec<String> = [
+            CONFIG_FILE,
+            BOOTSTRAP_FILE,
+            CONNECTION_FILE,
+            "native-service-start-intent.json",
+            "native-service-start-intent.lock",
+            "native-service-admin.lock",
+            "native-service-execution.lock",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        assert!(validate_unregistered_files(&names).is_ok());
+        names.push("native-service-start-intent-extra.json".into());
+        assert!(validate_unregistered_files(&names).is_err());
+        names.pop();
+        names.push(SECRET_FILE.into());
+        assert!(validate_unregistered_files(&names).is_err());
+    }
 }

@@ -128,6 +128,12 @@ pub fn inspect(file: &mut File) -> Result<Vec<String>> {
             // Native AccessKit/UIA provider: UiaReturnRawElementProvider is
             // exported by this Windows system DLL (uiautomationcoreapi.h).
             "uiautomationcore.dll",
+            // Slint's winit backend links the `webbrowser` crate for Platform::open_url, which
+            // imports only AssocQueryStringW from this Windows system DLL.
+            "shlwapi.dll",
+            // Slint text shaping enumerates system fonts (Korean fallback) through DirectWrite;
+            // only DWriteCreateFactory is imported.
+            "dwrite.dll",
             "oleaut32.dll",
             "ws2_32.dll",
             "iphlpapi.dll",

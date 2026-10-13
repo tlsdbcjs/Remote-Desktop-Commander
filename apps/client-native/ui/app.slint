@@ -1,0 +1,642 @@
+// RACP native Client window (ADR-0032). Presentation only: Rust owns state and commands.
+// Design reference: docs/spec/enterprise_gui_demo.html.
+import { Theme } from "theme.slint";
+import { Icon, Icons } from "icons.slint";
+import { Tag, Divider, Card, Button, NavItem, ScrollBar } from "widgets.slint";
+import { ShellModel } from "shell.slint";
+import { StatusView, StatusModel, ActivityRow, LogLine, EnrollPreview } from "status.slint";
+import { PermissionsView, CategoryRow, LeafRow, PolicyModel } from "permissions.slint";
+import { ApprovalsView, ApprovalRow } from "approvals.slint";
+import { RuntimeView, RuntimeModel } from "runtime.slint";
+import { SettingsView, SettingsModel, WorkspaceRow } from "settings.slint";
+
+export { Theme, ShellModel, StatusModel, ActivityRow, LogLine, EnrollPreview, CategoryRow, LeafRow, PolicyModel,
+    ApprovalRow, RuntimeModel, SettingsModel, WorkspaceRow }
+
+
+// --- Header ---
+
+component StatusCapsule inherits Rectangle {
+    in property <ShellModel> model;
+    property <bool> online: model.agent-status == 3;
+    property <color> state-color: online ? Theme.emerald-400 : model.agent-status == 1 || model.agent-status == 0 ? Theme.text-400 : Theme.amber-400;
+    background: Theme.inset-bg;
+    border-color: Theme.line;
+    border-width: 1px;
+    border-radius: self.height / 2;
+    height: 26px;
+    accessible-role: groupbox;
+    accessible-label: @tr("Agent status");
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 12px;
+        HorizontalLayout {
+            spacing: 6px;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: online ? Theme.emerald-500 : state-color;
+                }
+            }
+            Text {
+                text: model.agent-status == 3 ? @tr("Agent Online")
+                    : model.agent-status == 2 ? @tr("Agent Connecting")
+                    : model.agent-status == 1 ? @tr("Agent Stopped")
+                    : model.agent-status == 0 ? @tr("Not registered")
+                    : @tr("Agent Offline");
+                color: state-color;
+                font-size: Theme.fs-xs;
+                font-weight: 500;
+                vertical-alignment: center;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Divider { }
+        }
+        HorizontalLayout {
+            spacing: 4px;
+            Text {
+                text: @tr("Path:");
+                color: Theme.text-400;
+                font-size: Theme.fs-xs;
+                vertical-alignment: center;
+            }
+            Text {
+                text: model.state-root;
+                color: Theme.text-300;
+                font-family: Theme.mono;
+                font-size: Theme.fs-xs;
+                vertical-alignment: center;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Divider { }
+        }
+        HorizontalLayout {
+            spacing: 4px;
+            Text {
+                text: @tr("Role:");
+                color: Theme.text-400;
+                font-size: Theme.fs-xs;
+                vertical-alignment: center;
+            }
+            Text {
+                text: model.role == 1 ? @tr("Controller") : model.role == 2 ? @tr("Observer") : @tr("Standby");
+                color: model.role == 1 ? Theme.indigo-400 : Theme.text-300;
+                font-size: Theme.fs-xs;
+                font-weight: 500;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+component Header inherits Rectangle {
+    in property <string> version;
+    in property <ShellModel> model;
+    callback emergency-stop();
+    callback hide-to-tray();
+    callback quit();
+    height: 56px;
+    background: Theme.header-bg;
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.line-soft;
+    }
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 12px;
+        HorizontalLayout {
+            spacing: 12px;
+            horizontal-stretch: 1;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: Theme.r-lg;
+                    background: @linear-gradient(45deg, Theme.blue-600 0%, Theme.indigo-500 100%);
+                    drop-shadow-color: Theme.indigo-500.with-alpha(0.2);
+                    drop-shadow-blur: 15px;
+                    drop-shadow-offset-y: 6px;
+                    accessible-role: image;
+                    accessible-label: "RACP";
+                    Icon {
+                        data: Icons.shield-check;
+                        tint: white;
+                        weight: 2.2;
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                Text {
+                    text: model.service ? @tr("RACP Service Control") : @tr("RACP Native Client");
+                    font-size: Theme.fs-sm;
+                    font-weight: 700;
+                    color: Theme.text-strong;
+                    vertical-alignment: center;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Tag {
+                        text: @tr("Enterprise Agent");
+                    }
+                }
+                Text {
+                    text: "v" + root.version;
+                    font-family: Theme.mono;
+                    font-size: Theme.fs-xs;
+                    color: Theme.text-400;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            StatusCapsule {
+                model: root.model;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            horizontal-stretch: 1;
+            alignment: end;
+            if model.can-control: VerticalLayout {
+                alignment: center;
+                Button {
+                    text: @tr("Emergency Stop");
+                    icon: Icons.warning;
+                    fg: Theme.rose-400;
+                    fill: Theme.rose-500.with-alpha(0.1);
+                    hover-fill: Theme.rose-500.with-alpha(0.2);
+                    outline: Theme.rose-500.with-alpha(0.3);
+                    clicked => { root.emergency-stop(); }
+                }
+            }
+            if model.can-hide: VerticalLayout {
+                alignment: center;
+                Button {
+                    tooltip: @tr("Minimize to tray");
+                    icon: Icons.chevron-down;
+                    icon-size: 16px;
+                    pad-x: 6px;
+                    pad-y: 6px;
+                    radius: Theme.r-sm;
+                    fg: Theme.text-400;
+                    hover-fg: Theme.text-200;
+                    fill: transparent;
+                    hover-fill: Theme.hover-800;
+                    clicked => { root.hide-to-tray(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    tooltip: model.service ? @tr("Quit app") : @tr("Stop Agent and quit");
+                    icon: Icons.x;
+                    icon-size: 16px;
+                    pad-x: 6px;
+                    pad-y: 6px;
+                    radius: Theme.r-sm;
+                    fg: Theme.text-400;
+                    hover-fg: Theme.rose-400;
+                    fill: transparent;
+                    hover-fill: Theme.hover-800;
+                    clicked => { root.quit(); }
+                }
+            }
+        }
+    }
+}
+
+// --- Sidebar ---
+
+component Sidebar inherits Rectangle {
+    in-out property <int> current-page;
+    in property <ShellModel> model;
+    width: 224px;
+    background: Theme.sidebar-bg;
+
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        background: Theme.line-soft;
+    }
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 4px;
+        accessible-role: tab-list;
+        accessible-label: @tr("Navigation");
+        NavItem {
+            icon: Icons.grid;
+            text: @tr("Status");
+            active: current-page == 0;
+            badge-kind: 1;
+            badge: model.agent-status == 3 ? @tr("Agent Online") : @tr("Agent Offline");
+            dot-color: model.agent-status == 3 ? Theme.emerald-400 : Theme.text-500;
+            clicked => { current-page = 0; }
+        }
+        NavItem {
+            icon: Icons.shield-check;
+            text: @tr("Permissions");
+            active: current-page == 1;
+            badge-kind: 2;
+            badge: "Tree";
+            clicked => { current-page = 1; }
+        }
+        NavItem {
+            icon: Icons.bell;
+            text: @tr("Approvals");
+            active: current-page == 2;
+            badge-kind: model.pending-approvals > 0 ? 3 : 0;
+            badge: model.pending-approvals;
+            clicked => { current-page = 2; }
+        }
+        // Service-mode GUIs never change runtime selection or local settings.
+        if !model.service: NavItem {
+            icon: Icons.stack;
+            text: @tr("Optional runtimes");
+            active: current-page == 3;
+            clicked => { current-page = 3; }
+        }
+        if !model.service: NavItem {
+            icon: Icons.cog;
+            text: @tr("Settings");
+            active: current-page == 4;
+            clicked => { current-page = 4; }
+        }
+        Rectangle {
+            vertical-stretch: 1;
+        }
+        Rectangle {
+            vertical-stretch: 0;
+            background: Theme.inset-strong;
+            border-color: Theme.line;
+            border-width: 1px;
+            border-radius: Theme.r-lg;
+            accessible-role: groupbox;
+            accessible-label: @tr("Device Identity");
+            VerticalLayout {
+                padding: 10px;
+                spacing: 6px;
+                Text {
+                    text: @tr("DEVICE IDENTITY");
+                    font-size: Theme.fs-11;
+                    font-weight: 600;
+                    letter-spacing: 0.6px;
+                    color: Theme.text-400;
+                }
+                Text {
+                    text: model.device-id-short;
+                    font-family: Theme.mono;
+                    font-size: Theme.fs-11;
+                    color: Theme.text-300;
+                    overflow: elide;
+                    accessible-label: model.device-id;
+                }
+                Rectangle {
+                    height: 1px;
+                    background: Theme.line-soft;
+                }
+                HorizontalLayout {
+                    Text {
+                        text: "DPAPI Vault";
+                        font-size: Theme.fs-11;
+                        color: Theme.text-400;
+                        horizontal-stretch: 1;
+                    }
+                    HorizontalLayout {
+                        spacing: 4px;
+                        horizontal-stretch: 0;
+                        VerticalLayout {
+                            alignment: center;
+                            Icon {
+                                data: Icons.lock;
+                                tint: Theme.emerald-400;
+                                width: 12px;
+                                height: 12px;
+                            }
+                        }
+                        Text {
+                            text: @tr("Enforced");
+                            font-size: Theme.fs-11;
+                            font-weight: 500;
+                            color: Theme.emerald-400;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- Body ---
+
+// Global result/error line, the counterpart of the Iced client's message banner.
+component Notice inherits Rectangle {
+    in property <string> text;
+    in property <bool> quitting;
+    callback exit-anyway();
+    background: Theme.amber-500.with-alpha(0.08);
+    border-color: Theme.amber-500.with-alpha(0.3);
+    border-width: 1px;
+    border-radius: Theme.r-lg;
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.text;
+    HorizontalLayout {
+        padding: 12px;
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                data: Icons.warning;
+                tint: Theme.amber-400;
+            }
+        }
+        Text {
+            text: root.text;
+            color: Theme.text-200;
+            font-size: Theme.fs-xs;
+            wrap: word-wrap;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        if root.quitting: VerticalLayout {
+            alignment: center;
+            Button {
+                text: @tr("Quit without cleanup");
+                fg: Theme.rose-400;
+                fill: Theme.rose-500.with-alpha(0.1);
+                hover-fill: Theme.rose-500.with-alpha(0.2);
+                outline: Theme.rose-500.with-alpha(0.3);
+                clicked => { root.exit-anyway(); }
+            }
+        }
+    }
+}
+
+
+export component AppWindow inherits Window {
+    in property <string> version: "0.0.0";
+    in property <ShellModel> shell;
+    in property <string> notice;
+    in property <bool> quitting;
+    in-out property <int> current-page: 0;
+    // Flipped by Rust after structural changes. Creating or destroying this empty element makes
+    // Slint 1.16 rebuild the whole accessibility tree; otherwise pages and rows created later can
+    // stay missing from UI Automation (see slint_ui::Controller::refresh_accessibility).
+    in property <bool> a11y-epoch;
+    in property <StatusModel> status;
+    in property <[ActivityRow]> activity;
+    in property <[LogLine]> log-lines;
+    in property <EnrollPreview> preview;
+    in-out property <string> connection-path;
+    in-out property <string> connection-hash;
+    in-out property <string> workspace-draft;
+    in-out property <string> profile: "read_only";
+    in property <[CategoryRow]> categories;
+    in property <PolicyModel> policy;
+    in-out property <string> allow-list;
+    in-out property <string> deny-list;
+    in-out property <string> workspace-ids;
+    in-out property <string> max-timeout;
+    in-out property <string> max-output;
+    in-out property <bool> strict-isolation;
+    in property <[ApprovalRow]> approvals;
+    in property <RuntimeModel> runtime;
+    in-out property <string> runtime-manifest;
+    in-out property <string> runtime-hash;
+    in-out property <string> runtime-source;
+    in-out property <string> chromium-hash;
+    in-out property <string> cdb-hash;
+    in-out property <string> gdb-hash;
+    in-out property <string> analysis-hash;
+    in-out property <string> browser-origins;
+    in-out property <bool> external-cdp;
+    in property <SettingsModel> settings;
+    in property <[WorkspaceRow]> workspaces;
+    in property <string> language: "ko";
+
+    callback emergency-stop();
+    callback hide-to-tray();
+    callback quit();
+    callback exit-anyway();
+    callback refresh-local();
+    callback start-agent();
+    callback cancel-local();
+    callback connect-desktop();
+    callback disconnect-desktop();
+    callback connection-path-edited(string);
+    callback inspect-connection();
+    callback enroll();
+    callback cancel-operation(int);
+    callback clear-log();
+    callback toggle-category(int);
+    callback set-category-enabled(int, bool);
+    callback batch-category(int, int);
+    callback set-leaf(int, int, int);
+    callback apply-preset(int);
+    callback commit-policy();
+    callback reload-constraints();
+    callback constraints-edited();
+    callback decide(string, bool);
+    callback admit-runtime();
+    callback configure-runtime();
+    callback set-language(string);
+    callback add-workspace();
+    callback remove-workspace(int);
+    callback workspace-id-edited(int, string);
+    callback workspace-path-edited(int, string);
+    callback save-settings();
+    callback configure-login(bool);
+    callback reconcile-login();
+    callback page-changed();
+
+    changed current-page => { root.page-changed(); }
+    init => { shortcuts.focus(); }
+
+    function shortcut(event: KeyEvent) -> bool {
+        if (!event.modifiers.control || event.modifiers.alt) {
+            return false;
+        }
+        if (event.text == "1") { root.current-page = 0; return true; }
+        if (event.text == "2") { root.current-page = 1; return true; }
+        if (event.text == "3") { root.current-page = 2; return true; }
+        if (event.text == "4" && !root.shell.service) { root.current-page = 4; return true; }
+        if (event.text == "5" && !root.shell.service) { root.current-page = 3; return true; }
+        false
+    }
+
+    title: (shell.service ? @tr("RACP Service Control") : @tr("RACP Native Client")) + " v" + root.version;
+    icon: @image-url("../assets/app.png");
+    preferred-width: 1280px;
+    preferred-height: 820px;
+    min-width: 960px;
+    min-height: 600px;
+    background: Theme.app-bg;
+    default-font-family: Theme.sans;
+    default-font-size: Theme.fs-sm;
+
+    // Ctrl+1..5 page shortcuts, as in the previous client: Status, Permissions, Approvals,
+    // Settings, Optional runtimes. Captured before focused children; never takes focus itself.
+    // Keys reach only the focused element and its ancestors, so this scope holds focus at start
+    // and also captures keys while a child is focused.
+    shortcuts := FocusScope {
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        capture-key-pressed(event) => {
+            if (root.shortcut(event)) {
+                return accept;
+            }
+            reject
+        }
+        key-pressed(event) => {
+            if (root.shortcut(event)) {
+                return accept;
+            }
+            reject
+        }
+        VerticalLayout {
+            Header {
+                version: root.version;
+                model: root.shell;
+                emergency-stop => { root.emergency-stop(); }
+                hide-to-tray => { root.hide-to-tray(); }
+                quit => { root.quit(); }
+            }
+            HorizontalLayout {
+                vertical-stretch: 1;
+                Sidebar {
+                    current-page <=> root.current-page;
+                    model: root.shell;
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: Theme.app-bg;
+                    accessible-role: tab-panel;
+                    main-flick := Flickable {
+                        width: parent.width - 8px;
+                        viewport-height: page.preferred-height + 48px;
+                        page := VerticalLayout {
+                            x: 24px;
+                            y: 24px;
+                            width: main-flick.width - 48px;
+                            height: self.preferred-height;
+                            alignment: start;
+                            spacing: 16px;
+                            if root.notice != "": Notice {
+                                text: root.notice;
+                                quitting: root.quitting;
+                                exit-anyway => { root.exit-anyway(); }
+                            }
+                            if root.current-page == 0: StatusView {
+                                shell: root.shell;
+                                model: root.status;
+                                activity: root.activity;
+                                log-lines: root.log-lines;
+                                preview: root.preview;
+                                connection-path <=> root.connection-path;
+                                connection-hash <=> root.connection-hash;
+                                workspace-draft <=> root.workspace-draft;
+                                profile <=> root.profile;
+                                refresh-local => { root.refresh-local(); }
+                                start-agent => { root.start-agent(); }
+                                stop-agent => { root.emergency-stop(); }
+                                cancel-local => { root.cancel-local(); }
+                                connect-desktop => { root.connect-desktop(); }
+                                disconnect-desktop => { root.disconnect-desktop(); }
+                                connection-path-edited(value) => { root.connection-path-edited(value); }
+                                inspect-connection => { root.inspect-connection(); }
+                                enroll => { root.enroll(); }
+                                cancel-operation(index) => { root.cancel-operation(index); }
+                                clear-log => { root.clear-log(); }
+                                open-approvals => { root.current-page = 2; }
+                            }
+                            if root.current-page == 1: PermissionsView {
+                                categories: root.categories;
+                                policy: root.policy;
+                                allow-list <=> root.allow-list;
+                                deny-list <=> root.deny-list;
+                                workspace-ids <=> root.workspace-ids;
+                                max-timeout <=> root.max-timeout;
+                                max-output <=> root.max-output;
+                                strict-isolation <=> root.strict-isolation;
+                                toggle(i) => { root.toggle-category(i); }
+                                set-enabled(i, on) => { root.set-category-enabled(i, on); }
+                                batch(i, g) => { root.batch-category(i, g); }
+                                leaf(i, j, g) => { root.set-leaf(i, j, g); }
+                                preset(g) => { root.apply-preset(g); }
+                                commit => { root.commit-policy(); }
+                                reload-constraints => { root.reload-constraints(); }
+                                constraints-edited => { root.constraints-edited(); }
+                            }
+                            if root.current-page == 2: ApprovalsView {
+                                prompts: root.approvals;
+                                can-decide: root.shell.can-control;
+                                connected: root.status.connected;
+                                decide(nonce, allow) => { root.decide(nonce, allow); }
+                            }
+                            if root.current-page == 3: RuntimeView {
+                                model: root.runtime;
+                                manifest-file <=> root.runtime-manifest;
+                                manifest-hash <=> root.runtime-hash;
+                                source-directory <=> root.runtime-source;
+                                chromium-hash <=> root.chromium-hash;
+                                cdb-hash <=> root.cdb-hash;
+                                gdb-hash <=> root.gdb-hash;
+                                analysis-hash <=> root.analysis-hash;
+                                browser-origins <=> root.browser-origins;
+                                external-cdp <=> root.external-cdp;
+                                admit-runtime => { root.admit-runtime(); }
+                                configure-runtime => { root.configure-runtime(); }
+                            }
+                            if root.current-page == 4: SettingsView {
+                                model: root.settings;
+                                workspaces: root.workspaces;
+                                language: root.language;
+                                workspace-draft <=> root.workspace-draft;
+                                set-language(code) => { root.set-language(code); }
+                                add-workspace => { root.add-workspace(); }
+                                remove-workspace(index) => { root.remove-workspace(index); }
+                                workspace-id-edited(index, value) => { root.workspace-id-edited(index, value); }
+                                workspace-path-edited(index, value) => { root.workspace-path-edited(index, value); }
+                                save-settings => { root.save-settings(); }
+                                reload-settings => { root.refresh-local(); }
+                                configure-login(enabled) => { root.configure-login(enabled); }
+                                reconcile-login => { root.reconcile-login(); }
+                            }
+                        }
+                    }
+                    ScrollBar {
+                        x: parent.width - 6px;
+                        height: parent.height;
+                        viewport-height: main-flick.viewport-height;
+                        visible-height: main-flick.height;
+                        viewport-y <=> main-flick.viewport-y;
+                    }
+                }
+            }
+        }
+    }
+    if root.a11y-epoch: Rectangle {
+        width: 0px;
+        height: 0px;
+        accessible-role: none;
+    }
+}

@@ -8,7 +8,8 @@ fn provider(root: &std::path::Path) -> Filesystem {
     let docs = root.join("docs");
     std::fs::create_dir(&workspace).unwrap();
     std::fs::create_dir(&docs).unwrap();
-    let settings:AgentSettings=serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_1","workspace":workspace,"data_dir":root.join("data"),"profile":"trusted_personal","allowed_workspaces":[{"id":"docs","path":docs}],"ca_file":null,"desktop_enabled":false})).unwrap();
+    // Runtime state has a private parent; it must be separate from both workspaces.
+    let settings:AgentSettings=serde_json::from_value(json!({"version":2,"gateway":"http://localhost:1234","device_id":"dev_1","workspace":workspace,"data_dir":root.join("state/data"),"profile":"trusted_personal","allowed_workspaces":[{"id":"docs","path":docs}],"ca_file":null,"desktop_enabled":false})).unwrap();
     Filesystem::new(&settings).unwrap()
 }
 async fn execute(files: &Filesystem, operation: &str, payload: Value) -> Value {

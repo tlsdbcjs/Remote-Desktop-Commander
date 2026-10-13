@@ -1,0 +1,219 @@
+// Settings view (ADR-0032 migration step 4): language, registered workspaces, login start.
+import { Theme } from "theme.slint";
+import { Icon, Icons } from "icons.slint";
+import { Card, Button, TextField } from "widgets.slint";
+import { SectionTitle, FieldLabel, ChoiceButton, PrimaryButton, DangerButton } from "common.slint";
+
+export struct WorkspaceRow {
+    id: string,
+    path: string,
+}
+
+export struct SettingsModel {
+    registered: bool,
+    revision: string,
+    // Saving needs the Agent stopped and no local request in flight.
+    can-save: bool,
+    can-add-workspace: bool,
+    login-known: bool,
+    login-enabled: bool,
+    login-owned: bool,
+    login-pending: bool,
+    login-error: string,
+    can-configure-login: bool,
+}
+
+export component SettingsView inherits VerticalLayout {
+    in property <SettingsModel> model;
+    in property <[WorkspaceRow]> workspaces;
+    in property <string> language;
+    in-out property <string> workspace-draft;
+    callback set-language(string);
+    callback add-workspace();
+    callback remove-workspace(int);
+    callback workspace-id-edited(int, string);
+    callback workspace-path-edited(int, string);
+    callback save-settings();
+    callback reload-settings();
+    callback configure-login(bool);
+    callback reconcile-login();
+    alignment: start;
+    spacing: 16px;
+
+    Card {
+        VerticalLayout {
+            padding: 20px;
+            SectionTitle {
+                title: @tr("Settings");
+                subtitle: @tr("Language for this window, the folders this PC exposes, and starting the Agent after Windows sign-in.");
+            }
+        }
+    }
+
+    // Language
+    Card {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 10px;
+            SectionTitle {
+                title: @tr("Interface language");
+                subtitle: @tr("Switches this window immediately. The choice is not saved yet; the next start follows the Windows display language.");
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                ChoiceButton {
+                    text: "한국어 (ko-KR)";
+                    selected: root.language == "ko";
+                    clicked => { root.set-language("ko"); }
+                }
+                ChoiceButton {
+                    text: "English (en-US)";
+                    selected: root.language == "en";
+                    clicked => { root.set-language("en"); }
+                }
+            }
+        }
+    }
+
+    // Registered workspaces
+    Card {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 10px;
+            SectionTitle {
+                title: @tr("Workspaces");
+                subtitle: model.registered
+                    ? @tr("Remote operations can reach only these folders. Up to 15 named folders besides the default. Changes apply from the next Agent start (settings revision {}).", model.revision)
+                    : @tr("Register this PC first. The default workspace for a new registration is set on the Status page.");
+            }
+            if model.registered: VerticalLayout {
+                spacing: 10px;
+                FieldLabel { text: @tr("Default workspace folder"); }
+                TextField {
+                    label: @tr("Default workspace folder");
+                    mono: true;
+                    text <=> root.workspace-draft;
+                }
+                FieldLabel { text: @tr("Named workspaces (ID and absolute path)"); }
+                if workspaces.length == 0: Text {
+                    text: @tr("No named workspaces.");
+                    font-size: Theme.fs-xs;
+                    color: Theme.text-500;
+                }
+                for row[index] in workspaces: HorizontalLayout {
+                    spacing: 8px;
+                    TextField {
+                        width: 180px;
+                        label: @tr("Workspace ID");
+                        mono: true;
+                        text: row.id;
+                        edited(value) => { root.workspace-id-edited(index, value); }
+                    }
+                    TextField {
+                        horizontal-stretch: 1;
+                        label: @tr("Absolute path");
+                        mono: true;
+                        text: row.path;
+                        edited(value) => { root.workspace-path-edited(index, value); }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        DangerButton {
+                            icon: Icons.x;
+                            tooltip: @tr("Remove workspace {}", row.id);
+                            pad-x: 8px;
+                            clicked => { root.remove-workspace(index); }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    if model.can-add-workspace: Button {
+                        text: @tr("Add workspace");
+                        pad-x: 12px;
+                        pad-y: 6px;
+                        radius: Theme.r-lg;
+                        clicked => { root.add-workspace(); }
+                    }
+                    if model.can-save: PrimaryButton {
+                        text: @tr("Save settings");
+                        clicked => { root.save-settings(); }
+                    }
+                    Button {
+                        text: @tr("Reload saved settings");
+                        pad-x: 12px;
+                        pad-y: 6px;
+                        radius: Theme.r-lg;
+                        clicked => { root.reload-settings(); }
+                    }
+                }
+                if !model.can-save: Text {
+                    text: @tr("Stop the Agent completely before saving settings. Running work is not stopped automatically.");
+                    font-size: Theme.fs-11;
+                    color: Theme.amber-400;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+
+    // Login start
+    Card {
+        VerticalLayout {
+            padding: 20px;
+            spacing: 10px;
+            SectionTitle {
+                title: @tr("Start after Windows sign-in");
+                subtitle: @tr("Registers only this Client path and fixed arguments for the current user. Tokens and Gateway addresses are never written to the startup entry. Off by default.");
+            }
+            if !model.login-known: Text {
+                text: model.registered ? @tr("Startup state is not available.") : @tr("Available after this PC is registered.");
+                font-size: Theme.fs-xs;
+                color: Theme.text-400;
+            }
+            if model.login-known: VerticalLayout {
+                spacing: 8px;
+                Text {
+                    text: (model.login-enabled ? @tr("Startup entry: registered") : @tr("Startup entry: not registered"))
+                        + " · " + (model.login-owned ? @tr("owned by this Client") : @tr("not owned by this Client"))
+                        + (model.login-pending ? " · " + @tr("unconfirmed change") : "")
+                        + (model.login-error != "" ? " · " + model.login-error : "");
+                    font-size: Theme.fs-xs;
+                    color: Theme.text-300;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    if model.can-configure-login && model.login-pending: Button {
+                        text: @tr("Check and settle startup entry");
+                        pad-x: 12px;
+                        pad-y: 6px;
+                        radius: Theme.r-lg;
+                        clicked => { root.reconcile-login(); }
+                    }
+                    if model.can-configure-login && !model.login-pending && model.login-owned && !model.login-enabled: PrimaryButton {
+                        text: @tr("Start after sign-in");
+                        clicked => { root.configure-login(true); }
+                    }
+                    if model.can-configure-login && !model.login-pending && model.login-owned && model.login-enabled: Button {
+                        text: @tr("Do not start after sign-in");
+                        pad-x: 12px;
+                        pad-y: 6px;
+                        radius: Theme.r-lg;
+                        clicked => { root.configure-login(false); }
+                    }
+                    if model.can-configure-login && !model.login-pending && model.login-owned && model.login-enabled: Button {
+                        text: @tr("Update startup entry");
+                        pad-x: 12px;
+                        pad-y: 6px;
+                        radius: Theme.r-lg;
+                        clicked => { root.configure-login(true); }
+                    }
+                }
+            }
+        }
+    }
+}

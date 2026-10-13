@@ -12,6 +12,7 @@ import ctypes
 import hashlib
 import ipaddress
 import json
+import msvcrt
 import os
 import secrets
 import socket
@@ -20,6 +21,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -49,6 +51,48 @@ def wait_for(check: Any, timeout: float = 30) -> Any:
             return value
         time.sleep(0.1)
     raise TimeoutError("condition did not become true within the test budget")
+
+
+def wait_for_terminal_marker(
+    read: Callable[[str, int, float], httpx.Response],
+    marker: str,
+    timeout: float = 10,
+) -> str:
+    deadline = time.monotonic() + timeout
+    cursor, output = "0", ""
+    while time.monotonic() < deadline:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        wait_ms = max(1, min(1000, int(remaining * 1000)))
+        response = read(cursor, wait_ms, remaining)
+        if time.monotonic() >= deadline:
+            raise TimeoutError("terminal response arrived after the test budget")
+        require(
+            response.status_code == 200 and response.json()["state"] == "SUCCEEDED",
+            "terminal.read failed while collecting output",
+        )
+        result = response.json()["result"]
+        data, next_cursor = result["data"], result["next_cursor"]
+        require(
+            isinstance(data, str) and isinstance(next_cursor, str) and next_cursor.isdecimal(),
+            "invalid terminal read result",
+        )
+        require(
+            int(next_cursor) >= int(cursor) and (not data or int(next_cursor) > int(cursor)),
+            "terminal byte cursor did not advance",
+        )
+        output += data
+        require(
+            len(output.encode("utf-8")) <= 128 * 1024, "terminal output collection budget exceeded"
+        )
+        if marker in output:
+            return output
+        require(not result.get("eof", False), "terminal ended before expected output")
+        if next_cursor == cursor:
+            time.sleep(min(0.1, max(0, deadline - time.monotonic())))
+        cursor = next_cursor
+    raise TimeoutError("terminal marker did not arrive within the test budget")
 
 
 class Pipe:
@@ -370,7 +414,46 @@ def main() -> int:
             boot_id = snapshot["snapshot"]["boot_id"]
             passed("named_pipe_authenticated_snapshot", boot_id=boot_id)
 
-            def execute(operation: str, payload: dict[str, Any], **extra: Any) -> httpx.Response:
+            def cli_control(command: dict[str, Any]) -> dict[str, Any]:
+                request_id = "cli_" + secrets.token_hex(12)
+                completed = subprocess.run(
+                    [str(agent_exe), "native-control", "--state-dir", str(state)],
+                    input=json.dumps(
+                        {
+                            "protocol": 1,
+                            "request_id": request_id,
+                            "deadline_ms": 5000,
+                            "command": command,
+                        }
+                    ),
+                    text=True,
+                    encoding="utf-8",
+                    capture_output=True,
+                    timeout=10,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+                require(
+                    completed.returncode == 0,
+                    "headless control CLI failed: " + completed.stderr.strip(),
+                )
+                reply = json.loads(completed.stdout)
+                require(reply["request_id"] == request_id, "headless receipt identity mismatch")
+                return reply["result"]
+
+            cli_snapshot = cli_control({"type": "snapshot"})
+            require(
+                cli_snapshot["type"] == "snapshot" and cli_snapshot["role"] == "controller",
+                "headless CLI did not authenticate as controller",
+            )
+            require(
+                cli_snapshot["snapshot"]["boot_id"] == boot_id,
+                "headless CLI selected a different Agent boot",
+            )
+            passed("headless_cli_authenticated_snapshot")
+
+            def execute(
+                operation: str, payload: dict[str, Any], *, http_timeout: float = 35, **extra: Any
+            ) -> httpx.Response:
                 return client.post(
                     "/api/v1/operations",
                     json={
@@ -381,7 +464,75 @@ def main() -> int:
                         "idempotency_key": "smoke-" + secrets.token_hex(8),
                         **extra,
                     },
+                    timeout=http_timeout,
                 )
+
+            watcher = subprocess.Popen(
+                [str(agent_exe), "native-control", "--state-dir", str(state)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            try:
+                require(
+                    watcher.stdin is not None and watcher.stdout is not None,
+                    "headless subscription pipes missing",
+                )
+                watcher.stdin.write(
+                    json.dumps(
+                        {
+                            "protocol": 1,
+                            "request_id": "cli_watch_1",
+                            "deadline_ms": 5000,
+                            "command": {
+                                "type": "subscribe",
+                                "boot_id": boot_id,
+                                "after_sequence": snapshot["snapshot"]["sequence"],
+                            },
+                        }
+                    )
+                )
+                watcher.stdin.close()
+                wait_for(
+                    lambda: (
+                        win32pipe.PeekNamedPipe(msvcrt.get_osfhandle(watcher.stdout.fileno()), 0)[1]
+                        > 0
+                    ),
+                    10,
+                )
+                subscribed_cli = json.loads(watcher.stdout.readline())
+                require(
+                    subscribed_cli["result"]["type"] == "subscribed",
+                    "headless subscription was rejected",
+                )
+                require(
+                    execute("filesystem.read", {"path": "read.txt"}).json()["state"] == "SUCCEEDED",
+                    "headless watched remote read failed",
+                )
+                require(watcher.wait(timeout=8) == 0, "headless watch did not end within its bound")
+                streamed = [json.loads(line) for line in watcher.stdout.read().splitlines()]
+                require(
+                    streamed and all(event["boot_id"] == boot_id for event in streamed),
+                    "headless watch emitted no events or another boot's events",
+                )
+                require(
+                    all(
+                        event["sequence"] > subscribed_cli["result"]["snapshot"]["sequence"]
+                        for event in streamed
+                    ),
+                    "headless stream sequence did not advance",
+                )
+                passed("headless_cli_subscription_activity", event_count=len(streamed))
+            finally:
+                if watcher.poll() is None:
+                    watcher.kill()
+                    watcher.wait(timeout=10)
+                for stream in (watcher.stdin, watcher.stdout, watcher.stderr):
+                    if stream is not None:
+                        stream.close()
 
             read = execute("filesystem.read", {"path": "read.txt"})
             require(
@@ -492,14 +643,13 @@ def main() -> int:
                 (workspace / "pty.marker").read_text().strip() == "native-terminal-file",
                 "terminal command did not execute",
             )
-            terminal_output = execute(
-                "terminal.read", {**terminal_target, "cursor": "0", "wait_ms": 1000}
-            )
-            require(
-                terminal_output.status_code == 200
-                and terminal_output.json()["state"] == "SUCCEEDED"
-                and "native-terminal-output" in terminal_output.json()["result"]["data"],
-                "terminal output missing",
+            wait_for_terminal_marker(
+                lambda cursor, wait_ms, remaining: execute(
+                    "terminal.read",
+                    {**terminal_target, "cursor": cursor, "wait_ms": wait_ms},
+                    http_timeout=remaining,
+                ),
+                "native-terminal-output",
             )
             resized = execute("terminal.resize", {**terminal_target, "cols": 100, "rows": 30})
             require(
@@ -531,7 +681,7 @@ def main() -> int:
                         return
 
             threading.Thread(target=consume_events, daemon=True).start()
-            update = control(
+            update = cli_control(
                 {
                     "type": "update_policy",
                     "expected_revision": 0,
@@ -556,7 +706,7 @@ def main() -> int:
                 and update_result["revision"] == 1,
                 f"hot policy commit failed: {update_result}",
             )
-            conflict = control(
+            conflict = cli_control(
                 {
                     "type": "update_policy",
                     "expected_revision": 0,
@@ -594,7 +744,7 @@ def main() -> int:
                     ),
                     10,
                 )
-                decision = control(
+                decision = cli_control(
                     {"type": "decide_approval", "nonce": prompt["nonce"], "allow": True}
                 )
                 require(decision["type"] == "accepted", "bound approval decision rejected")
@@ -605,11 +755,58 @@ def main() -> int:
                     and "approval-fixture" in approved.text,
                     f"approved read failed: {approved.text}",
                 )
-                replay = control(
+                replay = cli_control(
                     {"type": "decide_approval", "nonce": prompt["nonce"], "allow": True}
                 )
                 require(replay["type"] == "error", "approval nonce replay accepted")
             passed("local_approval_execute_and_nonce_replay_rejection")
+            seen_nonces = {e.get("change", {}).get("nonce") for e in events}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as workers:
+                future = workers.submit(execute, "filesystem.read", {"path": "approval.txt"})
+                prompt = wait_for(
+                    lambda: next(
+                        (
+                            e["change"]
+                            for e in events
+                            if e.get("change", {}).get("type") == "approval_pending"
+                            and e["change"]["nonce"] not in seen_nonces
+                        ),
+                        None,
+                    ),
+                    10,
+                )
+                require(
+                    cli_control(
+                        {"type": "decide_approval", "nonce": prompt["nonce"], "allow": False}
+                    )["type"]
+                    == "accepted",
+                    "headless deny decision was rejected",
+                )
+                denied_approval = future.result(timeout=15)
+                require(
+                    denied_approval.json()["state"] == "FAILED"
+                    and denied_approval.json()["error"]["code"] == "APPROVAL_REQUIRED"
+                    and denied_approval.json()["result"] is None
+                    and "approval-fixture" not in denied_approval.text,
+                    "denied approval exposed the target file",
+                )
+                denied_event = wait_for(
+                    lambda: next(
+                        (
+                            e["change"]
+                            for e in events
+                            if e.get("change", {}).get("type") == "approval_finished"
+                            and e["change"]["nonce"] == prompt["nonce"]
+                        ),
+                        None,
+                    ),
+                    10,
+                )
+                require(
+                    denied_event["state"] == "denied_or_expired",
+                    "headless denial did not finish the approval",
+                )
+            passed("headless_approval_denial_no_data")
 
             job = execute(
                 "shell.exec",
@@ -638,8 +835,38 @@ def main() -> int:
             require(
                 psutil.pid_exists(owned_child_pid), "cancellation fixture child was not running"
             )
-            cancelled = client.post("/api/v1/operations/" + operation_id + "/cancel")
-            require(cancelled.status_code == 200, "job cancellation not accepted")
+            activity = wait_for(
+                lambda: next(
+                    (
+                        item
+                        for item in cli_control({"type": "snapshot"})["snapshot"]["activity"]
+                        if item["operation_id"] == operation_id
+                    ),
+                    None,
+                ),
+                10,
+            )
+            stale_cancel = cli_control(
+                {
+                    "type": "cancel_operation",
+                    "boot_id": "boot_stale",
+                    "operation_id": operation_id,
+                    "target_request_id": activity["request_id"],
+                }
+            )
+            require(
+                stale_cancel["type"] == "error" and psutil.pid_exists(owned_child_pid),
+                "stale headless cancellation affected the child",
+            )
+            cancelled = cli_control(
+                {
+                    "type": "cancel_operation",
+                    "boot_id": boot_id,
+                    "operation_id": operation_id,
+                    "target_request_id": activity["request_id"],
+                }
+            )
+            require(cancelled["type"] == "accepted", "headless job cancellation not accepted")
 
             def finished_job() -> Any:
                 item = client.get("/api/v1/operations/" + operation_id).json()
@@ -699,8 +926,18 @@ def main() -> int:
                 (workspace / "once.counter").read_text() == "1", "restart reran completed mutation"
             )
             passed("agent_restart_reconnect_preserves_policy_and_workspace", pid=agent.pid)
+            unavailable = execute("filesystem.read", {"path": "approval.txt"})
             require(
-                control({"type": "stop"})["type"] == "accepted", "restarted Agent stop not accepted"
+                unavailable.json()["state"] == "FAILED"
+                and unavailable.json()["error"]["code"] == "APPROVAL_REQUIRED"
+                and unavailable.json()["result"] is None
+                and "approval-fixture" not in unavailable.text,
+                "request without an approver was automatically allowed",
+            )
+            passed("approval_without_controller_is_unavailable")
+            require(
+                cli_control({"type": "stop"})["type"] == "accepted",
+                "restarted Agent stop not accepted",
             )
             require(agent.wait(timeout=25) == 0, "restarted Agent did not stop cleanly")
             require(

@@ -1,8 +1,8 @@
 # RACP Agent Guidelines & Version Management
 
 > **Document ID**: `DOC-GOV-AGENTS`\
-> **Status**: Active · **Target Version**: v0.1.26\
-> **Last Updated**: 2026-10-12 · **Classification**: Repository Agent Guidelines
+> **Status**: Active · **Target Version**: v0.1.27\
+> **Last Updated**: 2026-10-13 · **Classification**: Repository Agent Guidelines
 
 This document defines repository instructions, operational principles, and semantic versioning policies for AI agents (Codex, Antigravity, Gemini, etc.) and contributors working on the **Remote-Desktop-Commander (RACP)** codebase.
 
@@ -25,9 +25,11 @@ This document defines repository instructions, operational principles, and seman
 - **Name**: Remote-Desktop-Commander (RACP - Remote Access and Control Protocol)
 - **Architecture**:
   - Python workspace (`uv` workspace): `apps/cli`, `apps/gateway`, `packages/domain`, `packages/protocol`, `packages/policy`, `packages/observability`, `packages/sdk`
-  - Rust workspace: `apps/agent-rust`, `apps/client-native` (Iced, including its local `src/ui_model.rs`), `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`, `xtask`; opt-in independent `apps/analysis-host`
+  - Rust workspace: `apps/agent`, `apps/client-native` (Slint 1.16.x GUI with the software renderer per [ADR-0032](docs/adr/ADR-0032-native-client.md); `ui/*.slint` views, `src/slint_ui.rs` controller and local `src/ui_model.rs`), `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`, `xtask`; opt-in independent `apps/analysis-host`
   - Node / Web workspace (`pnpm` workspace): `apps/console` (React + Vite) only
 - **Current Baseline Version**: Read `packages/domain/src/racp_domain/version.py` (SSOT).
+
+The active Agent service/platform roadmap is [Agent Service Plan](docs/spec/agent-service-implementation-and-test-plan.md). Common contracts/policy and OS backends must be separated within their existing crate responsibilities; Windows is the only initial implementation target, while macOS/Linux service and hardware adapters remain unimplemented. Planned folder trees are not current source paths. The requested USB/dongle feature concerns remote access to attached hardware and static-analysis data collection, not Agent licensing or authentication keys. GUI redesign remains outside this Agent scope. Do not access devices, alter drivers, install or register services merely because a plan describes those actions.
 
 ---
 
@@ -200,7 +202,7 @@ Use [`.agents/skills/desktop-build/SKILL.md`](.agents/skills/desktop-build/SKILL
 - Packaging SSOT: `xtask/src/package.rs`, `xtask/native-installer.nsi`, `crates/racp-contract/src/distribution.rs`. Product artifact generation is separate from development staging and requires its explicit request.
 - Client staging: `dist/client/<version>/<target>/<build-id>/staging/`; product output: the same batch's `packages/`. Standalone Agent: `dist/agent/<version>/win-x64/<build-id>/build/`, using `xtask stage-agent` and `xtask verify-agent`.
 - Bump PATCH once per build/change batch with `scripts/version.py`, refresh `uv.lock`, and reuse that version for retries and all platform artifacts. Never bump once per output format.
-- Bundle native Iced Client, Rust Agent and required static assets/license/SBOM only. Do not bundle CPython, Node, Electron, React or WebView2. Optional runtimes and analysis host are separate. Never package enrollment tokens, credentials, gateway-specific settings or local device state.
+- Bundle the native Slint Client, Rust Agent and required static assets/license/SBOM only. Do not bundle CPython, Node, Electron, React or WebView2. Optional runtimes and analysis host are separate. Never package enrollment tokens, credentials, gateway-specific settings or local device state.
 - Preserve existing outputs by default. An explicit user request to reset `dist/` authorizes removing its old outputs, including legacy backups and test evidence; it does not authorize deleting source or registered state. Validate the exact workspace path, ensure output processes have stopped, and unlink reparse points without following their external targets before recursive deletion. On ordinary build failure, inspect and quarantine only the failed phase before retrying under a new build ID.
 - Verify production Rust/TypeScript builds and packaging manifest integrity. The Windows installer request authorizes setup artifact creation. The user's latest instruction, **do not actually install**, prohibits any further installer execution or install/uninstall tests on this machine. Earlier isolated tests completed before that instruction are historical evidence only; do not rerun them without a new explicit request. Preserve existing registered profiles and services. Machine service installation, signing, clean-machine acceptance and macOS/Linux native builds remain deferred. Record checksums, passed checks and limitations in [Implementation Status](docs/quality/implementation-status.md).
 
@@ -218,7 +220,9 @@ The user installer bundles Client and Agent in one setup EXE. Its default path i
 | Gateway | `dist/gateway/<version>/win-x64/<build-id>/packages/` | Python server/runtime and compiled Web Console, portable ZIP; `uv run --frozen python scripts/build_gateway.py --node <node.exe> --build-id <id> --targets portable` |
 | Gateway workspace wheels | `dist/gateway/<version>/python-any/<build-id>/wheels/` | Python Gateway/CLI/shared-package wheels; `uv run --frozen python scripts/build.py --build-id <id>` |
 | Agent | `dist/agent/<version>/win-x64/<build-id>/build/` | Rust Agent EXE, LICENSE, Agent-only SBOM and hash manifest; `cargo run --locked -p xtask -- stage-agent --build-id <id>` |
-| Client | `dist/client/<version>/win-x64/<build-id>/staging/` | Iced Client, required companion Agent, LICENSE/SBOM/manifest and native launcher; `xtask stage` / `verify-staging` |
+| Agent service staging | `dist/agent/<version>/win-x64/<build-id>/staging/` | GUI-free `payload/` with explicit `native-agent-service` manifest; `xtask stage-agent-service` / `verify-agent-service`. No installation/SCM changes |
+| Agent service setup | `dist/agent/<version>/win-x64/<build-id>/packages/` | Explicitly requested `xtask package-agent-service`; unsigned setup definition, no installer execution |
+| Client | `dist/client/<version>/win-x64/<build-id>/staging/` | Native Client, required companion Agent, LICENSE/SBOM/manifest and native launcher; `xtask stage` / `verify-staging` |
 | Client product artifacts | `dist/client/<version>/<target>/<build-id>/packages/` | Explicitly requested setup/portable/ZIP; `xtask package` |
 | Console | `dist/console/<version>/web/<build-id>/build/` | `web/` static frontend and build manifest; `uv run --frozen python scripts/console_build.py --node <node.exe> --build-id <id>` |
 | Verification | `dist/verification/<component>/<version>/<run-id>/` | Test reports, logs and isolated fixtures. Pass explicit output paths to Agent/GUI probes; never package these files. Known-source RE fixtures use `dist/verification/fixtures/<version>/re-fixture/`. |

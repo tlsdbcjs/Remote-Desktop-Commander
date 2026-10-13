@@ -1,12 +1,12 @@
 # RACP native 데스크톱 클라이언트 운용 가이드
 
 > **Document ID**: `DOC-GDE-DESKTOP`\
-> **Status**: Active · **Target Version**: v0.1.26 native development\
-> **Last Updated**: 2026-10-12 · **Classification**: User & Operations Guide
+> **Status**: Active · **Target Version**: v0.1.29 native development\
+> **Last Updated**: 2026-10-13 · **Classification**: User & Operations Guide
 
 ## 개요
 
-기본 Client는 Iced/Rust GUI와 Rust Agent다. Gateway·Python CLI/SDK와 React Console은 서버 측에 유지한다. 기본 Client payload는 native 실행 파일·정적 asset·license/SBOM만 포함하고 브라우저/분석 host는 선택 runtime으로 관리한다. 이전 Tauri/React Client source와 Node/WebView2 패키징 경로는 폐기했다.
+기본 Client는 Slint/Rust GUI와 Rust Agent다([ADR-0032](../adr/ADR-0032-native-client.md)). Gateway·Python CLI/SDK와 React Console은 서버 측에 유지한다. 기본 Client payload는 native 실행 파일·정적 asset·license/SBOM만 포함하고 브라우저/분석 host는 선택 runtime으로 관리한다. 이전 Tauri/React Client source와 Node/WebView2 패키징 경로는 폐기했다.
 
 > [!IMPORTANT]
 > Windows 핵심 Agent/GUI 및 사용자 계정용 설치·실행·제거를 격리된 상태에서 확인했다. 전체 기능 인수·업데이트·clean-PC·서명·머신 서비스 설치는 별도다. 정확한 산출물·검사 범위는 [구현 현황](../quality/implementation-status.md)에 기록한다. 기존 설치·Device·credential·사용자 데이터는 보존한다.
@@ -30,7 +30,7 @@ GUI는 로컬 Agent의 상태·권한·승인·수명주기를 관리한다. Age
 flowchart LR
     AI[AI/MCP caller] --> GW[Python Gateway]
     AG[Rust Agent] <-->|WSS| GW
-    UI[Iced GUI / Win32 tray] <-->|Authenticated Named Pipe| AG
+    UI[Slint GUI / Win32 tray] <-->|Authenticated Named Pipe| AG
     AG --> BG[Desktop Broker / Guardian]
     AG --> RT[Optional admitted runtimes]
 ```
@@ -87,7 +87,7 @@ Client는 Rust 1.90.0·Windows SDK/MSVC x64·xtask를 사용한다. Node 22.23.0
 
 <a id="native-development-staging"></a>
 
-### 6.1 Native 개발 staging (Iced/Rust)
+### 6.1 Native 개발 staging (Slint/Rust)
 
 새 Client는 Rust 1.90.0·Windows SDK/MSVC x64가 필요하며 기본 payload는 Client·Agent·LICENSE·SBOM과 해당 파일의 manifest다. Node·Python·WebView2·Chromium을 실행하거나 동봉하는 빌드 경로가 아니다. 브라우저/분석 도구는 별도 runtime admission을 사용한다.
 
@@ -175,7 +175,9 @@ packaged native GUI의 `--service-control <shared-control-dir>`는 하나의 exp
 
 등록된 서비스가 완전히 정지한 상태에서만 private `native-service-update.json`의 [update 계약](../protocol/native-service-update-v1.schema.json)을 처리한다. 현재 revision과 config 파일의 정확한 SHA-256, 다음 revision=현재+1을 비교하고 private/control root와 service SID 이동은 거부한다. 사용자 SID·세션 목록·observer/controller 역할만 변경한다. 변경 작업과 Agent 시작은 같은 config lock을 사용하며 Agent lock도 확인한다.
 
-SCM `StartService`의 일회성 start arguments `--configure-sha256 <hash>` 또는 `--reconcile-config`를 사용한다. 등록된 ImagePath/credential을 변경하거나 command line에 토큰을 넣지 않는다. 이 maintenance 실행은 config 작업만 수행하고 정지하며 Agent/WSS를 시작하지 않는다. [Microsoft ServiceMain argument 설명](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nc-winsvc-lpservice_main_functionw)의 서비스명 다음 argument 규칙을 사용한다. 관리자 handoff/호출 도구 및 실제 실행 인수는 후속이다.
+SYSTEM helper는 private root identity에 묶인 일회성 start intent를 저장하고 SCM `StartService`에 `--admin-intent <UUID>`만 전달한다. 기존 `--configure-sha256`/`--reconcile-config` start arguments는 거부한다. 등록된 ImagePath/credential을 변경하거나 command line에 토큰을 넣지 않는다. service actor는 효과 전에 claim을 저장하며 이 maintenance 실행은 config 작업만 수행하고 정지한다. Agent/WSS는 시작하지 않는다. [Microsoft ServiceMain argument 설명](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/nc-winsvc-lpservice_main_functionw)의 서비스명 다음 argument 규칙을 사용한다. completed receipt hash·STOPPED/PID 0/exit 0 확인 뒤 helper가 acknowledge하며, claimed/failed 또는 receipt 불일치는 정상 시작을 차단한다. 실제 SYSTEM/SCM 실행 인수는 후속이다.
+
+`native-service-admin`의 `inspect_start_intent`, `abort_start_intent`, `acknowledge_start_intent`와 완료 maintenance의 명시 CAS 재개 규칙은 [Agent 계획 AS09](../spec/agent-service-implementation-and-test-plan.md)에 정의한다. 아직 설치된 stopped service가 없는 prepared restore 복구, queued restart 중지와 boot admission은 미완료이며 운영 절차로 실행하지 않는다.
 
 변경 전 old/new config와 입력 hash를 durable pending intent에 저장한다. public directory 및 endpoint/lock 파일은 service owner와 고정 inherited read ACL을 확인하고, 이전/목표 ACL로 확인된 항목만 변경하거나 reconcile한다. 알려지지 않은 SID·쓰기 권한·protected child ACL·추가 파일은 conflict로 남긴다. 실행 중인 IPC lock의 보안 조회는 기존 writer를 허용하는 read handle로 수행한다. config commit과 ACL readback 후 결과 receipt를 쓰고 pending을 제거한다. 일반 Agent 시작은 pending을 거부하므로 불확실한 변경을 자동 성공으로 처리하지 않는다.
 
@@ -221,15 +223,15 @@ helper는 고정 `RACPNativeAgent`를 준비하거나 stopped-service의 config/
 
 ### 6.11 Windows 공용 서비스 설치·제거 정의 (source, 실행 보류)
 
-`xtask package --platform win --arch x64 --install-scope user|machine|both --dry-run`에서 setup 범위를 확인한다. 기본은 user이며 machine은 별도 NSIS recipe와 `*-machine-setup.exe` 이름을 사용한다. `both`는 같은 verified staging/version에서 두 setup과 portable/ZIP을 정의한다. portable/ZIP의 user scope는 유지한다. 실제 package/installer/CI 실행은 현재 수행하지 않는다.
+Client는 `xtask package --platform win --arch x64 --install-scope user --dry-run`만 지원한다. Agent 서비스는 `stage-agent-service` / `verify-agent-service`로 별도 payload를 만들며, `package-agent-service --dry-run`에서 GUI 없는 machine setup 정의를 확인한다. 서비스 setup 생성은 명시 요청 후에만 같은 검증 batch에서 수행하고 실제 installer 실행·서비스 등록·설치는 금지 유지다. [Agent 가이드](rust-agent-guide.md#5-생산-빌드와-보류된-검증)를 따른다.
 
-machine recipe는 Windows x64와 관리자 권한을 요구하고 고정 ProgramFiles/RACP-Native/version에 새 payload를 배치한다. 기존 version directory는 덮어쓰지 않는다. `native-machine-install-protect`가 manifest 전체 파일을 pin하고 fixed path/content를 확인한 뒤 Administrators owner·Administrators/SYSTEM write·Authenticated Users read/execute로 보호/readback한다. 별도 machine-install receipt에 version/scope/payload manifest 및 uninstaller hash를 기록한다. 공용 Client는 receipt를 확인해 service control 모드를 기본 선택하며 per-user Agent autorun을 만들지 않는다. 사용자별 로그인 시작은 user setup/portable scope를 사용한다.
+machine recipe는 Windows x64와 관리자 권한을 요구하고 고정 ProgramFiles/RACP-Native/version에 새 payload를 배치한다. 기존 version directory는 덮어쓰지 않는다. `native-machine-install-protect`가 manifest 전체 파일을 pin하고 fixed path/content를 확인한 뒤 Administrators owner·Administrators/SYSTEM write·Authenticated Users read/execute로 보호/readback한다. 별도 machine-install receipt에 version/scope/payload manifest 및 uninstaller hash를 기록한다. Agent-only service payload는 명시 `native-agent-service` 역할·3개 파일·machine receipt의 `payload_kind`를 검사한다. Client EXE나 shortcut을 만들지 않으며 관리는 `native-service-control`의 인증 IPC를 사용한다. 사용자별 로그인 시작은 user setup/portable scope를 사용한다.
 
 install recipe는 Gateway 입력·token·등록·서비스 시작을 포함하지 않는다. 관리자 handoff는 §6.10의 별도 bounded 입력으로 수행한다. 설치 직후 서비스가 준비되지 않았으면 GUI는 관리자 등록/시작이 필요하다는 연결 대기 상태를 표시한다.
 
 제거 전에는 controller가 Agent 정리를 요청하고 GUI를 종료한다. `native-machine-setup`의 remove_service 입력은 `expected_config_sha256`와 `expected_device_id`(미등록 준비 상태는 null)를 요구한다. SYSTEM은 같은 fixed SCM image/account/root와 STOPPED/PID=0을 확인한 뒤 virtual-account maintenance를 수행한다. maintenance는 새 nonce/config hash·NativeRun 최종 정리·정책/runtime/Journal 형식·pending/잔여 session을 확인하며 credential을 열지 않는다. 확인 후 SCM 등록만 삭제 요청하고 Device·state/credential·workspace 및 Gateway 등록은 보존한다. 실행 중 서비스의 강제 stop/kill을 제공하지 않는다.
 
-`native-machine-uninstall-preflight`는 두 native SCM 이름의 부재·trusted payload/설치 receipt/uninstaller hash를 확인한다. 성공 후 installer는 payload 전체 rename 뒤 고정 파일만 제거하며 GUI/Agent/helper의 기존 directory/file pin은 rename을 차단한다. unknown removing batch·손상 receipt·외부 변경은 자동 채택/복구하지 않는다. 검사와 rename 사이 외부 관리자/SYSTEM writer까지 포함한 원자적 lease는 보장하지 않는다.
+`native-machine-uninstall-preflight`는 두 native SCM 이름의 부재·trusted payload/설치 receipt/uninstaller hash를 확인한다. 성공 후 installer는 payload 전체 rename 뒤 고정 파일만 제거하며 Agent/관리 클라이언트/helper의 기존 directory/file pin은 rename을 차단한다. unknown removing batch·손상 receipt·외부 변경은 자동 채택/복구하지 않는다. 검사와 rename 사이 외부 관리자/SYSTEM writer까지 포함한 원자적 lease는 보장하지 않는다.
 
 실패한 setup helper는 `native-machine-setup-cleanup`에 정확한 setup_root/input_sha256를 전달해 명시적으로 정리하도록 연결했다. high-integrity administrator·trusted package·private request의 hash/ACL·LocalSystem/own-process/demand-start/exact ImagePath·STOPPED/PID=0을 확인한다. helper SCM/request만 정리하고 비밀 없는 cleanup/result 기록 및 target 서비스/state를 보존한다. running/foreign helper나 바뀐 input을 중지·채택·삭제하지 않는다.
 
@@ -244,21 +246,23 @@ SYSTEM은 고정 ProgramData namespace·보관 config hash/형식·private owner
 
 `native-release.json`은 현재 numeric SemVer와 state/policy/Journal format을 기록하는 별도 저장 버전 watermark다. 새 등록/Agent 시작 및 확인된 등록 상태의 service restore에 기록한다. 이 표시가 있는 root는 더 낮은 package version 또는 다른 저장 format으로 열지 않는다. watermark가 없던 초기 native root는 현재 형식을 확인한 첫 실행에서 현재 버전을 기록하며 구 설정을 변환하지 않는다. 표시를 무시하는 과거 binary의 동작까지 보증하지 않으며 자동 downgrade/rollback을 제공하지 않는다.
 
-GUI는 Iced가 처리하지 않은 Tab/Shift+Tab에 focusable 입력 필드 이동을 연결하고 Ctrl+1/2/3/4/5에 상태/권한/승인/설정/runtime 페이지 이동을 연결한다. service scope의 설정/runtime 이동은 차단한다. 이는 keyboard source 연결이며 button/checkbox 전체 키보드 조작이나 Narrator/UIA·IME/DPI 인수 완료가 아니다.
+GUI 키보드 이동은 [6.13](#613-gui-키보드와-windows-접근성-slint)을 따른다.
 
 > [!IMPORTANT]
 > 실제 서비스 복원·DPAPI profile 유지·새/이전 native 버전 호환·GUI 키보드 동작은 실행하지 않았다. 복원 preflight나 형식/정리 확인이 실패한 상태를 정상 Agent 시작 성공으로 바꾸지 않는다. partial provisioning 복구·검증된 updater/rollback·publisher trust와 접근성 연동은 계속 남아 있다.
 
-### 6.13 GUI 키보드와 Windows 접근성 연결 (source, 실기 보류)
+### 6.13 GUI 키보드와 Windows 접근성 (Slint)
 
-현재 native GUI는 버튼·체크박스·입력 필드·여러 줄 제약 편집기·실행 프로필 선택과 표시 텍스트를 Windows AccessKit/UI Automation tree로 연결한다. 창 소유 스레드에서 숨겨진 창에 adapter를 붙인 뒤 표시하며, 초기 트레이 표시 요청은 이 순서를 앞지르지 않는다. 같은 컨트롤의 접근성 ID는 화면 갱신 사이에 유지하고 사라진 컨트롤의 ID를 다른 대상으로 재사용하지 않는다.
+GUI는 Slint 내장 AccessKit으로 Windows UI Automation 트리를 제공한다. 메뉴는 탭, 권한 선택기는 라디오 버튼, 카테고리 머리글과 일반 버튼은 Invoke, 실행 프로필·언어 선택은 Toggle로 노출된다. 반복 권한·승인 버튼의 이름에는 대상 권한 ID나 작업 이름을 포함한다.
 
-Tab/Shift+Tab은 활성 컨트롤 사이를 이동하며 화면 밖의 focused 컨트롤은 해당 페이지로 스크롤한다. 버튼·체크박스는 Enter/Space를 놓을 때 한 번 동작한다. 대상 교체·focus 해제·창 focus 상실은 대기 동작을 취소한다. 실행 프로필은 방향키/Home/End로 선택한다. 반복 권한/승인 버튼의 접근성 이름에 대상 권한 또는 요청 식별자를 포함한다.
+- **Tab/Shift+Tab**: 버튼·입력 필드·선택기·카테고리 머리글 사이를 이동한다. Space/Enter로 실행하거나 펼친다.
+- **Ctrl+1~5**: 상태·권한·승인·설정·선택 런타임으로 이동한다. 서비스 모드에서는 설정·선택 런타임 이동을 막는다.
+- **한글 입력**: Slint/winit IME 경로를 사용한다. PoC와 이전 시험에서 조합 표시와 확정을 확인했다.
 
-입력값 변경 및 버튼 동작은 기존 GUI 메시지 경로를 사용하며 service 역할·초안·policy 저장·요청별 승인 검사를 거친다. 접근성 요청의 변경 동작은 화면 revision이 바뀌면 거부한다. window DPI와 페이지 scroll translation을 반영한 논리 좌표를 접근성 tree에 제공한다. 전체화면 캡처·Agent의 OS UIA Provider와 GUI 자체의 UIA tree는 별도 경로다.
+Slint 1.16은 트리를 만드는 도중에 생긴 화면 요소를 UIA 트리에 늦게 반영하거나 빠뜨릴 수 있다. 그래서 구조가 바뀌면 150ms 뒤 트리 전체를 다시 만들도록 유도하고, 자주 열리고 닫히는 영역은 미리 만들어 둔다([ADR-0032](../adr/ADR-0032-native-client.md#slint-116에서-확인한-제약과-우회)).
 
 > [!IMPORTANT]
-> 이 절은 source 연결이며 Narrator·키보드·DPI·GPU 없는 VM 실행 합격을 뜻하지 않는다. pinned Iced 0.13의 Windows IME event/조합 표시 경로는 별도 보강이 필요하며 한글 조합을 구현 완료로 판정하지 않는다. 실제 GUI를 실행하지 않았고 native 제품 적합성 gate는 보류다.
+> 페이지 전환·카테고리 펼침·항목 선택·언어 전환은 UIA 트리로 확인했다. Narrator 음성 확인, RDP 세션, 실행 중인 Agent에 연결한 상태의 동작은 아직 실기 인수 전이다. 진행 수치는 [구현 현황](../quality/implementation-status.md)에 있다.
 
 ## 7. 보안 및 안전 고려사항
 
@@ -288,6 +292,4 @@ Journal format 1은 현재 전체 SQL schema/constraint/index 정의가 일치�
 - [PC 등록 및 온보딩 가이드](pc-connect-guide.md)
 - [다중 작업 폴더 격리 가이드](named-workspaces-guide.md)
 - [2-PC 실증 랩 가이드](two-pc-lab-guide.md)
-- [아키텍처 결정 레코드: ADR-0023 (크로스플랫폼 클라이언트)](../adr/ADR-0023-cross-platform-desktop-client.md)
-- [아키텍처 결정 레코드: ADR-0028 (연결 파일 온보딩)](../adr/ADR-0028-connection-file-onboarding.md)
-- [아키텍처 결정 레코드: ADR-0029 (로컬 설정 복구)](../adr/ADR-0029-local-settings-repair.md)
+- [아키텍처 결정 레코드: ADR-0032 (Native Client 구조와 Slint GUI)](../adr/ADR-0032-native-client.md)

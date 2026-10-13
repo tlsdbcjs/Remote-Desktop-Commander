@@ -4,12 +4,30 @@ use racp_runtime::providers::{browser::Browser, Provider};
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
+fn settings(root: &std::path::Path, data_name: &str) -> racp_core::AgentSettings {
+    // Explicit fixture policy: production registration still defaults to deny.
+    let settings: racp_core::AgentSettings = serde_json::from_value(json!({
+        "version": 2, "gateway": "http://localhost:1234", "device_id": "dev_browser",
+        "workspace": root, "data_dir": root.join(data_name), "profile": "trusted_personal",
+        "allowed_workspaces": [], "ca_file": null, "desktop_enabled": false,
+        "permissions": {"version": 1, "grants": {
+            "browser.console.read": "allow", "browser.network.read": "allow"
+        }, "disabled_categories": [], "constraints": {
+            "workspace_ids": [], "max_timeout_ms": 30000, "max_output_bytes": 16777216,
+            "executable_allowlist": [], "executable_denylist": [], "strict_os_isolation": false
+        }}
+    }))
+    .unwrap();
+    settings.validate(true).unwrap();
+    settings
+}
+
 fn setup() -> (tempfile::TempDir, Browser) {
     setup_origins(vec![])
 }
 fn setup_origins(allow_origins: Vec<String>) -> (tempfile::TempDir, Browser) {
     let root = tempfile::tempdir().unwrap();
-    let settings: racp_core::AgentSettings = serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("data"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+    let settings = settings(root.path(), "data");
     let executable = std::env::var_os("RACP_TEST_CHROMIUM_PATH")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
@@ -577,7 +595,7 @@ async fn external_cdp_opt_in_context_and_target_ownership() {
     )
     .await;
     assert_eq!(denied["error"]["code"], "PERMISSION_DENIED");
-    let settings: racp_core::AgentSettings = serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("attached"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+    let settings = settings(root.path(), "attached");
     let attached = Browser::new(
         &settings,
         "boot_attached",
@@ -780,7 +798,7 @@ async fn failed_evaluation_records_started_effect_and_retains_no_child_after_tim
 async fn browser_process_is_protected_from_generic_termination() {
     let (root, browser) = setup();
     let opened = succeeded(execute(&browser, "open", json!({}), "owner_one").await);
-    let settings: racp_core::AgentSettings=serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("data"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+    let settings = settings(root.path(), "data");
     let processes = racp_runtime::providers::Processes::new(&settings, "boot_browser").unwrap();
     let id = opened["browser_id"].as_str().unwrap();
     let mut cursor = serde_json::Value::Null;
@@ -945,7 +963,7 @@ async fn restart_recovers_only_persisted_authorized_external_targets() {
     )
     .unwrap();
     let endpoint = format!("http://127.0.0.1:{}", port.lines().next().unwrap());
-    let settings:racp_core::AgentSettings=serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("attached"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+    let settings = settings(root.path(), "attached");
     let config = BrowserConfig {
         cdp_enabled: true,
         ..Default::default()
@@ -1013,7 +1031,7 @@ async fn restart_recovers_only_persisted_authorized_external_targets() {
 #[tokio::test]
 async fn foreign_recovery_authority_is_retained_and_cannot_report_complete_cleanup() {
     let root = tempfile::tempdir().unwrap();
-    let settings:racp_core::AgentSettings=serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("data"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+    let settings = settings(root.path(), "data");
     let profile = settings.data_dir.join("browser/browser_foreign");
     racp_core::private_dir(&profile).unwrap();
     racp_core::atomic_write(&profile.join("ownership.json"),serde_json::to_string(&json!({"version":1,"agent_boot_id":"boot_foreign","device_id":"dev_other","endpoint":"ws://127.0.0.1:9/devtools/browser/foreign","context_id":"ctx_foreign","target_ids":["target_foreign"]})).unwrap().as_bytes(),false).unwrap();
@@ -1046,7 +1064,7 @@ async fn restart_removes_profile_only_after_owned_process_tree_has_exited() {
     let config = BrowserConfig::default();
     drop(browser);
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-    let settings:racp_core::AgentSettings=serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("data"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+    let settings = settings(root.path(), "data");
     let restarted = Browser::new(&settings, "boot_restarted", config).unwrap();
     for _ in 0..100 {
         if !profile.exists() {
@@ -1064,7 +1082,7 @@ async fn restart_removes_profile_only_after_owned_process_tree_has_exited() {
 #[tokio::test]
 async fn recovery_never_deletes_a_live_owned_process_profile() {
     let root = tempfile::tempdir().unwrap();
-    let settings:racp_core::AgentSettings=serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_browser","workspace":root.path(),"data_dir":root.path().join("data"),"profile":"trusted_personal","allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+    let settings = settings(root.path(), "data");
     let profile = settings.data_dir.join("browser/browser_live");
     racp_core::private_dir(&profile).unwrap();
     racp_core::atomic_write(&profile.join("process.json"),serde_json::to_vec(&json!({"version":1,"agent_boot_id":"boot_old","device_id":"dev_browser","pid":std::process::id(),"create_time":1.0,"job_name":null})).unwrap().as_slice(),false).unwrap();

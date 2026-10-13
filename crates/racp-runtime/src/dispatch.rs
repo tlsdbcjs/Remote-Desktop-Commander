@@ -850,8 +850,13 @@ mod tests {
     async fn agent(root: &std::path::Path, profile: &str, slow: bool) -> (Agent, Arc<AtomicUsize>) {
         let workspace = root.join("workspace");
         std::fs::create_dir(&workspace).unwrap();
-        let settings:AgentSettings=serde_json::from_value(json!({"version":1,"gateway":"http://localhost:1234","device_id":"dev_1","workspace":workspace,"data_dir":root.join("data"),"profile":profile,"allowed_workspaces":[],"ca_file":null,"desktop_enabled":false})).unwrap();
+        let settings:AgentSettings=serde_json::from_value(json!({"version":2,"gateway":"http://localhost:1234","device_id":"dev_1","workspace":workspace,"data_dir":root.join("data"),"profile":profile,"allowed_workspaces":[],"ca_file":null,"desktop_enabled":false,
+            "permissions":{"version":1,"grants":{"exec.argv":"allow"},"disabled_categories":[],
+                "constraints":{"workspace_ids":[],"max_timeout_ms":60000,"max_output_bytes":1048576,
+                    "executable_allowlist":[],"executable_denylist":[],"strict_os_isolation":false}}})).unwrap();
         let mut agent = Agent::new(settings, "a".repeat(32)).unwrap();
+        // The in-memory peer models the same boot/epoch as request(), with no real WSS.
+        agent.boot_id = "boot_1".into();
         let effects = Arc::new(AtomicUsize::new(0));
         agent.providers = Arc::new(Controlled {
             effects: effects.clone(),
@@ -862,7 +867,12 @@ mod tests {
             CancellationToken::new(),
         ));
         *agent.lease.lock().await = tokio::time::Instant::now() + Duration::from_secs(60);
-        agent.status.write().await["connection_epoch"] = json!(1);
+        {
+            let mut status = agent.status.write().await;
+            status["connection_epoch"] = json!(1);
+            status["connected"] = json!(true);
+            status["connection_phase"] = json!("ready");
+        }
         (agent, effects)
     }
     async fn settled(agent: &Agent) -> Value {
@@ -920,7 +930,8 @@ mod tests {
         let mut r = request();
         r["remaining_timeout_ms"] = json!(1000);
         agent.dispatch(r).await.unwrap();
-        assert_eq!(settled(&agent).await["state"], "TIMED_OUT");
+        let outcome = settled(&agent).await;
+        assert_eq!(outcome["state"], "TIMED_OUT", "{}", outcome["error"]);
         assert_eq!(effects.load(Ordering::SeqCst), 1);
     }
 }

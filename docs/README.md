@@ -18,7 +18,7 @@
 > **[Client 영역 전체 Rust 전환 작업 계획서](spec/rust-client-migration-plan.md)** — GUI·상주 Agent·OS 제어·Client 배포를 Rust로 재작성하고 구 Client를 제거하는 현재 실행 기준이다. Gateway는 Python을 유지한다.
 
 > [!IMPORTANT]
-> **[Agent 서비스 구현 및 검증 작업 계획](spec/agent-service-implementation-and-test-plan.md)** — GUI 재구성을 제외한 현재 후속 작업 기준이다. Agent 단독 서비스 배포·관리/승인·원격 실행·SCM·계정/복구와 시험을 정의한다. 실제 설치 금지를 유지하며 계획서만으로 구현·테스트를 자동 실행하지 않는다.
+> **[Agent 서비스 구현 및 검증 작업 계획](spec/agent-service-implementation-and-test-plan.md)** — GUI 재구성을 제외한 현재 후속 기준이다. Agent 단독 서비스·원격 실행·SCM/계정/복구에 플랫폼별 구조와 원격 USB·동글·외장 장치의 정적 분석용 접근을 포함한다. Windows만 우선하며 macOS/Linux 서비스·장치 어댑터는 미구현이다. 실제 설치 금지를 유지하고 계획서만으로 구현·테스트를 자동 실행하지 않는다.
 
 > [!IMPORTANT]
 > **[Windows 작업 및 테스트 계획서 바로 열기](spec/windows-engineering-plan.md)** — 공식 위치는 `docs/spec/windows-engineering-plan.md`다. 이전 한글 파일 경로 대신 이 링크를 사용한다.
@@ -54,7 +54,7 @@ graph TD
     Quality --> Q2["런타임 호환성 매트릭스"]
     Quality --> Q3["Windows 릴리스 인수 게이트"]
 
-    ADR --> A1["ADR-0001 ~ ADR-0029 (29건)"]
+    ADR --> A1["ADR-0001 ~ ADR-0022, ADR-0032 (23건)"]
     Protocol --> P1["JSON Schemas & OpenAPI Spec"]
 ```
 
@@ -77,7 +77,7 @@ RACP 플랫폼의 핵심 설계 원칙, 프로토콜 계약, 상태 머신, 권�
 
 ### 2.2 [운영 및 사용자 가이드 (docs/guides/)](guides/README.md)
 실제 사용자 및 운영자를 위한 실전 가이드라인입니다.
-- [데스크톱 클라이언트 사용 가이드](guides/desktop-client-guide.md): Rust/Iced Client·동반 Agent의 Windows 설치본과 native 운용
+- [데스크톱 클라이언트 사용 가이드](guides/desktop-client-guide.md): Rust/Slint Client·동반 Agent의 Windows 설치본과 native 운용
 - [PC 등록 및 온보딩 가이드](guides/pc-connect-guide.md): 신규 장비 안전 등록, 토큰 발급, 연결 수립
 - [다중 작업 폴더(Named Workspaces) 가이드](guides/named-workspaces-guide.md): 작업 폴더 권한 격리 및 경로 보안
 - [백그라운드 에이전트 가이드](guides/background-agent-guide.md): `racp-agentctl` 수명주기 제어 및 데몬 관리
@@ -91,8 +91,8 @@ RACP 플랫폼의 핵심 설계 원칙, 프로토콜 계약, 상태 머신, 권�
 - [Windows 배포 릴리스 게이트](quality/windows-release-gates.md) (`DOC-QA-GATES`): 릴리스 필수 충족 게이트(AUTH, RPC, LIFE, DESK 등)
 
 ### 2.4 [아키텍처 결정 레코드 (docs/adr/)](adr/README.md)
-RACP 개발 과정에서 합의된 기술적 의사결정 기록(총 29건)을 일관된 포맷으로 보존합니다.
-- [ADR-0001: 부트스트랩 및 검증 기준](adr/ADR-0001-bootstrap-and-verification.md)부터 [ADR-0029: 로컬 설정 복구](adr/ADR-0029-local-settings-repair.md)까지 전수 수록
+RACP 개발 과정에서 합의된 기술적 의사결정 기록(총 23건)을 일관된 포맷으로 보존합니다.
+- [ADR-0001: 부트스트랩 및 검증 기준](adr/ADR-0001-bootstrap-and-verification.md)부터 [ADR-0022](adr/ADR-0022-user-background-agent-control.md)까지, Client 결정은 [ADR-0032: Native Client 구조와 Slint GUI](adr/ADR-0032-native-client.md)로 통합
 
 ### 2.5 [프로토콜 계약 및 스키마 (docs/protocol/)](protocol/README.md)
 엄격한 discriminated schema 및 OpenAPI 명세입니다.

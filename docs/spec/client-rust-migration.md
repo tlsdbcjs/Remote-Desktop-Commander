@@ -5,7 +5,7 @@
 > **Last Updated**: 2026-10-11 · **Classification**: Architecture Specification
 
 > [!IMPORTANT]
-> v0.1.21 Tauri/React 이식 설계를 설명하는 과거 기록이다. 2026-10-11 세부 계획 개정으로 향후 전체 Rust 전환 계획은 [Rust Client 전환 계획](rust-client-migration-plan.md)으로 통합한다. 아래 승인·실행 기록은 당시 범위에 한정하며 새 구현 실행 지시가 아니다. 현재 코드와 배포물은 여전히 [ADR-0030](../adr/ADR-0030-rust-tauri-client-and-native-agent.md)의 구조이며, Iced 전환 완료를 뜻하지 않는다.
+> v0.1.21 Tauri/React 이식 설계를 설명하는 과거 기록이다. 2026-10-11 세부 계획 개정으로 향후 전체 Rust 전환 계획은 [Rust Client 전환 계획](rust-client-migration-plan.md)으로 통합한다. 아래 승인·실행 기록은 당시 범위에 한정하며 새 구현 실행 지시가 아니다. 현재 코드와 배포물은 여전히 ADR-0030(삭제, [ADR-0032](../adr/ADR-0032-native-client.md)로 통합)의 구조이며, Iced 전환 완료를 뜻하지 않는다.
 
 ## 개요
 
@@ -178,4 +178,4 @@ Gateway·CLI가 사용하는 공통 Python 패키지와 서버 테스트는 보�
 - [Desktop Client Guide](../guides/desktop-client-guide.md)
 - [Windows 릴리스 게이트](../quality/windows-release-gates.md)
 - [구현 현황](../quality/implementation-status.md)
-- [기존 client 구조 결정 ADR-0023](../adr/ADR-0023-cross-platform-desktop-client.md)
+- 현재 Client 결정: [ADR-0032](../adr/ADR-0032-native-client.md) (ADR-0023은 삭제·통합됨)

@@ -34,6 +34,7 @@ pub fn is_service_install(exe: &Path) -> Result<bool, RacpError> {
     let value: serde_json::Value = serde_json::from_slice(&raw)?;
     if value["format_version"] != 1
         || value["scope"] != "machine_service"
+        || value["payload_kind"] != "native-agent-service"
         || value["version"] != racp_contract::VERSION
         || value["payload_manifest_sha256"]
             != racp_contract::digest(crate::read_bounded(
