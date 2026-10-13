@@ -188,7 +188,7 @@ impl App {
                 auto_start,
                 role: None,
                 accessibility_attempts: 0,
-                window_ready: !cfg!(windows),
+                window_ready: true,
                 lang: crate::i18n::detect_os_language(),
             },
             Task::batch([
@@ -1198,35 +1198,36 @@ impl App {
         .on_press(Message::Navigate(Page::Permissions));
 
         // Tab 3: Approvals
-        let approvals_badge_elem = if pending_count > 0 {
-            container(text(pending_count.to_string()).size(10))
-                .padding(Padding::from([1, 6]))
-                .style(|_| container::Style {
-                    background: Some(iced::Background::Color(crate::theme::ACCENT_ROSE)),
-                    border: iced::Border {
-                        color: iced::Color::TRANSPARENT,
-                        width: 0.0,
-                        radius: 10.0.into(),
-                    },
-                    text_color: Some(crate::theme::TEXT_PRIMARY),
-                    shadow: iced::Shadow::default(),
-                })
-        } else {
-            container(text("").size(0))
-        };
+        let mut approvals_row = row![
+            row![
+                crate::components::icons::render_icon(crate::components::icons::IconType::Bell, 15.0),
+                text(tr(lang, TextKey::NavApprovals)).size(12),
+            ]
+            .spacing(8)
+            .align_y(Alignment::Center),
+        ]
+        .width(Length::Fill)
+        .align_y(Alignment::Center);
+
+        if pending_count > 0 {
+            approvals_row = approvals_row.push(
+                container(text(pending_count.to_string()).size(10))
+                    .padding(Padding::from([1, 6]))
+                    .style(|_| container::Style {
+                        background: Some(iced::Background::Color(crate::theme::ACCENT_ROSE)),
+                        border: iced::Border {
+                            color: iced::Color::TRANSPARENT,
+                            width: 0.0,
+                            radius: 10.0.into(),
+                        },
+                        text_color: Some(crate::theme::TEXT_PRIMARY),
+                        shadow: iced::Shadow::default(),
+                    }),
+            );
+        }
 
         let tab_approvals = custom_button(
-            row![
-                row![
-                    crate::components::icons::render_icon(crate::components::icons::IconType::Bell, 15.0),
-                    text(tr(lang, TextKey::NavApprovals)).size(12),
-                ]
-                .spacing(8)
-                .align_y(Alignment::Center),
-                approvals_badge_elem,
-            ]
-            .width(Length::Fill)
-            .align_y(Alignment::Center),
+            approvals_row,
             tr(lang, TextKey::NavApprovals),
         )
         .width(Length::Fill)

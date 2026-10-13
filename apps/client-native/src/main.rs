@@ -93,12 +93,11 @@ fn main() -> iced::Result {
     }
     #[cfg(windows)]
     let shell = match native::Shell::new() {
-        Ok(Some(shell)) => shell,
+        Ok(Some(shell)) => Some(shell),
         Ok(None) => return Ok(()),
         Err(code) => {
-            eprintln!("native shell startup: {code}");
-            native::startup_error(&code);
-            std::process::exit(4);
+            eprintln!("native shell startup warning: {code}");
+            None
         }
     };
     let icon = image::load_from_memory_with_format(
@@ -117,7 +116,7 @@ fn main() -> iced::Result {
         .default_font(iced::Font::with_name("Malgun Gothic"))
         .window(iced::window::Settings {
             size: iced::Size::new(960.0, 680.0),
-            visible: !cfg!(windows),
+            visible: true,
             icon,
             exit_on_close_request: !cfg!(windows),
             ..Default::default()
@@ -125,7 +124,7 @@ fn main() -> iced::Result {
         .run_with(move || {
             let (mut app, task) = app::App::new(args.iter().any(|arg| arg == "--start-agent"));
             #[cfg(windows)]
-            {
+            if let Some(shell) = shell {
                 app.attach_shell(shell);
             }
             (app, task)

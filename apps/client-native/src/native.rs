@@ -344,13 +344,24 @@ fn run(
         ..Default::default()
     };
     if unsafe { RegisterClassW(&definitions) } == 0 {
-        let _ = ready.send(Err("GUI_TRAY_FAILED".into()));
-        return Err("GUI_TRAY_FAILED".into());
+        let err = unsafe { GetLastError() };
+        eprintln!("tray RegisterClassW failed: {err}");
+        let _ = ready.send(Err(format!("GUI_TRAY_FAILED: RegisterClassW {err}")));
+        return Err(format!("GUI_TRAY_FAILED: RegisterClassW {err}"));
     }
     let icons = [
-        icon(include_bytes!("../assets/offline.ico"))?,
-        icon(include_bytes!("../assets/connected.ico"))?,
-        icon(include_bytes!("../assets/busy.ico"))?,
+        icon(include_bytes!("../assets/offline.ico")).map_err(|e| {
+            eprintln!("offline.ico failed: {e}");
+            e
+        })?,
+        icon(include_bytes!("../assets/connected.ico")).map_err(|e| {
+            eprintln!("connected.ico failed: {e}");
+            e
+        })?,
+        icon(include_bytes!("../assets/busy.ico")).map_err(|e| {
+            eprintln!("busy.ico failed: {e}");
+            e
+        })?,
     ];
     let mut state = Box::new(State {
         sender,
@@ -376,19 +387,20 @@ fn run(
             (&mut *state as *mut State).cast(),
         )
     };
-    if hwnd.is_null() || !notify(hwnd, &state, NIM_ADD) {
-        let _ = ready.send(Err("GUI_TRAY_FAILED".into()));
-        if !hwnd.is_null() {
-            unsafe {
-                DestroyWindow(hwnd);
-            }
-        }
+    if hwnd.is_null() {
+        let err = unsafe { GetLastError() };
+        eprintln!("tray CreateWindowExW failed: {err}");
         for icon in icons {
             unsafe {
                 DestroyIcon(icon);
             }
         }
-        return Err("GUI_TRAY_FAILED".into());
+        let _ = ready.send(Err(format!("GUI_TRAY_FAILED: CreateWindowExW {err}")));
+        return Err(format!("GUI_TRAY_FAILED: CreateWindowExW {err}"));
+    }
+    if !notify(hwnd, &state, NIM_ADD) {
+        let err = unsafe { GetLastError() };
+        eprintln!("tray notify NIM_ADD failed: {err} (tray icon deferred until taskbar available)");
     }
     let _ = ready.send(Ok(hwnd as isize));
     let mut message = MSG::default();
