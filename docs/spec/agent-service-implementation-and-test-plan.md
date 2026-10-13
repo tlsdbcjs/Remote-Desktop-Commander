@@ -1,7 +1,7 @@
 # Rust Agent 서비스 구현 및 검증 작업 계획
 
 > **Document ID**: `DOC-PLAN-AGENT-SERVICE`\
-> **Status**: Active · **Target Version**: v0.1.28 source / Agent 서비스 릴리스 인수 미완료\
+> **Status**: Active · **Target Version**: v0.1.29 source / Agent 서비스 릴리스 인수 미완료\
 > **Last Updated**: 2026-10-13 · **Classification**: Service Implementation & Test Plan
 
 ## 개요
@@ -210,6 +210,13 @@ P0는 Agent 서비스의 독립 실행·원격 제어·권한/정리 경계, P1�
 AS01/AS12의 서비스 payload를 만들기 위해 기존 Client payload의 필수 파일 검사를 단순히 없애거나 모든 폴더를 허용하지 않는다. 역할을 명시한 계약·허용 파일·hash/ACL 검증을 유지한다. AS02는 승인 우회나 비인증 관리 API 추가를 의미하지 않는다.
 
 AS09 source의 기본 정책은 **demand-start 유지와 recovery 비활성화**다. 신규 provision 및 명시 restore가 만든 fixed-name service에 `none` action·non-crash recovery false·빈 command/reboot text를 명시하고 query로 다시 확인한다. restore는 일회성 maintenance의 STOPPED 검증 후 적용한다. bounded crash-only profile은 5초/30초/120초 재시작·마지막 `none`·24시간 무실패 reset 계약과 Win32 변환만 준비했으며 **SCM 활성화/CLI opt-in에는 연결하지 않는다**. 일회성 configure/reconcile/recover_sessions/remove가 crash 뒤 정상 Agent 실행으로 바뀌지 않도록 기본 recovery를 계속 끈다. 이미 queue된 SCM 재시작은 STOPPED 보고만으로 취소되지 않으므로 명시 disabled·durable startup gate·관리 전환/중지 orchestration을 갖춘 뒤에만 opt-in/auto-start를 연결해야 한다. 계약/Win32 변환·readback 실패 시험→보수적 provision/restore 연결→Windows compile/회귀→증거 기록 순서이며, 실제 SCM API 실행은 설치 금지 해제 전 수행하지 않는다.
+
+AS09의 다음 실행 경계 묶음은 durable 일회성 start intent다. 공통 typed intent/phase는 contract, pinned 파일·CAS·claim/receipt 저장은 core, SYSTEM handoff와 SCM 시작 인수·service actor 실행은 Agent Windows adapter에 둔다. configure/reconcile/recover_sessions 및 remove/restore의 maintenance는 UUID intent 인수만 넘기며, private root identity에 묶인 prepared→claimed→completed→acknowledged를 사용한다. claim은 효과 전에 persist하고 claimed/failed intent를 자동 재실행하거나 정상 Run으로 채택하지 않는다. 완료 receipt hash와 stopped/PID 0 확인 뒤에만 SYSTEM이 acknowledge한다. crash 뒤 completed receipt 확인/acknowledge와 준비 단계의 명시 abort는 별도 CAS 관리 요청으로 제공하고, claimed/failed 불확실성은 보존한다. 계약·중복 claim/crash/다른 root/변조/receipt CAS RED–GREEN→Windows host/admin/maintenance 연결→회귀·개발 payload→main 커밋 순서다. 자동 restart/boot 활성화 및 실제 SCM 시험은 이 gate만으로 완료를 선언하지 않는다.
+
+관리 helper의 `inspect_start_intent`는 private root의 typed snapshot/sha256을 반환한다. `abort_start_intent`는 `request_id`/`expected_sha256` CAS로 prepared만 취소하며, `acknowledge_start_intent`는 completed configure/reconcile/recover_sessions의 현재 receipt와 stopped/PID 0/exit 0/NONE recovery 확인 뒤에만 정상 Run을 허용한다. completed maintenance에는 일반 acknowledge를 적용하지 않는다. 제거·복원의 마지막 SYSTEM 처리가 실패하면 기존 `remove_service`/`restore_service` 입력에 **`resume_request_id`와 `resume_expected_sha256` 두 필드**를 추가해 동일한 completed purpose만 명시 재개한다. 현재 owned service 정의·실행 파일·stopped/PID 0/exit 0·NONE recovery 및 receipt/config/device를 다시 확인하고 final lock 아래 현재 state/schema/credential 존재·pending 상태를 확인한다. maintenance, 등록, bootstrap은 다시 실행하지 않는다. 제거는 DeleteService 뒤에도 barrier를 보존하고 namespace 부재를 확인한 restore만 이를 소비한다. 복원은 demand-start readback/release publish/receipt 작성 뒤 CAS acknowledge한다. 새 restore 정의에는 disabled 상태에서 NONE recovery를 먼저 설정한다. unregistered 사전검사의 allowlist에는 정확한 start-intent 파일과 세 lock 파일만 추가한다.
+
+> [!WARNING]
+> claimed/failed outcome은 자동 해제하지 않는다. 현재 inspect/abort는 설치된 stopped service를 요구하므로, service 생성 전 실패한 restore의 prepared intent와 namespace 없는 root의 일반 복구는 별도 AS08 orchestration이 필요하다. 실제 SCM/가상 계정 시험과 queued restart·boot admission은 미완료다.
 
 <a id="section-05"></a>
 

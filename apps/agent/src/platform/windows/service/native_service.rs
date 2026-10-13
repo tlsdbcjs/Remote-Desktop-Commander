@@ -99,10 +99,19 @@ fn verify() -> Result<(), RacpError> {
 }
 enum StartMode {
     Run,
-    Configure(String),
-    Reconcile,
-    RecoverSessions(String),
-    Maintenance(String),
+    AdminIntent(String),
+}
+fn parse_start_arguments(values: &[String]) -> Result<StartMode, RacpError> {
+    match values {
+        [] => Ok(StartMode::Run),
+        [flag, request]
+            if flag == "--admin-intent"
+                && racp_contract::service_start::id(request, "service_start_") =>
+        {
+            Ok(StartMode::AdminIntent(request.clone()))
+        }
+        _ => Err(RacpError::new("REQUEST_INVALID")),
+    }
 }
 unsafe fn start_mode(count: u32, args: *mut *mut u16) -> Result<StartMode, RacpError> {
     if count <= 1 {
@@ -129,39 +138,7 @@ unsafe fn start_mode(count: u32, args: *mut *mut u16) -> Result<StartMode, RacpE
                 .map_err(|_| RacpError::new("REQUEST_INVALID"))?,
         );
     }
-    match values.as_slice() {
-        [flag, nonce]
-            if flag == "--maintenance"
-                && nonce.strip_prefix("maintenance_").is_some_and(|id| {
-                    id.len() == 32
-                        && id
-                            .bytes()
-                            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-                }) =>
-        {
-            Ok(StartMode::Maintenance(nonce.clone()))
-        }
-        [flag] if flag == "--reconcile-config" => Ok(StartMode::Reconcile),
-        [flag, nonce]
-            if flag == "--recover-sessions"
-                && nonce.strip_prefix("session_recovery_").is_some_and(|id| {
-                    id.len() == 32
-                        && id
-                            .bytes()
-                            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-                }) =>
-        {
-            Ok(StartMode::RecoverSessions(nonce.clone()))
-        }
-        [flag, hash]
-            if flag == "--configure-sha256"
-                && hash.len() == 64
-                && hash.bytes().all(|v| v.is_ascii_hexdigit()) =>
-        {
-            Ok(StartMode::Configure(hash.clone()))
-        }
-        _ => Err(RacpError::new("REQUEST_INVALID")),
-    }
+    parse_start_arguments(&values)
 }
 unsafe extern "system" fn main(count: u32, args: *mut *mut u16) {
     let handle =
@@ -182,6 +159,8 @@ unsafe extern "system" fn main(count: u32, args: *mut *mut u16) {
         let context = CONTEXT
             .get()
             .ok_or_else(|| RacpError::new("LOCAL_STATE_FAILED"))?;
+        let store = super::start_intent::open_service(&context.root)?;
+        let _execution = store.execution_guard()?;
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
@@ -189,37 +168,13 @@ unsafe extern "system" fn main(count: u32, args: *mut *mut u16) {
             let (ready, mut readiness) = tokio::sync::oneshot::channel();
             let running = async {
                 match mode {
-                    StartMode::Maintenance(nonce) => {
-                        let root=context.root.clone();
-                        if context.cancel.is_cancelled() {return Err(RacpError::new("CANCELLED"));}
-                        let _=ready.send(());
-                        return tokio::task::spawn_blocking(move ||racp_runtime::service_maintenance::inspect(&root,&nonce)).await
-                            .map_err(|_|RacpError::new("SERVICE_MAINTENANCE_UNCONFIRMED"))?;
-                    },
-                    StartMode::RecoverSessions(nonce) => {
-                        let root=context.root.clone();
-                        let cancel=context.cancel.clone();
-                        if context.cancel.is_cancelled() {return Err(RacpError::new("CANCELLED"));}
-                        let _=ready.send(());
-                        return tokio::task::spawn_blocking(move ||
-                            racp_runtime::providers::desktop::recover_service_sessions(&root,&nonce,cancel).map(|_|()))
-                            .await.map_err(|_|RacpError::new("SERVICE_SESSION_RECOVERY_INCOMPLETE"))?;
-                    },
-                    StartMode::Configure(hash) => {
+                    StartMode::AdminIntent(request) => {
                         let root = context.root.clone();
-                        if context.cancel.is_cancelled() { return Err(RacpError::new("CANCELLED")); }
-                        let _ = ready.send(());
-                        return tokio::task::spawn_blocking(move || racp_core::service_config::update(&root,&hash)).await
-                            .map_err(|_| RacpError::new("SERVICE_CONFIG_OUTCOME_UNKNOWN"))?;
-                    },
-                    StartMode::Reconcile => {
-                        let root = context.root.clone();
-                        if context.cancel.is_cancelled() { return Err(RacpError::new("CANCELLED")); }
-                        let _ = ready.send(());
-                        return tokio::task::spawn_blocking(move || racp_core::service_config::reconcile(&root)).await
-                            .map_err(|_| RacpError::new("SERVICE_CONFIG_OUTCOME_UNKNOWN"))?;
-                    },
-                    StartMode::Run => {},
+                        let cancel = context.cancel.clone();
+                        return tokio::task::spawn_blocking(move || super::start_intent::execute(&root, &request, cancel, ready)).await
+                            .map_err(|_| RacpError::new("SERVICE_START_OUTCOME_UNKNOWN"))?;
+                    }
+                    StartMode::Run => store.allow_run()?,
                 }
                 racp_runtime::service_bootstrap::prepare(&context.root, context.bootstrap_hash.as_deref(), &context.cancel).await?;
                 racp_runtime::native_client::run_service(&context.root, context.cancel.clone(), ready).await
@@ -254,4 +209,28 @@ unsafe extern "system" fn main(count: u32, args: *mut *mut u16) {
         if result.is_ok() { 0 } else { 4 },
         0,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn administrative_start_arguments_require_a_unique_intent_and_reject_legacy_replay_modes() {
+        let id = racp_contract::new_id("service_start");
+        assert!(matches!(
+            parse_start_arguments(&[]).unwrap(),
+            StartMode::Run
+        ));
+        assert!(
+            matches!(parse_start_arguments(&["--admin-intent".into(), id.clone()]).unwrap(), StartMode::AdminIntent(found) if found == id)
+        );
+        for values in [
+            vec!["--reconcile-config".into()],
+            vec!["--configure-sha256".into(), "0".repeat(64)],
+            vec!["--admin-intent".into(), "service_start_bad".into()],
+            vec!["--admin-intent".into(), id, "extra".into()],
+        ] {
+            assert!(parse_start_arguments(&values).is_err());
+        }
+    }
 }

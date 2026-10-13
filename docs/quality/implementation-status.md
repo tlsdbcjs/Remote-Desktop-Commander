@@ -1,7 +1,7 @@
 # RACP 구현 작업 및 검증 현황 (Implementation Status)
 
 > **Document ID**: `DOC-QA-STATUS`\
-> **Status**: Active · **Target Version**: v0.1.28\
+> **Status**: Active · **Target Version**: v0.1.29\
 > **Last Updated**: 2026-10-13 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
@@ -2735,3 +2735,26 @@ Agent EXE는 **22,196,224 bytes**, SHA-256 `82eebcee2e621f149a3c6457b292b7ff8317
 > AS09는 **recovery 계약·보수적 disabled 기본값·readback의 부분 구현**이다. bounded restart의 활성화, 일회성 관리 crash gate, queued restart 중지, boot auto-start 및 실제 SCM/계정/설치 인수는 남아 있다. AS07 간헐 Browser cleanup과 AS16–AS18 USB/장치 계약·backend·수집·물리 인수도 미완료다. 실제 설치·서비스 등록·driver/device IO·기존 profile 변경은 하지 않았다.
 
 후속 source commit **`3b54490`**은 로컬 main에 fast-forward로 반영했다. [main 통합 후 전체 직렬 suite](../../dist/verification/agent/0.1.28/recovery-main/rust-workspace-serial.log)는 **103 PASS / 0 FAIL / 4 ignored**, main의 Python 시험 **11 PASS**, Ruff/mypy PASS, version show **0.1.28**이다. main 출력 위치에 원본 staging bytes와 private DACL을 보존해 복사한 뒤 `verify-agent-service --build-id recovery-20261013-a`도 PASS이며 EXE hash는 위 최종 E2E와 같다. 최초 robocopy security 복사는 empty output root에서 Access denied로 실패해 owner/group 변경 없이 그 **생성된 출력 디렉터리의 DACL만** 원본과 맞춰 복사했고, 파일/payload 검증을 약화하지 않았다. 검증 로그·최종 E2E results만 보존했으며 시험 credential/등록 state는 main으로 복사하지 않았다. 기존 GUI source와 사용자 미추적 HTML/계획 파일 3개는 보존됐고 push는 하지 않았다. 후속 구현과 원본 격리 evidence 보존을 위해 managed worktree를 유지한다.
+
+### 2026-10-13 AS09 durable 일회성 start intent·완료 maintenance 재개 — v0.1.29
+
+PATCH **0.1.28→0.1.29 한 번**과 Python/Rust/optional analysis-host lock의 로컬 package version을 동기화했다. [공통 계약](../../crates/racp-contract/src/service_start.rs)은 command/phase/UUID/hash/record grammar를 검증하고, [core 저장 계층](../../crates/racp-core/src/service_start.rs)은 pinned root identity, bounded/중복 key 거절, atomic claim-before-effect, receipt SHA 및 CAS acknowledge/abort를 제공한다. prepared/claimed/completed/failed는 정상 Run을 차단하며 claimed/failed를 자동 replay하지 않는다. [Windows service actor](../../apps/agent/src/platform/windows/service/start_intent.rs)는 actor/private ACL 확인 뒤 의도를 소비하고 host는 실행 lock을 수명 전체에 유지한다. SYSTEM helper의 configure/reconcile/recover_sessions/remove/restore는 UUID만 SCM start argument로 전달한다. 정상 Run의 bootstrap/WSS는 미확정 intent에서 실행되지 않는다.
+
+`inspect_start_intent`/`abort_start_intent`/`acknowledge_start_intent`는 fixed owned STOPPED/PID 0 service와 private root를 전제로 한다. completed configure/reconcile/session recovery는 현재 receipt와 exit 0/NONE recovery를 확인해 CAS acknowledge한다. 제거·복원의 completed maintenance에는 일반 acknowledge를 금지한다. 명시 `resume_request_id`/`resume_expected_sha256`을 기존 remove/restore 요청에 추가한 경우에만 동일 purpose의 마지막 SYSTEM 작업을 재개한다. maintenance를 다시 실행하지 않고 config/device/current state/schema/credential 존재/pending·receipt hash·service identity를 다시 확인한다. 제거 barrier는 namespace 부재를 확인한 restore만 소비한다. 복원은 NONE 정책·demand-start readback/release publish/receipt 뒤에 acknowledge한다. [계획](../spec/agent-service-implementation-and-test-plan.md)과 [운용 가이드](../guides/desktop-client-guide.md)에 경계 및 legacy start argument 거절을 반영했다.
+
+검토에서 completed maintenance의 finalization 오류 뒤 재개 경로 부재를 확인해 보완했다. 새 restore의 기본 failure actions가 empty인 상태를 NONE readback으로 확인하려던 회귀는 새 disabled service 생성 직후 NONE 설정으로 수정했다. demand readback을 disabled 허용 검사와 분리하고 제거 final lock 안에서 현재 state identity를 추가 확인했다. unregistered maintenance의 기존 allowlist가 새 의도/lock을 거부하던 문제는 [RED](../../dist/verification/agent/0.1.29/start-intent-20261013/maintenance-files-red.log)로 재현한 뒤 정확한 네 상수만 허용해 [GREEN](../../dist/verification/agent/0.1.29/start-intent-20261013/maintenance-files-green.log)으로 확인했다. 추가·유사 이름 및 credential 파일은 계속 거부한다. 외부 reviewer의 마지막 재검토는 계정 credit 오류로 중단됐으므로 최종 clean review로 기록하지 않으며, 해당 지적 수정 뒤 컴파일·시험 및 자체 source 검사를 수행했다.
+
+| 검사 | 결과·범위 |
+|---|---|
+| intent 계약·저장·host/maintenance | 최종 전체 suite에 새 contract **2**, core **7**, Agent parser/resume/receipt **3**, runtime allowlist **1** 포함. claim 뒤 crash·이중 claim·구 UUID·다른 root·변조·receipt/CAS·관리/실행 lock·정확한 completed purpose 재개를 검증. SCM/실제 서비스 계정 호출 없는 모델/파일 시험 |
+| 전체 Rust 직렬 suite | [최종 로그](../../dist/verification/agent/0.1.29/start-intent-20261013/rust-workspace-serial-b.log), `cargo test --locked --workspace -- --test-threads=1`, **116 PASS / 0 FAIL / 4 subprocess fixture ignored**, exit 0 |
+| Python·정적 검사 | [Python](../../dist/verification/agent/0.1.29/start-intent-20261013/python-final.log) **11 PASS**, [Ruff](../../dist/verification/agent/0.1.29/start-intent-20261013/ruff.log) PASS, [mypy](../../dist/verification/agent/0.1.29/start-intent-20261013/mypy.log) **98 files PASS**, scoped Rust fmt/git diff check PASS, [inventory](../../dist/verification/agent/0.1.29/start-intent-20261013/inventory.log) **114 ops / 143 permissions / 18 categories**, frozen 100 baseline 유지 |
+| Windows Agent 개발 payload | [manifest](../../dist/agent/0.1.29/win-x64/start-intent-20261013-a/staging/build-manifest.json)·[stage](../../dist/verification/agent/0.1.29/start-intent-20261013/stage.log)·[verify](../../dist/verification/agent/0.1.29/start-intent-20261013/verify-stage.log), Rust 1.90.0 Windows x64 release/static CRT·3-file GUI-free allowlist·PE/import/hash PASS. 설치 artifact·installer 실행 없음 |
+| 최종 EXE 격리 원격 회귀 | [results](../../dist/verification/agent/0.1.29/start-intent-e2e-20261013-a/results.json)·[로그](../../dist/verification/agent/0.1.29/start-intent-20261013/e2e.log), **21 PASS / 0 FAIL**, exit 0. 기존 profile 미사용 HTTPS/WSS·인증 IPC/headless·권한/승인/replay·파일/ConPTY·CAS/cancel/stop/재시작. 실제 SCM intent/가상 계정 인수를 대신하지 않음 |
+
+최종 EXE **22,328,832 bytes**, SHA-256 **`7c67a924e1915e315467c475717c58e6dd54730efffdd694a4fbaae1ee814e2a`**, payload manifest **`a6425d25aca14131a3e2db597338d07adbd214da1006bc478bc1a29396fee314`**, source input digest **`86b77284b8d6dd0060764b84edb3c7b61317c601120191695da860a0f3a0865e`**. E2E EXE hash는 manifest와 일치하고 harness SHA는 **`fd9b319d459948f5fed9dc5b8b6b8ed6de46e249392c8f4191ccd9fa93d65a1e`**다.
+
+최초 [전체 직렬 실행](../../dist/verification/agent/0.1.29/start-intent-20261013/rust-workspace-serial.log)은 Browser `cookies_form_refs_native_input_png_and_navigation_invalidation`의 cleanup에서 **19 PASS / 1 CLEANUP_FAILED**로 중단됐다. Agent 빌드 종료 뒤의 최종 직렬 재실행은 통과했지만 원인 규명·제품 수정 증거가 아니며 AS07 간헐 cleanup 공백을 유지한다. 생산 cleanup 예산·Provider 동작·실제 process-tree 종료 proof를 완화하지 않았다. 기존 recipes warning 3개/core test unused import warning도 유지된다.
+
+> [!IMPORTANT]
+> AS09는 **일회성 관리 작업의 durable 실행 경계 source·개발 검증**까지 진행했다. claimed/failed의 수동 outcome recovery, namespace 없는 prepared restore 관리(AS08), queued restart 중지·bounded restart 활성화·boot admission, 실제 SCM/SYSTEM/virtual account/설치 인수는 미완료다. AS16–AS18 USB/장치 계약·backend·수집·물리 인수도 남아 있다. 실제 설치·서비스 등록/시작·driver/device IO·기존 profile 변경은 하지 않았다. GUI source와 사용자 미추적 파일 3개를 보존한다.

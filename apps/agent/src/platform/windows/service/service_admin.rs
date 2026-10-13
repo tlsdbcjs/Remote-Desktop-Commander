@@ -1,10 +1,12 @@
 //! Installer SYSTEM handoff only. No arbitrary service name/account/image or token argument.
+use racp_contract::service_start::{MaintenancePurpose, StartCommand};
 use racp_contract::{
     digest,
     local_ipc::reject_duplicate_keys,
     service_scope::{SERVICE_ACCOUNT, SERVICE_NAME},
     RacpError,
 };
+use racp_core::service_start::StartStore;
 use serde_json::{json, Value};
 use std::{
     ffi::c_void,
@@ -123,7 +125,8 @@ fn owned_rights(root: &Path, rights: u32) -> Result<Service, RacpError> {
     {
         return Err(RacpError::new("SERVICE_OWNERSHIP_CONFLICT"));
     }
-    if status(&service)?.dwCurrentState != SERVICE_STOPPED {
+    let observed = status(&service)?;
+    if observed.dwCurrentState != SERVICE_STOPPED || observed.dwProcessId != 0 {
         return Err(RacpError::new("SERVICE_NOT_STOPPED"));
     }
     Ok(service)
@@ -148,18 +151,30 @@ pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
     if action == "restore_service" {
         return super::service_restore::execute(&root, &input);
     }
-    let _state = racp_core::machine_service::pin_private(&root)?;
+    let store = StartStore::new(racp_core::machine_service::pin_private(&root)?)?;
+    let _administration = store.admin_guard()?;
     let service = owned(&root)?;
-    if action == "remove_service" {
-        return remove_service(&root, &input);
+    if let Some(result) = manage_intent(&root, &input, &store, &service)? {
+        return Ok(result);
     }
-    let (arguments, input_hash) = match action {
+    if action == "remove_service" {
+        return remove_service(&root, &input, &store);
+    }
+    let execution = store.execution_guard()?;
+    super::recovery::verify(service.0)?; // No adoption of externally enabled restart actions.
+    store.allow_run()?;
+    let (command, input_hash) = match action {
         "recover_sessions" => {
             if object.len() != 1 {
                 return Err(RacpError::new("REQUEST_INVALID"));
             }
             let nonce = racp_contract::new_id("session_recovery");
-            (vec![wide("--recover-sessions"), wide(&nonce)], Some(nonce))
+            (
+                StartCommand::RecoverSessions {
+                    request_id: nonce.clone(),
+                },
+                Some(nonce),
+            )
         }
         "configure" => {
             if object.len() != 4
@@ -200,20 +215,29 @@ pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
                 )
             };
             let hash = racp_core::service_config::stage_admin(&root, &bytes, prior.as_deref())?;
-            (vec![wide("--configure-sha256"), wide(&hash)], Some(hash))
+            (
+                StartCommand::Configure {
+                    input_sha256: hash.clone(),
+                },
+                Some(hash),
+            )
         }
         "reconcile" => {
             if object.len() != 1 {
                 return Err(RacpError::new("REQUEST_INVALID"));
             }
-            (vec![wide("--reconcile-config")], None)
+            (StartCommand::Reconcile {}, None)
         }
         _ => return Err(RacpError::new("REQUEST_INVALID")),
     };
     // No stop/reconfigure of a running or foreign service, even on a race after staging.
-    if status(&service)?.dwCurrentState != SERVICE_STOPPED {
+    let observed = status(&service)?;
+    if observed.dwCurrentState != SERVICE_STOPPED || observed.dwProcessId != 0 {
         return Err(RacpError::new("SERVICE_NOT_STOPPED"));
     }
+    let intent = store.prepare(command.clone())?;
+    let arguments = [wide("--admin-intent"), wide(&intent.intent.request_id)];
+    drop(execution); // The service actor holds the execution lock for its entire lifetime.
     let ptrs: Vec<_> = arguments.iter().map(|arg| arg.as_ptr()).collect();
     if unsafe { StartServiceW(service.0, ptrs.len() as u32, ptrs.as_ptr()) } == 0 {
         return Err(RacpError::new("SERVICE_CONFIG_START_UNKNOWN"));
@@ -225,7 +249,7 @@ pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
         if observed.dwCurrentState != SERVICE_STOPPED {
             began = true;
         }
-        if observed.dwCurrentState == SERVICE_STOPPED && (began || observed.dwWin32ExitCode != 0) {
+        if observed.dwCurrentState == SERVICE_STOPPED && observed.dwProcessId == 0 && began {
             if observed.dwWin32ExitCode != 0 {
                 return Err(RacpError::new(if action == "recover_sessions" {
                     "SERVICE_SESSION_RECOVERY_INCOMPLETE"
@@ -233,12 +257,19 @@ pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
                     "SERVICE_CONFIG_OUTCOME_UNKNOWN"
                 }));
             }
-            break;
+            if super::start_intent::completed(&root, &store, &intent.intent.request_id, &command)?
+                .is_some()
+            {
+                break;
+            }
         }
         // A very fast maintenance run may already be stopped; the durable receipt
         // rather than START/STOP observations proves its committed result.
         if observed.dwCurrentState == SERVICE_STOPPED
-            && receipt(&root, input_hash.as_deref(), action == "recover_sessions").is_ok()
+            && observed.dwProcessId == 0
+            && observed.dwWin32ExitCode == 0
+            && super::start_intent::completed(&root, &store, &intent.intent.request_id, &command)?
+                .is_some()
         {
             break;
         }
@@ -247,7 +278,96 @@ pub fn execute(root: &Path, raw: &[u8]) -> Result<Value, RacpError> {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    receipt(&root, input_hash.as_deref(), action == "recover_sessions")
+    let _execution = store.execution_guard()?;
+    let observed = status(&service)?;
+    if observed.dwCurrentState != SERVICE_STOPPED
+        || observed.dwProcessId != 0
+        || observed.dwWin32ExitCode != 0
+    {
+        return Err(RacpError::new("SERVICE_START_OUTCOME_UNKNOWN"));
+    }
+    let mut result = receipt(&root, input_hash.as_deref(), action == "recover_sessions")?;
+    let completed =
+        super::start_intent::completed(&root, &store, &intent.intent.request_id, &command)?
+            .ok_or_else(|| RacpError::new("SERVICE_START_OUTCOME_UNKNOWN"))?;
+    let acknowledged = store.acknowledge(
+        &intent.intent.request_id,
+        &completed.sha256,
+        &super::start_intent::receipt_bytes(&root, &command)?,
+    )?;
+    result["start_intent_id"] = json!(intent.intent.request_id);
+    result["start_intent_sha256"] = json!(acknowledged.sha256);
+    Ok(result)
+}
+
+fn manage_intent(
+    root: &Path,
+    input: &Value,
+    store: &StartStore,
+    service: &Service,
+) -> Result<Option<Value>, RacpError> {
+    let action = input["type"].as_str().unwrap_or("");
+    if action == "inspect_start_intent" {
+        if input.as_object().is_none_or(|object| object.len() != 1) {
+            return Err(RacpError::new("REQUEST_INVALID"));
+        }
+        return Ok(Some(json!({"start_intent":store.snapshot()?})));
+    }
+    if !["acknowledge_start_intent", "abort_start_intent"].contains(&action) {
+        return Ok(None);
+    }
+    let object = input
+        .as_object()
+        .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
+    let request = input["request_id"]
+        .as_str()
+        .filter(|id| racp_contract::service_start::id(id, "service_start_"))
+        .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
+    let expected = input["expected_sha256"]
+        .as_str()
+        .filter(|hash| racp_contract::service_start::hash(hash))
+        .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
+    if object.len() != 3
+        || object
+            .keys()
+            .any(|key| !["type", "request_id", "expected_sha256"].contains(&key.as_str()))
+    {
+        return Err(RacpError::new("REQUEST_INVALID"));
+    }
+    let _execution = store.execution_guard()?;
+    let observed = status(service)?;
+    if observed.dwCurrentState != SERVICE_STOPPED || observed.dwProcessId != 0 {
+        return Err(RacpError::new("SERVICE_NOT_STOPPED"));
+    }
+    super::recovery::verify(service.0)?;
+    if action == "abort_start_intent" {
+        return Ok(Some(
+            json!({"start_intent":store.abort_prepared(request, expected)?}),
+        ));
+    }
+    if observed.dwWin32ExitCode != 0 {
+        return Err(RacpError::new("SERVICE_START_OUTCOME_UNKNOWN"));
+    }
+    let record = store
+        .snapshot()?
+        .ok_or_else(|| RacpError::new("SERVICE_START_INTENT_CONFLICT"))?;
+    match &record.intent.command {
+        StartCommand::Configure { input_sha256 } => {
+            receipt(root, Some(input_sha256), false)?;
+        }
+        StartCommand::Reconcile {} => {
+            receipt(root, None, false)?;
+        }
+        StartCommand::RecoverSessions { request_id } => {
+            receipt(root, Some(request_id), true)?;
+        }
+        StartCommand::Maintenance { .. } => {
+            return Err(RacpError::new("SERVICE_START_RECOVERY_REQUIRED"))
+        }
+    }
+    Ok(Some(
+        json!({"start_intent":store.acknowledge(request, expected, &super::start_intent::receipt_bytes(root, &record.intent.command)?)?}),
+    ))
 }
 fn receipt(root: &Path, expected: Option<&str>, recovery: bool) -> Result<Value, RacpError> {
     if recovery {
@@ -314,13 +434,20 @@ fn receipt(root: &Path, expected: Option<&str>, recovery: bool) -> Result<Value,
     )
 }
 
-fn remove_service(root: &Path, input: &Value) -> Result<Value, RacpError> {
+fn remove_service(root: &Path, input: &Value, store: &StartStore) -> Result<Value, RacpError> {
     let object = input
         .as_object()
         .ok_or_else(|| RacpError::new("REQUEST_INVALID"))?;
-    if object.len() != 3
+    if ![3, 5].contains(&object.len())
         || object.keys().any(|key| {
-            !["type", "expected_config_sha256", "expected_device_id"].contains(&key.as_str())
+            ![
+                "type",
+                "expected_config_sha256",
+                "expected_device_id",
+                "resume_request_id",
+                "resume_expected_sha256",
+            ]
+            .contains(&key.as_str())
         })
         || !input["expected_config_sha256"]
             .as_str()
@@ -334,6 +461,8 @@ fn remove_service(root: &Path, input: &Value) -> Result<Value, RacpError> {
     {
         return Err(RacpError::new("REQUEST_INVALID"));
     }
+    let cas = super::start_intent::resume_cas(input)?;
+    let execution = store.execution_guard()?;
     let config = racp_core::read_bounded(
         &root.join(racp_core::native_service::CONFIG_FILE),
         16384,
@@ -342,47 +471,128 @@ fn remove_service(root: &Path, input: &Value) -> Result<Value, RacpError> {
     if input["expected_config_sha256"] != digest(&config) {
         return Err(RacpError::new("STATE_REVISION_CONFLICT"));
     }
-    let nonce = racp_contract::new_id("maintenance");
     let service = owned_rights(root, SERVICE_START | DELETE)?;
-    let args = [wide("--maintenance"), wide(&nonce)];
-    let args: Vec<_> = args.iter().map(|arg| arg.as_ptr()).collect();
-    if unsafe { StartServiceW(service.0, 2, args.as_ptr()) } == 0 {
-        return Err(RacpError::new("SERVICE_MAINTENANCE_START_UNKNOWN"));
-    }
-    let deadline = Instant::now() + Duration::from_secs(60);
-    let receipt = loop {
+    super::recovery::verify(service.0)?;
+    let prior = store.snapshot()?;
+    let resume =
+        super::start_intent::resume_maintenance(prior.as_ref(), MaintenancePurpose::Remove, cas)?;
+    let (intent, command, nonce, receipt) = if resume {
+        let intent = prior.unwrap();
         let observed = status(&service)?;
-        if observed.dwCurrentState == SERVICE_STOPPED && observed.dwProcessId == 0 {
-            if let Ok(bytes) = racp_core::read_bounded(
-                &root.join(racp_runtime::service_maintenance::RESULT_FILE),
-                4096,
-                false,
-            ) {
-                reject_duplicate_keys(&bytes)?;
-                let value: Value = serde_json::from_slice(&bytes)?;
-                if value["request_id"] == nonce {
-                    if observed.dwWin32ExitCode != 0
-                        || value["format_version"] != 1
-                        || value["preflight_complete"] != true
-                        || value["config_sha256"] != input["expected_config_sha256"]
-                        || value["device_id"] != input["expected_device_id"]
-                    {
-                        return Err(RacpError::new("SERVICE_MAINTENANCE_UNCONFIRMED"));
-                    }
-                    break value;
-                }
-            }
-        }
-        if Instant::now() >= deadline {
+        if observed.dwWin32ExitCode != 0 {
             return Err(RacpError::new("SERVICE_MAINTENANCE_UNCONFIRMED"));
         }
-        std::thread::sleep(Duration::from_millis(100));
+        let receipt = super::start_intent::maintenance_receipt(
+            root,
+            store,
+            &intent,
+            input["expected_config_sha256"].as_str().unwrap(),
+            &input["expected_device_id"],
+        )?;
+        let StartCommand::Maintenance { request_id, .. } = &intent.intent.command else {
+            unreachable!()
+        };
+        let nonce = request_id.clone();
+        let command = intent.intent.command.clone();
+        drop(execution);
+        (intent, command, nonce, receipt)
+    } else {
+        let nonce = racp_contract::new_id("maintenance");
+        let command = StartCommand::Maintenance {
+            purpose: MaintenancePurpose::Remove,
+            request_id: nonce.clone(),
+        };
+        let intent = store.prepare(command.clone())?;
+        let args = [wide("--admin-intent"), wide(&intent.intent.request_id)];
+        drop(execution);
+        let args: Vec<_> = args.iter().map(|arg| arg.as_ptr()).collect();
+        if unsafe { StartServiceW(service.0, 2, args.as_ptr()) } == 0 {
+            return Err(RacpError::new("SERVICE_MAINTENANCE_START_UNKNOWN"));
+        }
+        let deadline = Instant::now() + Duration::from_secs(60);
+        let receipt = loop {
+            let observed = status(&service)?;
+            if observed.dwCurrentState == SERVICE_STOPPED && observed.dwProcessId == 0 {
+                if let Ok(bytes) = racp_core::read_bounded(
+                    &root.join(racp_runtime::service_maintenance::RESULT_FILE),
+                    4096,
+                    false,
+                ) {
+                    reject_duplicate_keys(&bytes)?;
+                    let value: Value = serde_json::from_slice(&bytes)?;
+                    if value["request_id"] == nonce {
+                        if observed.dwWin32ExitCode != 0
+                            || value["format_version"] != 1
+                            || value["preflight_complete"] != true
+                            || value["config_sha256"] != input["expected_config_sha256"]
+                            || value["device_id"] != input["expected_device_id"]
+                        {
+                            return Err(RacpError::new("SERVICE_MAINTENANCE_UNCONFIRMED"));
+                        }
+                        if super::start_intent::completed(
+                            root,
+                            store,
+                            &intent.intent.request_id,
+                            &command,
+                        )?
+                        .is_some()
+                        {
+                            break value;
+                        }
+                    }
+                }
+            }
+            if Instant::now() >= deadline {
+                return Err(RacpError::new("SERVICE_MAINTENANCE_UNCONFIRMED"));
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        };
+        (intent, command, nonce, receipt)
     };
     // Re-open/verify the exact fixed definition after the maintenance run, then pin startup/config.
     let service = owned_rights(root, DELETE)?;
+    let _execution = store.execution_guard()?;
+    let current = super::start_intent::completed(root, store, &intent.intent.request_id, &command)?;
+    if current
+        .as_ref()
+        .is_none_or(|value| resume && value.sha256 != intent.sha256)
+    {
+        return Err(RacpError::new("SERVICE_START_OUTCOME_UNKNOWN"));
+    }
+    super::start_intent::maintenance_receipt(
+        root,
+        store,
+        current.as_ref().unwrap(),
+        input["expected_config_sha256"].as_str().unwrap(),
+        &input["expected_device_id"],
+    )?;
+    super::recovery::verify(service.0)?;
     let _config_lock =
         racp_core::InstanceLock::acquire(&root.join(racp_core::native_service::CONFIG_LOCK))?;
     let _agent_lock = racp_core::InstanceLock::acquire(&root.join("native-agent.lock"))?;
+    // The completed preflight is historical evidence. Recheck current identity
+    // under the same locks immediately before finalization, including retries.
+    use racp_core::state_schema::{NativeState, SECRET_FILE, STATE_FILE, STATE_SCHEMA_VERSION};
+    if root.join("native-registration.pending").try_exists()?
+        || root
+            .join(racp_core::native_service::CONFIG_PENDING)
+            .try_exists()?
+    {
+        return Err(RacpError::new("SERVICE_MAINTENANCE_UNCONFIRMED"));
+    }
+    if root.join(STATE_FILE).try_exists()? {
+        let raw = racp_core::read_bounded(&root.join(STATE_FILE), 65536, false)?;
+        reject_duplicate_keys(&raw)?;
+        let state: NativeState = serde_json::from_slice(&raw)?;
+        if state.schema_version != STATE_SCHEMA_VERSION
+            || input["expected_device_id"] != state.device_id
+            || !root.join(SECRET_FILE).try_exists()?
+        {
+            return Err(RacpError::new("SERVICE_MAINTENANCE_UNCONFIRMED"));
+        }
+    } else if !input["expected_device_id"].is_null() || root.join(SECRET_FILE).try_exists()? {
+        return Err(RacpError::new("SERVICE_MAINTENANCE_UNCONFIRMED"));
+    }
     if digest(racp_core::read_bounded(
         &root.join(racp_core::native_service::CONFIG_FILE),
         16384,
@@ -405,6 +615,7 @@ fn remove_service(root: &Path, input: &Value) -> Result<Value, RacpError> {
     // The namespace, Device and DPAPI credential are retained; no Gateway request is made.
     Ok(
         json!({"service_removal_requested":true,"state_preserved":true,"device_preserved":true,
-        "credential_preserved":true,"request_id":nonce,"deletion_visibility":"wait_for_scm_handle_release"}),
+        "credential_preserved":true,"request_id":nonce,"deletion_visibility":"wait_for_scm_handle_release",
+        "start_intent_id":intent.intent.request_id,"start_intent_retained":true}),
     )
 }
