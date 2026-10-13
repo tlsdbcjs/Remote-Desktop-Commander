@@ -469,6 +469,19 @@ export component AppWindow inherits Window {
     callback page-changed();
 
     changed current-page => { root.page-changed(); }
+    init => { shortcuts.focus(); }
+
+    function shortcut(event: KeyEvent) -> bool {
+        if (!event.modifiers.control || event.modifiers.alt) {
+            return false;
+        }
+        if (event.text == "1") { root.current-page = 0; return true; }
+        if (event.text == "2") { root.current-page = 1; return true; }
+        if (event.text == "3") { root.current-page = 2; return true; }
+        if (event.text == "4" && !root.shell.service) { root.current-page = 4; return true; }
+        if (event.text == "5" && !root.shell.service) { root.current-page = 3; return true; }
+        false
+    }
 
     title: (shell.service ? @tr("RACP Service Control") : @tr("RACP Native Client")) + " v" + root.version;
     icon: @image-url("../assets/app.png");
@@ -480,123 +493,143 @@ export component AppWindow inherits Window {
     default-font-family: Theme.sans;
     default-font-size: Theme.fs-sm;
 
-    VerticalLayout {
-        Header {
-            version: root.version;
-            model: root.shell;
-            emergency-stop => { root.emergency-stop(); }
-            hide-to-tray => { root.hide-to-tray(); }
-            quit => { root.quit(); }
-        }
-        HorizontalLayout {
-            vertical-stretch: 1;
-            Sidebar {
-                current-page <=> root.current-page;
-                model: root.shell;
+    // Ctrl+1..5 page shortcuts, as in the previous client: Status, Permissions, Approvals,
+    // Settings, Optional runtimes. Captured before focused children; never takes focus itself.
+    // Keys reach only the focused element and its ancestors, so this scope holds focus at start
+    // and also captures keys while a child is focused.
+    shortcuts := FocusScope {
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        capture-key-pressed(event) => {
+            if (root.shortcut(event)) {
+                return accept;
             }
-            Rectangle {
-                horizontal-stretch: 1;
-                background: Theme.app-bg;
-                accessible-role: tab-panel;
-                main-flick := Flickable {
-                    width: parent.width - 8px;
-                    viewport-height: page.preferred-height + 48px;
-                    page := VerticalLayout {
-                        x: 24px;
-                        y: 24px;
-                        width: main-flick.width - 48px;
-                        height: self.preferred-height;
-                        alignment: start;
-                        spacing: 16px;
-                        if root.notice != "": Notice {
-                            text: root.notice;
-                            quitting: root.quitting;
-                            exit-anyway => { root.exit-anyway(); }
-                        }
-                        if root.current-page == 0: StatusView {
-                            shell: root.shell;
-                            model: root.status;
-                            activity: root.activity;
-                            log-lines: root.log-lines;
-                            preview: root.preview;
-                            connection-path <=> root.connection-path;
-                            connection-hash <=> root.connection-hash;
-                            workspace-draft <=> root.workspace-draft;
-                            profile <=> root.profile;
-                            refresh-local => { root.refresh-local(); }
-                            start-agent => { root.start-agent(); }
-                            stop-agent => { root.emergency-stop(); }
-                            cancel-local => { root.cancel-local(); }
-                            connect-desktop => { root.connect-desktop(); }
-                            disconnect-desktop => { root.disconnect-desktop(); }
-                            connection-path-edited(value) => { root.connection-path-edited(value); }
-                            inspect-connection => { root.inspect-connection(); }
-                            enroll => { root.enroll(); }
-                            cancel-operation(index) => { root.cancel-operation(index); }
-                            clear-log => { root.clear-log(); }
-                            open-approvals => { root.current-page = 2; }
-                        }
-                        if root.current-page == 1: PermissionsView {
-                            categories: root.categories;
-                            policy: root.policy;
-                            allow-list <=> root.allow-list;
-                            deny-list <=> root.deny-list;
-                            workspace-ids <=> root.workspace-ids;
-                            max-timeout <=> root.max-timeout;
-                            max-output <=> root.max-output;
-                            strict-isolation <=> root.strict-isolation;
-                            toggle(i) => { root.toggle-category(i); }
-                            set-enabled(i, on) => { root.set-category-enabled(i, on); }
-                            batch(i, g) => { root.batch-category(i, g); }
-                            leaf(i, j, g) => { root.set-leaf(i, j, g); }
-                            preset(g) => { root.apply-preset(g); }
-                            commit => { root.commit-policy(); }
-                            reload-constraints => { root.reload-constraints(); }
-                            constraints-edited => { root.constraints-edited(); }
-                        }
-                        if root.current-page == 2: ApprovalsView {
-                            prompts: root.approvals;
-                            can-decide: root.shell.can-control;
-                            connected: root.status.connected;
-                            decide(nonce, allow) => { root.decide(nonce, allow); }
-                        }
-                        if root.current-page == 3: RuntimeView {
-                            model: root.runtime;
-                            manifest-file <=> root.runtime-manifest;
-                            manifest-hash <=> root.runtime-hash;
-                            source-directory <=> root.runtime-source;
-                            chromium-hash <=> root.chromium-hash;
-                            cdb-hash <=> root.cdb-hash;
-                            gdb-hash <=> root.gdb-hash;
-                            analysis-hash <=> root.analysis-hash;
-                            browser-origins <=> root.browser-origins;
-                            external-cdp <=> root.external-cdp;
-                            admit-runtime => { root.admit-runtime(); }
-                            configure-runtime => { root.configure-runtime(); }
-                        }
-                        if root.current-page == 4: SettingsView {
-                            model: root.settings;
-                            workspaces: root.workspaces;
-                            language: root.language;
-                            workspace-draft <=> root.workspace-draft;
-                            set-language(code) => { root.set-language(code); }
-                            add-workspace => { root.add-workspace(); }
-                            remove-workspace(index) => { root.remove-workspace(index); }
-                            workspace-id-edited(index, value) => { root.workspace-id-edited(index, value); }
-                            workspace-path-edited(index, value) => { root.workspace-path-edited(index, value); }
-                            save-settings => { root.save-settings(); }
-                            reload-settings => { root.refresh-local(); }
-                            configure-login(enabled) => { root.configure-login(enabled); }
-                            reconcile-login => { root.reconcile-login(); }
+            reject
+        }
+        key-pressed(event) => {
+            if (root.shortcut(event)) {
+                return accept;
+            }
+            reject
+        }
+        VerticalLayout {
+            Header {
+                version: root.version;
+                model: root.shell;
+                emergency-stop => { root.emergency-stop(); }
+                hide-to-tray => { root.hide-to-tray(); }
+                quit => { root.quit(); }
+            }
+            HorizontalLayout {
+                vertical-stretch: 1;
+                Sidebar {
+                    current-page <=> root.current-page;
+                    model: root.shell;
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: Theme.app-bg;
+                    accessible-role: tab-panel;
+                    main-flick := Flickable {
+                        width: parent.width - 8px;
+                        viewport-height: page.preferred-height + 48px;
+                        page := VerticalLayout {
+                            x: 24px;
+                            y: 24px;
+                            width: main-flick.width - 48px;
+                            height: self.preferred-height;
+                            alignment: start;
+                            spacing: 16px;
+                            if root.notice != "": Notice {
+                                text: root.notice;
+                                quitting: root.quitting;
+                                exit-anyway => { root.exit-anyway(); }
+                            }
+                            if root.current-page == 0: StatusView {
+                                shell: root.shell;
+                                model: root.status;
+                                activity: root.activity;
+                                log-lines: root.log-lines;
+                                preview: root.preview;
+                                connection-path <=> root.connection-path;
+                                connection-hash <=> root.connection-hash;
+                                workspace-draft <=> root.workspace-draft;
+                                profile <=> root.profile;
+                                refresh-local => { root.refresh-local(); }
+                                start-agent => { root.start-agent(); }
+                                stop-agent => { root.emergency-stop(); }
+                                cancel-local => { root.cancel-local(); }
+                                connect-desktop => { root.connect-desktop(); }
+                                disconnect-desktop => { root.disconnect-desktop(); }
+                                connection-path-edited(value) => { root.connection-path-edited(value); }
+                                inspect-connection => { root.inspect-connection(); }
+                                enroll => { root.enroll(); }
+                                cancel-operation(index) => { root.cancel-operation(index); }
+                                clear-log => { root.clear-log(); }
+                                open-approvals => { root.current-page = 2; }
+                            }
+                            if root.current-page == 1: PermissionsView {
+                                categories: root.categories;
+                                policy: root.policy;
+                                allow-list <=> root.allow-list;
+                                deny-list <=> root.deny-list;
+                                workspace-ids <=> root.workspace-ids;
+                                max-timeout <=> root.max-timeout;
+                                max-output <=> root.max-output;
+                                strict-isolation <=> root.strict-isolation;
+                                toggle(i) => { root.toggle-category(i); }
+                                set-enabled(i, on) => { root.set-category-enabled(i, on); }
+                                batch(i, g) => { root.batch-category(i, g); }
+                                leaf(i, j, g) => { root.set-leaf(i, j, g); }
+                                preset(g) => { root.apply-preset(g); }
+                                commit => { root.commit-policy(); }
+                                reload-constraints => { root.reload-constraints(); }
+                                constraints-edited => { root.constraints-edited(); }
+                            }
+                            if root.current-page == 2: ApprovalsView {
+                                prompts: root.approvals;
+                                can-decide: root.shell.can-control;
+                                connected: root.status.connected;
+                                decide(nonce, allow) => { root.decide(nonce, allow); }
+                            }
+                            if root.current-page == 3: RuntimeView {
+                                model: root.runtime;
+                                manifest-file <=> root.runtime-manifest;
+                                manifest-hash <=> root.runtime-hash;
+                                source-directory <=> root.runtime-source;
+                                chromium-hash <=> root.chromium-hash;
+                                cdb-hash <=> root.cdb-hash;
+                                gdb-hash <=> root.gdb-hash;
+                                analysis-hash <=> root.analysis-hash;
+                                browser-origins <=> root.browser-origins;
+                                external-cdp <=> root.external-cdp;
+                                admit-runtime => { root.admit-runtime(); }
+                                configure-runtime => { root.configure-runtime(); }
+                            }
+                            if root.current-page == 4: SettingsView {
+                                model: root.settings;
+                                workspaces: root.workspaces;
+                                language: root.language;
+                                workspace-draft <=> root.workspace-draft;
+                                set-language(code) => { root.set-language(code); }
+                                add-workspace => { root.add-workspace(); }
+                                remove-workspace(index) => { root.remove-workspace(index); }
+                                workspace-id-edited(index, value) => { root.workspace-id-edited(index, value); }
+                                workspace-path-edited(index, value) => { root.workspace-path-edited(index, value); }
+                                save-settings => { root.save-settings(); }
+                                reload-settings => { root.refresh-local(); }
+                                configure-login(enabled) => { root.configure-login(enabled); }
+                                reconcile-login => { root.reconcile-login(); }
+                            }
                         }
                     }
-                }
-                ScrollBar {
-                    x: parent.width - 6px;
-                    height: parent.height;
-                    viewport-height: main-flick.viewport-height;
-                    visible-height: main-flick.height;
-                    viewport-y <=> main-flick.viewport-y;
+                    ScrollBar {
+                        x: parent.width - 6px;
+                        height: parent.height;
+                        viewport-height: main-flick.viewport-height;
+                        visible-height: main-flick.height;
+                        viewport-y <=> main-flick.viewport-y;
+                    }
                 }
             }
         }

@@ -251,7 +251,7 @@ unsafe extern "system" fn procedure(
                 return 0;
             }
             STATUS => {
-                state.status = (wparam as usize).min(2);
+                state.status = wparam.min(2);
                 if !notify(hwnd, state, NIM_MODIFY) {
                     let _ = state.sender.try_send(ShellEvent::Failed);
                 }

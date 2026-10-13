@@ -1,4 +1,4 @@
-//! Slint frontend (ADR-0032). Step 1: window, tray, Agent state feed and lifecycle.
+//! Native Client GUI (Slint, ADR-0032). Step 1: window, tray, Agent state feed and lifecycle.
 //! Step 2: Status view (registration, Agent start/stop, metrics, operations, receipts).
 //! Step 3: Permissions view (category tree, 3-way grants, constraints, revision CAS commit).
 //! Step 4: Approvals, optional runtimes and settings (language, workspaces, login start).
@@ -1043,17 +1043,11 @@ impl Controller {
             .iter()
             .map(|id| grant_index(self.model.grants.get(id).copied().unwrap_or(Grant::Deny)))
             .collect();
+        let text = crate::i18n::category_text(category, self.lang);
         CategoryRow {
             id: category.as_str().into(),
-            title: crate::components::category_accordion::category_title(
-                category, label, self.lang,
-            )
-            .as_ref()
-            .into(),
-            description: crate::components::category_accordion::category_description(
-                category, self.lang,
-            )
-            .into(),
+            title: text.map_or(label, |(title, _)| title).into(),
+            description: text.map_or("", |(_, description)| description).into(),
             icon: category_icon(category),
             expanded: self.expanded.contains(category),
             enabled: !self.model.disabled_categories.contains(category),

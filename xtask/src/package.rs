@@ -508,7 +508,7 @@ fn stage_batch(root: &Path, batch: &Path, role: StageRole) -> Result<()> {
     );
     let build = json!({"format_version":1,"product_version":VERSION,"kind":"development-native-staging","platform":"win","architecture":"x64","source":source,
         "compiler":rustc_version.trim(),"cargo":compiler.trim(),"native_imports":dependencies,"toolchain":"1.90.0","target":"x86_64-pc-windows-msvc","static_crt":true,"cargo_lock_sha256":racp_contract::digest(lock),
-        "features":["software-renderer"],"payload":manifest,"launcher":launcher,"payload_manifest_sha256":racp_contract::digest(fs::read(payload.join(MANIFEST_FILE))?),
+        "features":["slint-software-renderer"],"payload":manifest,"launcher":launcher,"payload_manifest_sha256":racp_contract::digest(fs::read(payload.join(MANIFEST_FILE))?),
         "signed":false,"license_review":"pending","tests":"not_run_by_xtask","native_acceptance":"not_run_by_xtask","optional_runtimes":[],"deferred_platforms":["macOS","Linux"],"artifacts_published":false});
     write_new(
         &batch.join("build-manifest.json"),

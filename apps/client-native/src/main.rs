@@ -1,27 +1,21 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-mod accessibility;
-mod app;
-pub mod components;
 mod constraints;
 mod control_target;
-mod controls;
-pub mod i18n;
+mod i18n;
 #[cfg(windows)]
 mod ipc;
 #[cfg(windows)]
 mod native;
 mod onboarding;
-#[cfg(all(windows, feature = "slint-ui"))]
+#[cfg(windows)]
 mod slint_ui;
-pub mod theme;
 mod ui_model;
-pub mod views;
 
-fn main() -> iced::Result {
+fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|arg| arg == "--version") {
         println!("racp-client {}", racp_contract::VERSION);
-        return Ok(());
+        return;
     }
     let startup =
         || -> Result<Option<racp_core::distribution::PinnedPayload>, racp_contract::RacpError> {
@@ -84,15 +78,12 @@ fn main() -> iced::Result {
             std::process::exit(4);
         }
     };
-    #[cfg(all(windows, feature = "slint-ui"))]
-    return run_slint(&args);
-    #[cfg(not(all(windows, feature = "slint-ui")))]
-    run_iced(args)
+    run(&args);
 }
 
-/// ADR-0032 migration frontend: Slint with the software renderer only.
-#[cfg(all(windows, feature = "slint-ui"))]
-fn run_slint(args: &[String]) -> iced::Result {
+/// Slint GUI with the software renderer only (ADR-0032).
+#[cfg(windows)]
+fn run(args: &[String]) {
     if args.iter().any(|arg| arg == "--gpu") {
         native::startup_error("GPU_RENDERER_NOT_COMPILED");
         std::process::exit(4);
@@ -105,7 +96,7 @@ fn run_slint(args: &[String]) -> iced::Result {
     }
     let shell = match native::Shell::new() {
         Ok(Some(shell)) => Some(shell),
-        Ok(None) => return Ok(()),
+        Ok(None) => return,
         Err(code) => {
             eprintln!("native shell startup warning: {code}");
             None
@@ -115,63 +106,11 @@ fn run_slint(args: &[String]) -> iced::Result {
         native::startup_error(&code);
         std::process::exit(4);
     }
-    Ok(())
 }
 
-#[cfg(not(all(windows, feature = "slint-ui")))]
-fn run_iced(args: Vec<String>) -> iced::Result {
-    // Select before tray/Iced/Tokio create any other threads. Software is the product default.
-    let gpu = args.iter().any(|arg| arg == "--gpu");
-    if gpu && !cfg!(feature = "gpu-renderer") {
-        eprintln!("GPU renderer is not compiled in this build");
-        #[cfg(windows)]
-        native::startup_error("GPU_RENDERER_NOT_COMPILED");
-        std::process::exit(4);
-    }
-    unsafe {
-        std::env::set_var("ICED_BACKEND", if gpu { "wgpu" } else { "tiny-skia" });
-    }
-    #[cfg(windows)]
-    let shell = match native::Shell::new() {
-        Ok(Some(shell)) => Some(shell),
-        Ok(None) => return Ok(()),
-        Err(code) => {
-            eprintln!("native shell startup warning: {code}");
-            None
-        }
-    };
-    let icon = image::load_from_memory_with_format(
-        include_bytes!("../assets/app.png"),
-        image::ImageFormat::Png,
-    )
-    .ok()
-    .and_then(|image| {
-        let rgba = image.to_rgba8();
-        let (width, height) = rgba.dimensions();
-        iced::window::icon::from_rgba(rgba.into_raw(), width, height).ok()
-    });
-    let result = iced::application(app::App::title, app::App::update, app::App::view)
-        .theme(|_| iced::Theme::Dark)
-        .subscription(app::App::subscription)
-        .default_font(iced::Font::with_name("Malgun Gothic"))
-        .window(iced::window::Settings {
-            size: iced::Size::new(960.0, 680.0),
-            visible: true,
-            icon,
-            exit_on_close_request: !cfg!(windows),
-            ..Default::default()
-        })
-        .run_with(move || {
-            let (mut app, task) = app::App::new(args.iter().any(|arg| arg == "--start-agent"));
-            #[cfg(windows)]
-            if let Some(shell) = shell {
-                app.attach_shell(shell);
-            }
-            (app, task)
-        });
-    #[cfg(windows)]
-    if result.is_err() {
-        native::startup_error("GUI_RENDERER_OR_WINDOW_FAILED");
-    }
-    result
+/// macOS and Linux GUI adapters are deferred (ADR-0032 §1).
+#[cfg(not(windows))]
+fn run(_: &[String]) {
+    eprintln!("NATIVE_PLATFORM_DEFERRED");
+    std::process::exit(4);
 }

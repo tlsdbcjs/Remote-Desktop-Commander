@@ -19902,7 +19902,7 @@
       "kind": "source",
       "reason": "React GUI and three-second polling",
       "owner_task": "R01",
-      "current_source_path": "apps/client-native/src/app.rs",
+      "current_source_path": "apps/client-native/src/slint_ui.rs",
       "disposition": "retired_from_client_source",
       "evidence_ref": "docs/quality/implementation-status.md#rust-pretest-progress-0123"
     },

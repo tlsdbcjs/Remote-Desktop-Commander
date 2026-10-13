@@ -6,7 +6,7 @@
 
 ## 개요
 
-기본 Client는 Iced/Rust GUI와 Rust Agent다. Gateway·Python CLI/SDK와 React Console은 서버 측에 유지한다. 기본 Client payload는 native 실행 파일·정적 asset·license/SBOM만 포함하고 브라우저/분석 host는 선택 runtime으로 관리한다. 이전 Tauri/React Client source와 Node/WebView2 패키징 경로는 폐기했다.
+기본 Client는 Slint/Rust GUI와 Rust Agent다([ADR-0032](../adr/ADR-0032-native-client.md)). Gateway·Python CLI/SDK와 React Console은 서버 측에 유지한다. 기본 Client payload는 native 실행 파일·정적 asset·license/SBOM만 포함하고 브라우저/분석 host는 선택 runtime으로 관리한다. 이전 Tauri/React Client source와 Node/WebView2 패키징 경로는 폐기했다.
 
 > [!IMPORTANT]
 > Windows 핵심 Agent/GUI 및 사용자 계정용 설치·실행·제거를 격리된 상태에서 확인했다. 전체 기능 인수·업데이트·clean-PC·서명·머신 서비스 설치는 별도다. 정확한 산출물·검사 범위는 [구현 현황](../quality/implementation-status.md)에 기록한다. 기존 설치·Device·credential·사용자 데이터는 보존한다.
@@ -30,7 +30,7 @@ GUI는 로컬 Agent의 상태·권한·승인·수명주기를 관리한다. Age
 flowchart LR
     AI[AI/MCP caller] --> GW[Python Gateway]
     AG[Rust Agent] <-->|WSS| GW
-    UI[Iced GUI / Win32 tray] <-->|Authenticated Named Pipe| AG
+    UI[Slint GUI / Win32 tray] <-->|Authenticated Named Pipe| AG
     AG --> BG[Desktop Broker / Guardian]
     AG --> RT[Optional admitted runtimes]
 ```
@@ -87,7 +87,7 @@ Client는 Rust 1.90.0·Windows SDK/MSVC x64·xtask를 사용한다. Node 22.23.0
 
 <a id="native-development-staging"></a>
 
-### 6.1 Native 개발 staging (Iced/Rust)
+### 6.1 Native 개발 staging (Slint/Rust)
 
 새 Client는 Rust 1.90.0·Windows SDK/MSVC x64가 필요하며 기본 payload는 Client·Agent·LICENSE·SBOM과 해당 파일의 manifest다. Node·Python·WebView2·Chromium을 실행하거나 동봉하는 빌드 경로가 아니다. 브라우저/분석 도구는 별도 runtime admission을 사용한다.
 
@@ -246,21 +246,23 @@ SYSTEM은 고정 ProgramData namespace·보관 config hash/형식·private owner
 
 `native-release.json`은 현재 numeric SemVer와 state/policy/Journal format을 기록하는 별도 저장 버전 watermark다. 새 등록/Agent 시작 및 확인된 등록 상태의 service restore에 기록한다. 이 표시가 있는 root는 더 낮은 package version 또는 다른 저장 format으로 열지 않는다. watermark가 없던 초기 native root는 현재 형식을 확인한 첫 실행에서 현재 버전을 기록하며 구 설정을 변환하지 않는다. 표시를 무시하는 과거 binary의 동작까지 보증하지 않으며 자동 downgrade/rollback을 제공하지 않는다.
 
-GUI는 Iced가 처리하지 않은 Tab/Shift+Tab에 focusable 입력 필드 이동을 연결하고 Ctrl+1/2/3/4/5에 상태/권한/승인/설정/runtime 페이지 이동을 연결한다. service scope의 설정/runtime 이동은 차단한다. 이는 keyboard source 연결이며 button/checkbox 전체 키보드 조작이나 Narrator/UIA·IME/DPI 인수 완료가 아니다.
+GUI 키보드 이동은 [6.13](#613-gui-키보드와-windows-접근성-slint)을 따른다.
 
 > [!IMPORTANT]
 > 실제 서비스 복원·DPAPI profile 유지·새/이전 native 버전 호환·GUI 키보드 동작은 실행하지 않았다. 복원 preflight나 형식/정리 확인이 실패한 상태를 정상 Agent 시작 성공으로 바꾸지 않는다. partial provisioning 복구·검증된 updater/rollback·publisher trust와 접근성 연동은 계속 남아 있다.
 
-### 6.13 GUI 키보드와 Windows 접근성 연결 (source, 실기 보류)
+### 6.13 GUI 키보드와 Windows 접근성 (Slint)
 
-현재 native GUI는 버튼·체크박스·입력 필드·여러 줄 제약 편집기·실행 프로필 선택과 표시 텍스트를 Windows AccessKit/UI Automation tree로 연결한다. 창 소유 스레드에서 숨겨진 창에 adapter를 붙인 뒤 표시하며, 초기 트레이 표시 요청은 이 순서를 앞지르지 않는다. 같은 컨트롤의 접근성 ID는 화면 갱신 사이에 유지하고 사라진 컨트롤의 ID를 다른 대상으로 재사용하지 않는다.
+GUI는 Slint 내장 AccessKit으로 Windows UI Automation 트리를 제공한다. 메뉴는 탭, 권한 선택기는 라디오 버튼, 카테고리 머리글과 일반 버튼은 Invoke, 실행 프로필·언어 선택은 Toggle로 노출된다. 반복 권한·승인 버튼의 이름에는 대상 권한 ID나 작업 이름을 포함한다.
 
-Tab/Shift+Tab은 활성 컨트롤 사이를 이동하며 화면 밖의 focused 컨트롤은 해당 페이지로 스크롤한다. 버튼·체크박스는 Enter/Space를 놓을 때 한 번 동작한다. 대상 교체·focus 해제·창 focus 상실은 대기 동작을 취소한다. 실행 프로필은 방향키/Home/End로 선택한다. 반복 권한/승인 버튼의 접근성 이름에 대상 권한 또는 요청 식별자를 포함한다.
+- **Tab/Shift+Tab**: 버튼·입력 필드·선택기·카테고리 머리글 사이를 이동한다. Space/Enter로 실행하거나 펼친다.
+- **Ctrl+1~5**: 상태·권한·승인·설정·선택 런타임으로 이동한다. 서비스 모드에서는 설정·선택 런타임 이동을 막는다.
+- **한글 입력**: Slint/winit IME 경로를 사용한다. PoC와 이전 시험에서 조합 표시와 확정을 확인했다.
 
-입력값 변경 및 버튼 동작은 기존 GUI 메시지 경로를 사용하며 service 역할·초안·policy 저장·요청별 승인 검사를 거친다. 접근성 요청의 변경 동작은 화면 revision이 바뀌면 거부한다. window DPI와 페이지 scroll translation을 반영한 논리 좌표를 접근성 tree에 제공한다. 전체화면 캡처·Agent의 OS UIA Provider와 GUI 자체의 UIA tree는 별도 경로다.
+Slint 1.16은 트리를 만드는 도중에 생긴 화면 요소를 UIA 트리에 늦게 반영하거나 빠뜨릴 수 있다. 그래서 구조가 바뀌면 150ms 뒤 트리 전체를 다시 만들도록 유도하고, 자주 열리고 닫히는 영역은 미리 만들어 둔다([ADR-0032](../adr/ADR-0032-native-client.md#slint-116에서-확인한-제약과-우회)).
 
 > [!IMPORTANT]
-> 이 절은 source 연결이며 Narrator·키보드·DPI·GPU 없는 VM 실행 합격을 뜻하지 않는다. pinned Iced 0.13의 Windows IME event/조합 표시 경로는 별도 보강이 필요하며 한글 조합을 구현 완료로 판정하지 않는다. 실제 GUI를 실행하지 않았고 native 제품 적합성 gate는 보류다.
+> 페이지 전환·카테고리 펼침·항목 선택·언어 전환은 UIA 트리로 확인했다. Narrator 음성 확인, RDP 세션, 실행 중인 Agent에 연결한 상태의 동작은 아직 실기 인수 전이다. 진행 수치는 [구현 현황](../quality/implementation-status.md)에 있다.
 
 ## 7. 보안 및 안전 고려사항
 

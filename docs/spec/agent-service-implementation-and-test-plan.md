@@ -302,7 +302,7 @@ AST24–AST26의 실제 장치 접근·분리/재연결·수집은 수행하지 
 
 - Agent 앱 source의 현재 경로는 `apps/agent`다. `apps/agent-rust`는 과거 검증 이력에만 보존한다. 공유 source는 `crates/racp-contract`, `crates/racp-core`, `crates/racp-runtime`, 필요한 `xtask` 범위에 둔다. `apps/client-native` source/화면/실행을 이 계획의 구현·시험 대상으로 추가하지 않는다.
 - 현재 standalone build는 `dist/agent/<version>/win-x64/<build-id>/build/`다. service staging은 같은 Agent batch의 `staging/payload/`, 명시 요청하는 setup artifact는 `packages/`다. `stage-agent-service`, `verify-agent-service`, `package-agent-service`가 각각 개발 빌드·정적 검증·setup 생성 단계이며 실제 설치/등록을 수행하지 않는다.
-- Client package는 user scope만 받으며 Agent service staging/recipe는 별도 역할을 사용한다. 기본 제품에 CPython/Node/Electron/Iced GUI·token·credential·Gateway 고정 설정·Device state를 넣지 않는다. 선택 runtime은 별도 admission이다.
+- Client package는 user scope만 받으며 Agent service staging/recipe는 별도 역할을 사용한다. 기본 제품에 CPython/Node/Electron/GUI 실행 파일·token·credential·Gateway 고정 설정·Device state를 넣지 않는다. 선택 runtime은 별도 admission이다.
 - raw evidence는 `dist/verification/agent/<version>/<run-id>/`, 실제 결과·실패·수치·hash는 [구현 현황](../quality/implementation-status.md)에 기록한다. mode(`user`/`service`/`model`), 계정/SID 역할, source/lock, 기대/실제 결과, 자원 정리를 포함하며 비밀 값은 제외한다.
 - 구현/build batch의 버전·재시도·출력 보존은 [AGENTS](../../AGENTS.md)를 따른다. 문서 작성만으로 v0.1.26을 증가시키거나 설치/서비스 작업을 시작하지 않는다.
 - 기존 서비스명·root·account·config 충돌은 보호 대상이다. 불확실한 provisioning/정리는 UNKNOWN/pending 증거를 보존하고 자동 강제 삭제하지 않는다. 설치 금지·기존 등록/state 보존 지시는 문서보다 우선한다.
