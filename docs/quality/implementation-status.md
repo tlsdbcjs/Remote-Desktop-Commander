@@ -1,7 +1,7 @@
 # RACP 구현 작업 및 검증 현황 (Implementation Status)
 
 > **Document ID**: `DOC-QA-STATUS`\
-> **Status**: Active · **Target Version**: v0.1.30\
+> **Status**: Active · **Target Version**: v0.1.31\
 > **Last Updated**: 2026-10-13 · **Classification**: Quality Assurance & Implementation Status (SSOT)
 
 ---
@@ -2811,3 +2811,23 @@ PATCH **0.1.29→0.1.30 한 번**과 Python/Rust/optional analysis-host lock의 
 최종 EXE **22,391,296 bytes**, SHA-256 **`62affae11742147e5501994c3545d9936e226f72592d69fba7bceb9bf80cf8d3`**, payload manifest **`c21623a32dbb020e978c499f3758ba3c20dd7f043122137fcfd85ac91912765e`**, source input digest **`454a18ebefa8eafaae2b5a71b1030ab5ff634a8b4944ef9f40797b32fe834a0a`**다. 최종 E2E EXE hash는 manifest와 일치하고 harness SHA는 **`fd9b319d459948f5fed9dc5b8b6b8ed6de46e249392c8f4191ccd9fa93d65a1e`**다. baseline `635d08a` 및 당시 dirty source를 기록한 unsigned 개발 후보이며 기능 전체 검증/서비스 릴리스를 선언하지 않는다.
 
 AS07 실패 조사: [단독 재실행](../../dist/verification/agent/0.1.30/restore-intent-20261013/browser-timeout-diagnostic.log)은 **1 PASS**지만 목표 assertion에 진단이 붙지 않아 경계 데이터를 수집하지 못했다. 정확한 timeout assertion에 진단을 연결한 [Browser 그룹 실행](../../dist/verification/agent/0.1.30/restore-intent-20261013/browser-group-diagnostic.log)은 **19 PASS / 1 FAIL**, UNKNOWN의 code **EXECUTION_UNKNOWN**을 확인했다. 이어 [close 경계 진단](../../dist/verification/agent/0.1.30/restore-intent-20261013/browser-close-boundaries.log)은 **18 PASS / 2 FAIL**(concurrent close, cookies/form cleanup)이며 worker 종료와 kill 요청 뒤 **parent exit signal=false / Job tree empty=true**인 상태로 5초 deadline에 도달했다. profile 삭제 단계까지 도달하기 전의 종료 증명 실패라는 근거를 얻었으나 아직 원인을 수정하지 않았다. 임시 test/production 진단 코드는 원본 bytes로 복구했고 Browser 소스·시험의 최종 diff는 0이다. deadline을 늘리거나 exit code/빈 Job만으로 성공 판정을 대체하지 않았다. 다음 AS07 조사는 부모 handle signal·Job membership/termination·pending IO 경계다.
+
+
+### 2026-10-13 AS07 Browser 시작 실패의 종료 확인·프로필 보존 — v0.1.31
+
+[Browser session](../../crates/racp-runtime/src/providers/browser/session.rs)의 process marker persist·CDP 접속·version query·proxy bind·context 생성 실패 경로는 기존에 OwnedProcess를 Drop한 뒤 종료 결과와 관계없이 profile을 삭제했다. Drop의 종료 요청/대기는 성공을 증명하지 않으므로, 다섯 경로에 **부모 handle signal과 전체 Job tree-empty를 모두 확인한 뒤 삭제**하는 gate를 연결했다. 기존 Session::close와 동일한 5초 종료 budget을 공유하며, 종료 확인 실패에는 삭제를 시작하지 않아 profile과 존재하는 recovery record를 보존한다. 파일 삭제 실패도 전파하고 남은 파일을 불확실한 정리 상태로 보고한다. startup process는 session inventory에 아직 없으므로 cleanup 실패에는 Browser ready를 false로 전환해 새 execute 요청을 거부하고 빈 inventory만으로 전체 cleanup 완료를 보고하지 않는다. 정상 cleanup이 완료되면 원래 startup error를 반환한다. 종료 확인에 exit code나 빈 Job만을 대체 증거로 사용하지 않았다.
+
+[RED](../../dist/verification/agent/0.1.31/startup-cleanup-20261013/red.log)는 실패한 cleanup 결과를 무시하는 기존 삭제 경로에서 **1 PASS / 1 FAIL**, [GREEN](../../dist/verification/agent/0.1.31/startup-cleanup-20261013/green.log)은 **2 PASS**다. private 임시 profile의 cleanup 실패/record byte 보존과 정상 cleanup/다른 profile 보존을 검사한다. [readiness RED](../../dist/verification/agent/0.1.31/startup-cleanup-20261013/readiness-red.log)는 동일 시험에 불확실한 startup의 ready 차단 assertion을 추가해 **1 PASS / 1 FAIL**이었다. 최종 source는 이 경우 CLEANUP_FAILED/UNKNOWN을 보고하며 새 요청과 전체 cleanup 완료 판정을 차단한다. actual SDK timeout을 주입한 시험은 아니며, Windows Browser 시작 취소는 전체 suite에서 별도 검증한다. PATCH **0.1.30→0.1.31 한 번**, uv.lock 및 workspace/독립 analysis-host Cargo.lock의 local package version만 동기화했다. 최초 --locked startup 단독 실행은 lock refresh 부족으로 시험 시작 전 exit 101이었다. offline full metadata로 lock을 갱신했고 의존성 pin 변경은 없다.
+
+AS07 별도 진단도 보존한다. [stdout drain 실험](../../dist/verification/agent/0.1.30/browser-signal-20261013/drain-experiment.log)은 **10 PASS / 10 FAIL**이며 실패 시 drained bytes=0·parent signal=false·Job empty=true였다. drain이 간헐 종료 문제를 해결한다는 증거가 없어 제거했다. [identity 단독 진단](../../dist/verification/agent/0.1.30/browser-signal-20261013/identity-probe.log) **1 PASS**, [그룹](../../dist/verification/agent/0.1.30/browser-signal-20261013/identity-group-probe.log) **20 PASS**에서 process handle PID·Job membership 일치와 exit code/Job empty가 process signal에 앞설 수 있음을 관찰했다. 진단 코드는 원본으로 복구했으며 이 PASS로 간헐 실패 해결을 선언하지 않는다. recovery enumeration→process birth 확인 사이의 정상 exit race도 후속 조사 대상이다.
+
+> [!IMPORTANT]
+> 사용자가 main의 Slint/Cargo.lock 작업이 아직 진행 중이라고 확인했으므로 **main 통합은 GUI 작업 완료·커밋 뒤로 보류**한다. Agent v0.1.30 source commit `d547896`과 이번 묶음은 별도 managed worktree에 유지한다. main의 GUI source/lock을 stage·stash·reset하거나 변경하지 않았다. 실제 installer/SCM/device/driver 실행은 하지 않았다. read-only 후속 reviewer는 capacity/credit 오류로 완료하지 못했으므로 독립 review 완료라고 기록하지 않는다. AS07 간헐 process signal 문제와 실제 서비스/장치 인수 및 AS08/AS09/AS16–AS18 잔여 범위는 미완료다.
+
+
+| v0.1.31 최종 검사 | 실제 결과·범위 |
+|---|---|
+| 최종 source 전체 Rust 직렬 실행 | [최종 로그](../../dist/verification/agent/0.1.31/startup-cleanup-20261013/rust-workspace-final.log), `cargo test --locked --workspace -- --test-threads=1`, **93 PASS / 2 FAIL**, exit 101, Browser군에서 중단. 실패는 `cookies_form_refs_native_input_png_and_navigation_invalidation` 및 `external_cdp_opt_in_context_and_target_ownership`의 `CLEANUP_FAILED`. 신규 gate/ready 시험 **2 PASS**와 실제 Windows Browser startup cancel PASS 포함. 간헐 종료 문제 미해결이며 전체 suite PASS 아님 |
+| ready 차단 보완 전 전체 실행 | [이전 로그](../../dist/verification/agent/0.1.31/startup-cleanup-20261013/rust-workspace-serial.log) **124 PASS / 0 FAIL / 4 subprocess fixture ignored**, exit 0. 최종 source 결과를 이 성공으로 대체하지 않음. 최종 실패 뒤 Desktop/Filesystem/Memory/Process/Shell/Terminal/xtask target은 해당 최종 전체 실행에서 미실행 |
+| 버전·Python 정적 검사 | [버전 시험](../../dist/verification/agent/0.1.31/startup-cleanup-20261013/python-version.log) **6 PASS**, [Ruff](../../dist/verification/agent/0.1.31/startup-cleanup-20261013/ruff.log) PASS, [mypy](../../dist/verification/agent/0.1.31/startup-cleanup-20261013/mypy.log) **98 files PASS**, version show **0.1.31**, scoped Rust fmt/diff check PASS. 기존 Windows recipes naming/core unused-import warnings 유지 |
+| 배포·통합 | 이번 v0.1.31은 source/debug-test 묶음이며 새 release payload/setup 생성·최종 EXE 원격 인수는 하지 않음. v0.1.30 payload evidence를 v0.1.31 산출물로 해석하지 않음. GUI 완료 전 main 통합 보류·별도 Agent branch 보존 |

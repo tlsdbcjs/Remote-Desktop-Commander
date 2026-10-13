@@ -15,6 +15,52 @@ use std::{
 };
 use tokio_util::sync::CancellationToken;
 
+async fn remove_profile_after_cleanup(
+    profile: &std::path::Path,
+    ready: &std::sync::atomic::AtomicBool,
+    cleanup: impl FnOnce() -> Result<(), RacpError>,
+) -> Result<(), RacpError> {
+    // Dropping the process requests termination but cannot report its outcome.
+    // Keep ownership evidence until the parent handle and entire tree confirm exit.
+    let result = async {
+        cleanup()?;
+        racp_core::validate_local_path(profile)?;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match std::fs::remove_dir_all(profile) {
+                Ok(()) => return Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                Err(_) if Instant::now() >= deadline => {
+                    return Err(RacpError::new("CLEANUP_FAILED"))
+                }
+                Err(_) => tokio::time::sleep(Duration::from_millis(20)).await,
+            }
+        }
+    }
+    .await;
+    if result.is_err() {
+        // This startup process is not yet in the session inventory. Prevent a
+        // later empty-inventory cleanup from claiming that all owned work exited.
+        ready.store(false, std::sync::atomic::Ordering::SeqCst);
+        return Err(RacpError::new("CLEANUP_FAILED"));
+    }
+    result
+}
+
+fn terminate_owned(process: &mut OwnedProcess) -> Result<(), RacpError> {
+    process.kill_tree()?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if process.poll()?.is_some() && process.tree_empty()? {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err(RacpError::new("CLEANUP_FAILED"));
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 pub(super) struct Frame {
     pub id: String,
     pub native: String,
@@ -315,8 +361,8 @@ impl Browser {
         if let Err(error) =
             super::recovery::persist_process(&profile, &self.device, &self.boot, &process)
         {
-            drop(process);
-            let _ = std::fs::remove_dir_all(&profile);
+            remove_profile_after_cleanup(&profile, &self.ready, || terminate_owned(&mut process))
+                .await?;
             return Err(error);
         }
         let connection = async {
@@ -354,8 +400,10 @@ impl Browser {
         let cdp = match connection {
             Ok(cdp) => cdp,
             Err(e) => {
-                drop(process);
-                let _ = std::fs::remove_dir_all(&profile);
+                remove_profile_after_cleanup(&profile, &self.ready, || {
+                    terminate_owned(&mut process)
+                })
+                .await?;
                 return Err(e);
             }
         };
@@ -368,8 +416,10 @@ impl Browser {
             }
             Err(error) => {
                 cdp.close().await;
-                drop(process);
-                let _ = std::fs::remove_dir_all(&profile);
+                remove_profile_after_cleanup(&profile, &self.ready, || {
+                    terminate_owned(&mut process)
+                })
+                .await?;
                 return Err(error);
             }
         };
@@ -377,8 +427,10 @@ impl Browser {
             Ok(proxy) => proxy,
             Err(error) => {
                 cdp.close().await;
-                drop(process);
-                let _ = std::fs::remove_dir_all(&profile);
+                remove_profile_after_cleanup(&profile, &self.ready, || {
+                    terminate_owned(&mut process)
+                })
+                .await?;
                 return Err(error);
             }
         };
@@ -394,8 +446,7 @@ impl Browser {
             Ok(value) => value["browserContextId"].as_str().unwrap_or("").to_owned(),
             Err(e) => {
                 cdp.close().await;
-                drop(process);
-                let _ = std::fs::remove_dir_all(&profile);
+                remove_profile_after_cleanup(&profile, &self.ready, || terminate_owned(&mut process)).await?;
                 return Err(e);
             }
         };
@@ -667,17 +718,7 @@ impl Session {
                 .lock()
                 .map_err(|_| RacpError::new("CLEANUP_FAILED"))?;
             if let Some(process) = owned.as_mut() {
-                process.kill_tree()?;
-                let deadline = Instant::now() + Duration::from_secs(5);
-                loop {
-                    if process.poll()?.is_some() && process.tree_empty()? {
-                        break;
-                    }
-                    if Instant::now() >= deadline {
-                        return Err(RacpError::new("CLEANUP_FAILED"));
-                    }
-                    std::thread::sleep(Duration::from_millis(10));
-                }
+                terminate_owned(process)?;
                 owned.take();
                 self.protected
                     .lock()
@@ -1534,6 +1575,51 @@ impl Provider for Browser {
 #[cfg(test)]
 mod frame_race_tests {
     use super::*;
+    #[tokio::test]
+    async fn startup_cleanup_failure_preserves_profile_and_recovery_record() {
+        let root = tempfile::tempdir().unwrap();
+        let profile = root.path().join("owned-profile");
+        std::fs::create_dir(&profile).unwrap();
+        let record = profile.join("process.json");
+        std::fs::write(&record, b"persisted ownership evidence").unwrap();
+        let ready = std::sync::atomic::AtomicBool::new(true);
+        let result = remove_profile_after_cleanup(&profile, &ready, || {
+            Err(RacpError::new("CLEANUP_FAILED"))
+        })
+        .await;
+        assert!(
+            result.is_err(),
+            "unconfirmed termination must report cleanup failure"
+        );
+        assert_eq!(
+            std::fs::read(record).unwrap(),
+            b"persisted ownership evidence"
+        );
+        assert!(
+            !ready.load(std::sync::atomic::Ordering::SeqCst),
+            "untracked startup cleanup must block new work and complete-cleanup reports"
+        );
+    }
+    #[tokio::test]
+    async fn startup_cleanup_removes_only_the_confirmed_owned_profile() {
+        let root = tempfile::tempdir().unwrap();
+        let profile = root.path().join("owned-profile");
+        let sibling = root.path().join("unrelated-profile");
+        std::fs::create_dir(&profile).unwrap();
+        std::fs::create_dir(&sibling).unwrap();
+        std::fs::write(profile.join("process.json"), b"owned").unwrap();
+        std::fs::write(sibling.join("process.json"), b"unrelated").unwrap();
+        let ready = std::sync::atomic::AtomicBool::new(true);
+        remove_profile_after_cleanup(&profile, &ready, || Ok(()))
+            .await
+            .unwrap();
+        assert!(!profile.exists());
+        assert!(ready.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(
+            std::fs::read(sibling.join("process.json")).unwrap(),
+            b"unrelated"
+        );
+    }
     #[test]
     fn late_parent_swap_preserves_new_child_context_but_remove_invalidates_it() {
         let child = Frame {

@@ -1,7 +1,7 @@
 # Rust Agent 서비스 구현 및 검증 작업 계획
 
 > **Document ID**: `DOC-PLAN-AGENT-SERVICE`\
-> **Status**: Active · **Target Version**: v0.1.30 source / Agent 서비스 릴리스 인수 미완료\
+> **Status**: Active · **Target Version**: v0.1.31 source / Agent 서비스 릴리스 인수 미완료\
 > **Last Updated**: 2026-10-13 · **Classification**: Service Implementation & Test Plan
 
 ## 개요
@@ -221,6 +221,8 @@ AS09의 다음 실행 경계 묶음은 durable 일회성 start intent다. 공통
 첫 service bootstrap의 등록 예약은 service actor/config 확인 뒤 실행 gate의 네 고정 파일만 추가 허용한다. intent의 정상 Run 허용 phase를 다시 확인하며 미확정 intent는 token 소비 전에 차단한다. unregistered restore 후 남은 고정 maintenance/restore/detach·config/agent/settings lock은 **Acknowledged Restore와 현재 maintenance receipt hash/nonce·config hash·registered=false/device=null/state-preserved/credential-unread**가 확인된 경우에만 허용한다. 일반 사용자 등록의 empty-root 검사는 그대로 유지하고, 임의 파일·미완료/다른 purpose·변조된 receipt로 등록을 재개하지 않는다.
 
 AS08의 첫 복구 경계는 `inspect_restore_intent`와 `abort_uncreated_restore`다. 요청 계약은 공통 contract, prepared Restore 전용 CAS 전이는 core, SYSTEM/SCM 증거는 Windows adapter에 둔다. 두 요청은 `expected_config_sha256`을 요구하며 `NativeServiceConfig::read_restore`의 고정 machine root·sealed SID/private ACL·config hash 검증 뒤 ADMIN→EXECUTION→config/agent lock을 유지한다. inspect는 bounded snapshot과 namespace `absent`/`present`/`unconfirmed`를 보고하고 의도 파일을 바꾸지 않는다. abort에는 추가 `request_id`/`expected_sha256`을 요구하며 **SCM의 고정 이름 조회에서 정확히 ERROR_SERVICE_DOES_NOT_EXIST가 나온 경우에만** Prepared Maintenance Restore를 Aborted로 CAS 전이한다. namespace 증거를 JSON으로 받지 않고 SDK error를 handle cleanup 전에 보존한다. 기존 service, 접근 거부, 삭제 대기, 알 수 없는 오류 및 claimed/failed/completed·다른 purpose·stale ID/hash는 해제하지 않는다. 취소 후에는 새 UUID의 명시 restore가 필요하며 늦게 온 이전 start는 claim할 수 없다. 이 요청은 service 생성/시작/중지/제거/재설정·credential 읽기·재등록을 하지 않는다. 계약/phase/CAS/namespace 분류와 실제 파일 불변 시험 RED–GREEN→SYSTEM handoff 연결/검토→Windows 회귀·개발 payload→main 순서로 검증한다. 보호 config를 만들기 전의 partial provision, 이미 생성된 불확실한 service 및 실제 SCM 인수는 별도다.
+
+AS07 Browser 시작 실패 정리는 정상 close와 같은 부모 signal/Job tree-empty 확인 뒤에만 owned profile을 삭제한다. marker persist·CDP 연결·backend query·proxy/context 생성 실패에 적용하며, 5초 종료 budget이나 proof 조건을 약화하지 않는다. 종료 확인 불가에는 profile/기존 recovery marker를 보존하고 cleanup 실패를 반환한다. 아직 inventory에 들어가기 전의 startup 정리가 실패하면 Provider ready도 false로 유지해 새 요청/전체 cleanup 완료를 차단한다. 이 gate 보완과 간헐 parent signal 지연 원인 규명은 별개이며, recovery enumeration과 birth 조회 사이 exit race 및 부하 조건은 계속 검증해야 한다. main 통합은 동시 Slint GUI 작업이 완료·커밋된 뒤 진행한다.
 
 <a id="section-05"></a>
 
