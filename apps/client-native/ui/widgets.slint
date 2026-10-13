@@ -474,3 +474,45 @@ export component TextField inherits Rectangle {
         accessible-role: none;
     }
 }
+
+// Multi-line text area, one entry per line (executable lists, workspace IDs).
+export component TextArea inherits Rectangle {
+    in property <string> label;
+    in-out property <string> text <=> input.text;
+    in property <bool> enabled: true;
+    callback edited(string);
+    height: 96px;
+    background: Theme.well-bg;
+    border-radius: Theme.r-lg;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.indigo-500 : Theme.line-strong;
+    opacity: enabled ? 1 : 0.6;
+    clip: true;
+    animate border-color { duration: Theme.t-fast; }
+    forward-focus: input;
+
+    input := TextInput {
+        x: 12px;
+        y: 8px;
+        width: parent.width - 24px;
+        height: parent.height - 16px;
+        single-line: false;
+        wrap: word-wrap;
+        enabled: root.enabled;
+        font-family: Theme.mono;
+        font-size: Theme.fs-xs;
+        color: Theme.text-200;
+        selection-background-color: Theme.indigo-600;
+        accessible-label: root.label;
+        edited => { root.edited(self.text); }
+    }
+    if input.text == "": Text {
+        x: 12px;
+        y: 8px;
+        width: parent.width - 24px;
+        text: root.label;
+        font-size: Theme.fs-xs;
+        color: Theme.text-500;
+        accessible-role: none;
+    }
+}

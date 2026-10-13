@@ -1,5 +1,6 @@
 //! Slint frontend (ADR-0032). Step 1: window, tray, Agent state feed and lifecycle.
 //! Step 2: Status view (registration, Agent start/stop, metrics, operations, receipts).
+//! Step 3: Permissions view (category tree, 3-way grants, constraints, revision CAS commit).
 //! The window is presentation only. All state lives in `Controller` on the UI thread, and
 //! background work reports back through `post`, mirroring the Iced `update` rules.
 slint::include_modules!();
@@ -11,10 +12,13 @@ use crate::{
     ui_model::UiModel,
 };
 use racp_contract::{
-    local_ipc::{AgentStatus, ControlCommand, ControlReply, ControlResult, StateChange},
+    local_ipc::{
+        AgentStatus, AvailabilityState, ControlCommand, ControlReply, ControlResult, Grant,
+        PolicyChanges, PolicyConstraints, StateChange,
+    },
     service_scope::ControllerRole,
 };
-use slint::{CloseRequestResponse, ComponentHandle, ModelRc, VecModel};
+use slint::{CloseRequestResponse, ComponentHandle, Model, ModelRc, VecModel};
 use std::{cell::RefCell, collections::BTreeSet, rc::Rc, sync::Arc};
 use tokio_util::sync::CancellationToken;
 
@@ -49,6 +53,18 @@ struct Controller {
     cleared_receipts: BTreeSet<String>,
     activity: Rc<VecModel<ActivityRow>>,
     log_lines: Rc<VecModel<LogLine>>,
+    /// Category tree layout: (category id, leaf capability ids). Rows update in place so
+    /// focus and expansion survive edits; the layout is rebuilt only when it changes.
+    layout: Vec<(String, Vec<String>)>,
+    categories: Rc<VecModel<CategoryRow>>,
+    leaves: Vec<Rc<VecModel<LeafRow>>>,
+    expanded: BTreeSet<String>,
+    lang: crate::i18n::Language,
+    /// Grants or categories edited since the last Agent policy.
+    policy_dirty: bool,
+    /// Policy revision the constraint draft was loaded from; None until loaded.
+    constraints_revision: Option<u64>,
+    constraints_dirty: bool,
     can_hide: bool,
     quitting: bool,
     starting: bool,
@@ -94,6 +110,8 @@ pub fn run(shell: Option<Arc<Shell>>, auto_start: bool) -> Result<(), String> {
     let log_lines = Rc::new(VecModel::default());
     window.set_activity(ModelRc::from(activity.clone()));
     window.set_log_lines(ModelRc::from(log_lines.clone()));
+    let categories = Rc::new(VecModel::default());
+    window.set_categories(ModelRc::from(categories.clone()));
     wire(&window);
 
     let receiver = shell.as_ref().map(|shell| shell.receiver.clone());
@@ -120,6 +138,14 @@ pub fn run(shell: Option<Arc<Shell>>, auto_start: bool) -> Result<(), String> {
         cleared_receipts: BTreeSet::new(),
         activity,
         log_lines,
+        layout: Vec::new(),
+        categories,
+        leaves: Vec::new(),
+        expanded: BTreeSet::new(),
+        lang: crate::i18n::detect_os_language(),
+        policy_dirty: false,
+        constraints_revision: None,
+        constraints_dirty: false,
         can_hide,
         quitting: false,
         starting: false,
@@ -143,6 +169,11 @@ pub fn run(shell: Option<Arc<Shell>>, auto_start: bool) -> Result<(), String> {
         });
     }
     with(|c| {
+        // Registration starts from the deny-all policy, like the Iced client.
+        c.replace_constraints(
+            &racp_core::state_schema::NativePolicy::deny_all().constraints,
+            0,
+        );
         c.refresh_local();
         c.render();
     });
@@ -220,6 +251,69 @@ fn wire(window: &AppWindow) {
             c.render();
         });
     });
+    window.on_toggle_category(|index| {
+        with(|c| {
+            if let Some((category, _)) = c.layout.get(index as usize) {
+                let category = category.clone();
+                if !c.expanded.remove(&category) {
+                    c.expanded.insert(category);
+                }
+                c.sync_permissions();
+            }
+        });
+    });
+    window.on_set_category_enabled(|index, enabled| {
+        with(|c| {
+            if let Some((category, _)) = c.layout.get(index as usize).cloned() {
+                c.edit_policy(|model| model.category_enabled(&category, enabled));
+            }
+        });
+    });
+    window.on_batch_category(|index, grant| {
+        with(|c| {
+            if let Some((_, ids)) = c.layout.get(index as usize).cloned() {
+                c.set_grants(&ids, grant);
+            }
+        });
+    });
+    window.on_set_leaf(|index, leaf, grant| {
+        with(|c| {
+            let id = c
+                .layout
+                .get(index as usize)
+                .and_then(|(_, ids)| ids.get(leaf as usize))
+                .cloned();
+            if let Some(id) = id {
+                c.set_grants(&[id], grant);
+            }
+        });
+    });
+    window.on_apply_preset(|grant| {
+        with(|c| {
+            // Presets cover implemented capabilities only; planned ones stay denied.
+            let ids: Vec<String> = c
+                .model
+                .catalog
+                .iter()
+                .filter(|item| item.implementation == "rpc")
+                .map(|item| item.id.clone())
+                .collect();
+            c.set_grants(&ids, grant);
+        });
+    });
+    window.on_commit_policy(|| {
+        with(|c| c.save_policy());
+    });
+    window.on_reload_constraints(|| {
+        with(|c| c.reload_constraints());
+    });
+    window.on_constraints_edited(|| {
+        with(|c| {
+            c.constraints_dirty = true;
+            c.policy_dirty = true;
+            c.render();
+        });
+    });
     window.window().on_close_requested(|| {
         with(|c| {
             if c.can_hide {
@@ -249,6 +343,35 @@ fn state_root_label() -> String {
 
 fn is_cancellable_state(state: &str) -> bool {
     matches!(state, "ACCEPTED" | "DISPATCHED" | "RUNNING" | "RECONCILING")
+}
+
+fn grant_index(grant: Grant) -> i32 {
+    match grant {
+        Grant::Deny => 0,
+        Grant::RequireApproval => 1,
+        Grant::Allow => 2,
+    }
+}
+
+fn grant_from_index(index: i32) -> Option<Grant> {
+    match index {
+        0 => Some(Grant::Deny),
+        1 => Some(Grant::RequireApproval),
+        2 => Some(Grant::Allow),
+        _ => None,
+    }
+}
+
+/// Tile icon index used by permissions.slint.
+fn category_icon(category: &str) -> i32 {
+    match category {
+        "system" => 0,
+        "files_read" => 1,
+        "files_write" => 2,
+        "terminal" => 3,
+        "browser" => 4,
+        _ => 5,
+    }
 }
 
 impl Controller {
@@ -284,6 +407,8 @@ impl Controller {
                 }
                 self.tray_status(u32::from(snapshot.status == AgentStatus::Online));
                 self.model.replace_snapshot(snapshot);
+                self.policy_dirty = false;
+                self.sync_constraints();
                 self.tray_control();
                 if self.quitting && self.local_cancel.is_none() {
                     self.send(ControlCommand::Stop);
@@ -296,6 +421,10 @@ impl Controller {
                     self.render();
                     return;
                 }
+                if matches!(event.change, StateChange::PolicyCommitted { .. }) {
+                    self.policy_dirty = false;
+                }
+                self.sync_constraints();
                 self.tray_activity();
                 match &event.change {
                     StateChange::CancelFinished { .. } => {
@@ -358,6 +487,9 @@ impl Controller {
                         self.model.grants.extend(policy.grants.clone());
                         self.model.disabled_categories = policy.disabled_categories.clone();
                         self.model.constraints = Some(policy.constraints.clone());
+                        if !self.constraints_dirty {
+                            self.replace_constraints(&policy.constraints, policy.revision);
+                        }
                     }
                 }
                 let start = self.auto_start && info.state.is_some() && !info.registration_pending;
@@ -549,12 +681,21 @@ impl Controller {
             self.render();
             return;
         }
-        // Constraint editing moves in step 3; until then the current model constraints apply.
         let mut policy = racp_core::state_schema::NativePolicy::deny_all();
         policy.grants = self.model.grants.clone();
         policy.disabled_categories = self.model.disabled_categories.clone();
         if let Some(constraints) = &self.model.constraints {
             policy.constraints = constraints.clone();
+        }
+        if self.constraints_revision.is_some() || self.constraints_dirty {
+            match self.read_constraints() {
+                Ok(value) => policy.constraints = value,
+                Err(_) => {
+                    self.notice = Some("제약 값과 실행 파일의 절대 경로를 확인하세요.".into());
+                    self.render();
+                    return;
+                }
+            }
         }
         let named: Vec<racp_core::WorkspaceSpec> = Vec::new();
         let input = serde_json::json!({
@@ -650,6 +791,235 @@ impl Controller {
             cancel.cancel();
             self.notice = Some("현재 사용자 화면 연결과 입력 정리를 기다립니다.".into());
             self.render();
+        }
+    }
+
+    /// Applies a grant or category edit when this connection may edit policy.
+    fn edit_policy(
+        &mut self,
+        edit: impl FnOnce(&mut UiModel) -> Result<(), racp_contract::RacpError>,
+    ) {
+        if !self.can_control() {
+            self.notice = Some("현재 연결에는 조회 권한만 있습니다.".into());
+        } else {
+            match edit(&mut self.model) {
+                Ok(()) => self.policy_dirty = true,
+                Err(error) => self.notice = Some(error.to_string()),
+            }
+        }
+        self.render();
+    }
+
+    fn set_grants(&mut self, ids: &[String], grant: i32) {
+        let Some(grant) = grant_from_index(grant) else {
+            return;
+        };
+        self.edit_policy(|model| ids.iter().try_for_each(|id| model.edit_grant(id, grant)));
+    }
+
+    fn replace_constraints(&mut self, value: &PolicyConstraints, revision: u64) {
+        self.window
+            .set_workspace_ids(value.workspace_ids.join("\n").into());
+        self.window
+            .set_max_timeout(value.max_timeout_ms.to_string().into());
+        self.window
+            .set_max_output(value.max_output_bytes.to_string().into());
+        self.window
+            .set_allow_list(value.executable_allowlist.join("\n").into());
+        self.window
+            .set_deny_list(value.executable_denylist.join("\n").into());
+        self.window.set_strict_isolation(value.strict_os_isolation);
+        self.constraints_revision = Some(revision);
+        self.constraints_dirty = false;
+    }
+
+    fn read_constraints(&self) -> Result<PolicyConstraints, racp_contract::RacpError> {
+        crate::constraints::parse_fields(
+            &self.window.get_workspace_ids(),
+            &self.window.get_max_timeout(),
+            &self.window.get_max_output(),
+            &self.window.get_allow_list(),
+            &self.window.get_deny_list(),
+            self.window.get_strict_isolation(),
+        )
+    }
+
+    /// Follows the Agent policy unless the user has an unsaved constraint draft.
+    fn sync_constraints(&mut self) {
+        let Some(snapshot) = &self.model.snapshot else {
+            return;
+        };
+        let Some(policy) = &snapshot.policy else {
+            return;
+        };
+        let (constraints, revision) = (policy.constraints.clone(), snapshot.policy_revision);
+        let same = self.read_constraints().ok().is_some_and(|draft| {
+            serde_json::to_value(draft).ok() == serde_json::to_value(&constraints).ok()
+        });
+        if !self.constraints_dirty || same {
+            self.replace_constraints(&constraints, revision);
+        }
+    }
+
+    fn reload_constraints(&mut self) {
+        if let Some((constraints, revision)) = self.model.snapshot.as_ref().and_then(|s| {
+            s.policy
+                .as_ref()
+                .map(|p| (p.constraints.clone(), s.policy_revision))
+        }) {
+            self.replace_constraints(&constraints, revision);
+        } else if let Some((constraints, revision)) = self
+            .local
+            .as_ref()
+            .and_then(|info| info.policy.as_ref())
+            .map(|p| (p.constraints.clone(), p.revision))
+        {
+            self.replace_constraints(&constraints, revision);
+        }
+        self.render();
+    }
+
+    fn save_policy(&mut self) {
+        if !self.can_control() {
+            self.notice = Some("현재 연결에는 조회 권한만 있습니다.".into());
+            self.render();
+            return;
+        }
+        let Some(revision) = self
+            .model
+            .snapshot
+            .as_ref()
+            .filter(|_| !self.model.needs_resync)
+            .map(|s| s.policy_revision)
+        else {
+            self.notice = Some("Agent 연결 후 저장할 수 있습니다.".into());
+            self.render();
+            return;
+        };
+        if self.constraints_revision != Some(revision) {
+            self.notice =
+                Some("정책이 변경되었습니다. 제약 초안을 다시 불러온 뒤 저장하세요.".into());
+            self.render();
+            return;
+        }
+        let constraints = match self.read_constraints() {
+            Ok(value) => value,
+            Err(_) => {
+                self.notice = Some("제약 값과 실행 파일의 절대 경로를 확인하세요.".into());
+                self.render();
+                return;
+            }
+        };
+        self.send(ControlCommand::UpdatePolicy {
+            expected_revision: revision,
+            changes: PolicyChanges {
+                grants: self.model.grants.clone(),
+                disabled_categories: Some(self.model.disabled_categories.iter().cloned().collect()),
+                constraints: Some(constraints),
+            },
+        });
+    }
+
+    /// Implemented capabilities grouped by category, in catalog order.
+    fn desired_layout(&self) -> Vec<(String, Vec<String>)> {
+        let mut layout: Vec<(String, Vec<String>)> = Vec::new();
+        for item in &self.model.catalog {
+            if item.implementation != "rpc"
+                || self.model.availability(&item.id) == AvailabilityState::NotImplemented
+            {
+                continue;
+            }
+            match layout
+                .iter_mut()
+                .find(|(category, _)| *category == item.category)
+            {
+                Some((_, ids)) => ids.push(item.id.clone()),
+                None => layout.push((item.category.clone(), vec![item.id.clone()])),
+            }
+        }
+        layout
+    }
+
+    fn category_row(&self, index: usize) -> CategoryRow {
+        let (category, ids) = &self.layout[index];
+        let label = self
+            .model
+            .catalog
+            .iter()
+            .find(|item| item.category == *category)
+            .map_or(category.as_str(), |item| item.category_label.as_str());
+        let grants: BTreeSet<i32> = ids
+            .iter()
+            .map(|id| grant_index(self.model.grants.get(id).copied().unwrap_or(Grant::Deny)))
+            .collect();
+        CategoryRow {
+            id: category.as_str().into(),
+            title: crate::components::category_accordion::category_title(
+                category, label, self.lang,
+            )
+            .as_ref()
+            .into(),
+            description: crate::components::category_accordion::category_description(
+                category, self.lang,
+            )
+            .into(),
+            icon: category_icon(category),
+            expanded: self.expanded.contains(category),
+            enabled: !self.model.disabled_categories.contains(category),
+            summary: if grants.len() == 1 {
+                *grants.iter().next().unwrap_or(&0)
+            } else {
+                3
+            },
+            leaves: ModelRc::from(self.leaves[index].clone()),
+        }
+    }
+
+    fn leaf_row(&self, id: &str) -> LeafRow {
+        let label = self
+            .model
+            .catalog
+            .iter()
+            .find(|item| item.id == id)
+            .map_or("", |item| item.label.as_str());
+        LeafRow {
+            id: id.into(),
+            label: label.into(),
+            grant: grant_index(self.model.grants.get(id).copied().unwrap_or(Grant::Deny)),
+        }
+    }
+
+    /// Updates only rows whose content changed so focus and expansion are preserved.
+    fn sync_permissions(&mut self) {
+        let layout = self.desired_layout();
+        if layout != self.layout {
+            self.layout = layout;
+            self.leaves = self
+                .layout
+                .iter()
+                .map(|(_, ids)| {
+                    Rc::new(VecModel::from(
+                        ids.iter().map(|id| self.leaf_row(id)).collect::<Vec<_>>(),
+                    ))
+                })
+                .collect();
+            let rows: Vec<CategoryRow> = (0..self.layout.len())
+                .map(|i| self.category_row(i))
+                .collect();
+            self.categories.set_vec(rows);
+            return;
+        }
+        for index in 0..self.layout.len() {
+            for (position, id) in self.layout[index].1.iter().enumerate() {
+                let row = self.leaf_row(id);
+                if self.leaves[index].row_data(position).as_ref() != Some(&row) {
+                    self.leaves[index].set_row_data(position, row);
+                }
+            }
+            let row = self.category_row(index);
+            if self.categories.row_data(index).as_ref() != Some(&row) {
+                self.categories.set_row_data(index, row);
+            }
         }
     }
 
@@ -768,7 +1138,7 @@ impl Controller {
         });
     }
 
-    fn render(&self) {
+    fn render(&mut self) {
         let snapshot = self.model.snapshot.as_ref();
         let registered = self.registered();
         let connected = snapshot.is_some() && !self.model.needs_resync;
@@ -932,6 +1302,14 @@ impl Controller {
                 .unwrap_or("없음")
                 .into(),
         });
+        self.window.set_policy(PolicyModel {
+            can_edit: self.can_control(),
+            can_commit: can_control && !self.quitting,
+            dirty: self.policy_dirty,
+            revision: snapshot.map_or(0, |s| s.policy_revision).to_string().into(),
+            connected,
+        });
+        self.sync_permissions();
         self.window
             .set_notice(self.notice.clone().unwrap_or_default().into());
         self.window.set_quitting(self.quitting);

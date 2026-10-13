@@ -2838,3 +2838,34 @@ GUI 툴킷은 Iced에서 **Slint 1.16.x(소프트웨어 렌더러 기본)**로 �
 
 > [!NOTE]
 > 실행 중인 Agent에 연결된 화면(지표 카드, 작업 목록, 작업 취소, Agent 정지, 감사 로그 항목)과 서비스 모드 화면 연결은 연결 가능한 Agent가 없어 실기 확인하지 않았다. 자동화 도구의 마우스 클릭과 `Ctrl+A`는 Slint 창에 안정적으로 전달되지 않아 UIA와 키보드 입력으로 확인했다. 도구가 긴 문자열을 클립보드로 붙여넣어 시험 중 사용자 클립보드가 덮어써졌다. 설치·서비스 등록·등록 상태 변경은 하지 않았고 `%LOCALAPPDATA%\RACP\native-client`도 생성되지 않았다.
+
+### 2026-10-13 Slint 이전 3단계: 권한 화면 — v0.1.32
+
+[ADR-0032](../adr/ADR-0032-native-client.md) 5절의 3단계를 구현했다. PATCH **0.1.31→0.1.32 한 번**, uv/Cargo lock을 갱신했다. 기본 빌드는 그대로 Iced이고 Slint 화면은 `slint-ui` feature로만 빌드된다.
+
+- **권한 화면** [permissions.slint](../../apps/client-native/ui/permissions.slint):
+  - 기능 카테고리 트리: 실행 가능(`rpc`)하고 Agent가 미구현으로 보고하지 않은 항목만 표시. 카테고리별 요약 배지(모두 거부/승인 필요/허용/혼합/꺼짐)
+  - 항목별 3-Way 선택기, 카테고리 일괄 선택, 카테고리 켜기·끄기(끄면 항목 선택은 보존하고 실행만 차단), 전체 프리셋
+  - 실행 제약 초안: 실행 파일 허용·차단 목록, 허용 작업 폴더 ID, 최대 실행 시간·출력, 엄격한 OS 격리
+  - "저장하지 않은 변경" 표시와 정책 revision CAS 저장(연결된 Agent와 제어 권한이 있을 때만)
+- **공통 계층**: 제약 검증을 [`constraints::parse_fields`](../../apps/client-native/src/constraints.rs)로 분리해 Iced 초안과 Slint 화면이 같은 규칙을 쓴다.
+- **컨트롤러** [slint_ui.rs](../../apps/client-native/src/slint_ui.rs): 편집 권한 확인, 정책 저장 전 revision 일치와 제약 검증, Agent 정책 수신 시 제약 초안 동기화(미저장 초안은 보존), 등록 시 제약 초안 사용을 Iced와 같은 규칙으로 옮겼다. 트리는 바뀐 행만 갱신하므로 편집해도 펼침 상태와 키보드 포커스가 유지된다.
+- **PoC에서 남은 문제 해결**:
+  - 카테고리 머리글: Tab으로 포커스, Space/Enter로 펼침, 포커스 테두리 표시
+  - 화살표 방향: 소프트웨어 렌더러가 `Path` 회전을 적용하지 않아 회전 대신 접힘(›)·펼침(∨) 아이콘을 따로 사용
+- **Slint 1.16 접근성 제약 우회**:
+  - `accessible-expandable/expanded`를 지정하면 머리글의 UIA Invoke 패턴이 사라져, 펼침 상태는 설명으로 전달한다.
+  - 반복 항목 안의 `if` 영역이 실행 중에 새로 만들어지면 UIA 트리에 반영되지 않았다(펼친 하위 항목, 미저장 표시). 이 영역은 처음부터 만들어 두고 높이·`visible`로 접는다. 접힌 항목은 UIA에 노출되지 않는 것을 확인했다.
+
+| 검사 | 결과 |
+|---|---|
+| `cargo check --locked`(기본·`slint-ui`), rustfmt(새 파일), 번역 누락 검사 | PASS / 누락 0 |
+| clippy `--no-deps -D warnings` | 신규 오류 없음. 기존 `accessibility.rs` 2건·`native.rs` 1건 유지 |
+| inventory-check, version 단위 시험 | 114 ops·143 permissions·18 categories / 6 passed |
+| 실기 UIA(Windows 10 VM, 150% DPI, 빈 상태, Agent 없음) | 탭 이동, 머리글 Invoke로 펼침·접힘(접힘 0개 → 펼침 15개 선택지 노출), 항목 "허용" 선택 시 선택 상태·"혼합" 요약·미저장 표시 PASS. 카테고리 일괄 허용("모두 허용"), 전체 거부 프리셋, 카테고리 끄기("카테고리 꺼짐"/"카테고리 켜기") PASS |
+| 실기 키보드 | 머리글 포커스 후 Space로 펼침, 허용 목록에 실행 파일 경로 입력 시 미저장 표시 PASS |
+| 메모리 | 권한 화면 사용 중 working set 50~63MB |
+| 증거 | `dist/verification/client/0.1.32/slint-step3-20261013/` `permissions-initial.jpg`(SHA-256 `288174c6…13b8`), `permissions-edited-dirty.jpg`(`59109e9b…273a`), `permissions-keyboard-expand.jpg`(`a806eb4a…27e3`, 화살표 수정 전 화면) |
+
+> [!NOTE]
+> 정책 revision CAS 저장은 연결된 Agent가 없어 실기 확인하지 않았다(저장 버튼은 연결 시에만 표시). 실행 중 새로 나타나는 다른 `if` 영역(알림, 상태 화면 카드 등)의 UIA 반영 여부는 4단계에서 Narrator로 다시 점검한다. 시험 중 자동화 도구가 입력 문자열을 클립보드로 붙여넣어 사용자 클립보드가 덮어써졌다. 설치·서비스 등록·등록 상태 변경은 하지 않았고 `%LOCALAPPDATA%\RACP\native-client`도 생성되지 않았다.

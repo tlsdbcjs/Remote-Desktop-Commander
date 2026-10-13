@@ -230,3 +230,108 @@ msgstr "연결 파일 확인"
 
 msgid "Waiting for the service connection."
 msgstr "서비스 연결을 기다리는 중입니다."
+
+msgid "All allowed"
+msgstr "모두 허용"
+
+msgid "All denied"
+msgstr "모두 거부"
+
+msgid "All require approval"
+msgstr "모두 승인 필요"
+
+msgid "Allow"
+msgstr "허용"
+
+msgid "Allow all (Developer opt-in)"
+msgstr "전체 허용 (개발자 선택)"
+
+msgid "Allowed workspace IDs"
+msgstr "허용 작업 폴더 ID"
+
+msgid "Apply a quick preset to the whole policy:"
+msgstr "전체 정책에 빠른 프리셋 적용:"
+
+msgid "Batch allow"
+msgstr "일괄 허용"
+
+msgid "Batch approve"
+msgstr "일괄 승인 필요"
+
+msgid "Batch deny"
+msgstr "일괄 거부"
+
+msgid "Batch require approval"
+msgstr "일괄 승인 필요"
+
+msgid "Capability category tree & security policy matrix"
+msgstr "기능 카테고리 트리와 보안 정책 매트릭스"
+
+msgid "Category off"
+msgstr "카테고리 꺼짐"
+
+msgid "Commit policy revision (CAS)"
+msgstr "정책 revision 저장 (CAS)"
+
+msgid "Deny"
+msgstr "거부"
+
+msgid "Deny all (Default Deny)"
+msgstr "전체 거부 (기본 거부)"
+
+msgid "Executable allowlist"
+msgstr "실행 파일 허용 목록"
+
+msgid "Executable denylist"
+msgstr "실행 파일 차단 목록"
+
+msgid "Execution constraints"
+msgstr "실행 제약"
+
+msgid "Expand a category to fine-tune each capability. Changes are saved against policy revision {}."
+msgstr "카테고리를 펼쳐 기능별로 조정할 수 있습니다. 변경은 정책 revision {} 기준으로 저장됩니다."
+
+msgid "Max output (bytes)"
+msgstr "최대 출력 (bytes)"
+
+msgid "Max timeout (ms)"
+msgstr "최대 실행 시간 (ms)"
+
+msgid "Mixed"
+msgstr "혼합"
+
+msgid "Not connected to the Agent. The selection here is used for a new registration; saving needs a connected Agent."
+msgstr "Agent에 연결되어 있지 않습니다. 여기서 고른 내용은 새 등록에 사용되며, 저장하려면 Agent 연결이 필요합니다."
+
+msgid "One entry per line. Executables use absolute paths. The Agent validates the draft when it is saved."
+msgstr "한 줄에 하나씩 입력합니다. 실행 파일은 절대 경로를 사용합니다. 저장할 때 Agent가 초안을 검증합니다."
+
+msgid "Reload constraints"
+msgstr "제약 다시 불러오기"
+
+msgid "Require approval"
+msgstr "승인 필요"
+
+msgid "Require approval for all (Zero-Trust)"
+msgstr "전체 승인 필요 (Zero-Trust)"
+
+msgid "Strict OS isolation: off"
+msgstr "엄격한 OS 격리: 꺼짐"
+
+msgid "Strict OS isolation: on"
+msgstr "엄격한 OS 격리: 켜짐"
+
+msgid "Turn category off"
+msgstr "카테고리 끄기"
+
+msgid "Turn category on"
+msgstr "카테고리 켜기"
+
+msgid "Uncommitted changes"
+msgstr "저장하지 않은 변경"
+
+msgid "Expanded"
+msgstr "펼침"
+
+msgid "Collapsed"
+msgstr "접힘"

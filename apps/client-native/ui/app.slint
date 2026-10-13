@@ -5,8 +5,9 @@ import { Icon, Icons } from "icons.slint";
 import { Tag, Divider, Card, Button, NavItem, ScrollBar } from "widgets.slint";
 import { ShellModel } from "shell.slint";
 import { StatusView, StatusModel, ActivityRow, LogLine, EnrollPreview } from "status.slint";
+import { PermissionsView, CategoryRow, LeafRow, PolicyModel } from "permissions.slint";
 
-export { Theme, ShellModel, StatusModel, ActivityRow, LogLine, EnrollPreview }
+export { Theme, ShellModel, StatusModel, ActivityRow, LogLine, EnrollPreview, CategoryRow, LeafRow, PolicyModel }
 
 
 // --- Header ---
@@ -422,6 +423,14 @@ export component AppWindow inherits Window {
     in-out property <string> connection-hash;
     in-out property <string> workspace-draft;
     in-out property <string> profile: "read_only";
+    in property <[CategoryRow]> categories;
+    in property <PolicyModel> policy;
+    in-out property <string> allow-list;
+    in-out property <string> deny-list;
+    in-out property <string> workspace-ids;
+    in-out property <string> max-timeout;
+    in-out property <string> max-output;
+    in-out property <bool> strict-isolation;
 
     callback emergency-stop();
     callback hide-to-tray();
@@ -437,6 +446,14 @@ export component AppWindow inherits Window {
     callback enroll();
     callback cancel-operation(int);
     callback clear-log();
+    callback toggle-category(int);
+    callback set-category-enabled(int, bool);
+    callback batch-category(int, int);
+    callback set-leaf(int, int, int);
+    callback apply-preset(int);
+    callback commit-policy();
+    callback reload-constraints();
+    callback constraints-edited();
 
     title: (shell.service ? @tr("RACP Service Control") : @tr("RACP Native Client")) + " v" + root.version;
     icon: @image-url("../assets/app.png");
@@ -504,9 +521,23 @@ export component AppWindow inherits Window {
                             clear-log => { root.clear-log(); }
                             open-approvals => { root.current-page = 2; }
                         }
-                        if root.current-page == 1: PendingView {
-                            title: @tr("Permissions");
-                            step: 3;
+                        if root.current-page == 1: PermissionsView {
+                            categories: root.categories;
+                            policy: root.policy;
+                            allow-list <=> root.allow-list;
+                            deny-list <=> root.deny-list;
+                            workspace-ids <=> root.workspace-ids;
+                            max-timeout <=> root.max-timeout;
+                            max-output <=> root.max-output;
+                            strict-isolation <=> root.strict-isolation;
+                            toggle(i) => { root.toggle-category(i); }
+                            set-enabled(i, on) => { root.set-category-enabled(i, on); }
+                            batch(i, g) => { root.batch-category(i, g); }
+                            leaf(i, j, g) => { root.set-leaf(i, j, g); }
+                            preset(g) => { root.apply-preset(g); }
+                            commit => { root.commit-policy(); }
+                            reload-constraints => { root.reload-constraints(); }
+                            constraints-edited => { root.constraints-edited(); }
                         }
                         if root.current-page == 2: PendingView {
                             title: @tr("Approvals");
