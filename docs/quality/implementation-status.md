@@ -2769,6 +2769,8 @@ main 반영 후 bootstrap source 검사에서 `NativeRegistration::ensure_empty(
 
 **최신 v0.1.29 후보는 batch b**다. [manifest](../../dist/agent/0.1.29/win-x64/start-intent-20261013-b/staging/build-manifest.json): EXE **22,331,904 bytes**, SHA-256 **`10448a84a0a31ada180c6d457668c175c9fdd06ba78afcc02fb95ebb48022c4b`**, payload manifest **`530bdb9c426dedd78ab93af04b5b248f13bc43699aeff69b94372c2869cb5e4b`**, source digest **`13244b46b4fc5c88a655f726554c556d33629c5992b8a683024959789f97a32e`**. 최종 E2E의 EXE SHA는 manifest와 일치하고 harness SHA는 앞선 실행과 동일하다.
 
+admission 수정은 **`2b84b31`**, 동시에 main에 반영된 Client 문서 commit `e1c7df2`와의 통합은 **`f171ba9`**다. SSOT의 두 append 내용을 모두 보존해 문서 충돌을 해결했고 GUI source 변경은 없다. [수정·통합 뒤 main 전체 직렬 회귀](../../dist/verification/agent/0.1.29/start-intent-main/rust-workspace-serial-b.log)는 **117 PASS / 0 FAIL / 4 ignored**, [main batch b verify](../../dist/verification/agent/0.1.29/start-intent-main/verify-stage-b.log)는 PASS, SSOT **0.1.29**다. batch b 출력의 private DACL/bytes와 비밀 없는 logs/results만 primary에 보존해 EXE SHA를 대조했다. 실제 설치·서비스/장치 조작·push는 하지 않았다. 다음 AS08 작업은 namespace 없는 prepared restore의 명시 검사/취소 경계이며, 목표는 계속 진행 중이다.
+
 ### 2026-10-13 Client ADR 통합과 Slint GUI 결정 — 문서 변경만
 
 Client ADR-0023~0031(Electron·Python·Tauri·Iced 시절 결정과 이력)을 삭제하고, 현재도 유효한 결정만 현재 코드 기준으로 [ADR-0032](../adr/ADR-0032-native-client.md)에 통합했다. 통합 범위는 Rust 단일 프로세스 Client 구조, 독립 상태, `.racp` 연결 파일 등록, 설정 수정·복구, 트레이·단일 인스턴스, HKCU 로그인 자동 시작, 사용자 NSIS 설치·제거다. ADR-0022(Agent 백그라운드 수명)는 Agent 결정이므로 유지했다. ADR 색인, 문서 포털, README, 가이드, documentation-standards skill, AGENTS.md의 링크와 표기를 갱신했다. 이력 문단의 삭제된 ADR 링크는 "삭제, ADR-0032로 통합" 텍스트로 바꿨다.
