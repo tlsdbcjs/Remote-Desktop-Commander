@@ -19,6 +19,25 @@ fn strings(value: &Value) -> Result<BTreeSet<String>> {
     }
     Ok(result)
 }
+/// Digests of the LF and CRLF forms of a text file. Content changes still change both.
+fn line_ending_digests(bytes: &[u8]) -> [String; 2] {
+    let mut lf = Vec::with_capacity(bytes.len());
+    let mut iter = bytes.iter().peekable();
+    while let Some(&byte) = iter.next() {
+        if byte == b'\r' && iter.peek() == Some(&&b'\n') {
+            continue;
+        }
+        lf.push(byte);
+    }
+    let mut crlf = Vec::with_capacity(lf.len() + lf.len() / 32);
+    for &byte in &lf {
+        if byte == b'\n' {
+            crlf.push(b'\r');
+        }
+        crlf.push(byte);
+    }
+    [digest(lf), digest(crlf)]
+}
 fn source(root: &Path, path: &str) -> Result<()> {
     if path.contains('\\')
         || path.split('/').any(|v| v == "..")
@@ -60,7 +79,9 @@ pub fn check(root: &Path) -> Result<()> {
     {
         let path = input["path"].as_str().ok_or("missing input path")?;
         source(root, path)?;
-        let current = digest(fs::read(root.join(path))?);
+        // Recorded hashes come from both LF and CRLF checkouts (core.autocrlf differs between
+        // machines and CI runners), so accept either line-ending form of the same text.
+        let current = line_ending_digests(&fs::read(root.join(path))?);
         let admitted: Vec<_> = inventory["deltas"]
             .as_array()
             .into_iter()
@@ -72,11 +93,16 @@ pub fn check(root: &Path) -> Result<()> {
         }
         let explicit = admitted.first().is_some_and(|delta| {
             delta["baseline_sha256"] == input["sha256"]
-                && delta["current_sha256"] == current
+                && delta["current_sha256"]
+                    .as_str()
+                    .is_some_and(|value| current.iter().any(|digest| digest == value))
                 && delta["owner_task"].as_str().is_some_and(|s| !s.is_empty())
                 && delta["reason"].as_str().is_some_and(|s| !s.is_empty())
         });
-        if input["sha256"] != current && !explicit {
+        let unchanged = input["sha256"]
+            .as_str()
+            .is_some_and(|value| current.iter().any(|digest| digest == value));
+        if !unchanged && !explicit {
             return Err(format!(
                 "baseline drift: {path}; record an explicit delta before updating inventory"
             )
